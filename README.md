@@ -3,4 +3,4 @@
 </p>
 
 # ODIN Catalog
-coming soon
+coming soon - currently in private repo
