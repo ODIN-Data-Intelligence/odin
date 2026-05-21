@@ -180,7 +180,6 @@ data-catalog/
 │   ├── kafka/                # Topic definitions
 │   ├── keycloak/             # Realm export
 │   └── opensearch/           # Index mappings
-├── marketing/                # Marketing landing page
 ├── docker-compose.yml
 ├── Makefile
 └── gradle/libs.versions.toml # Gradle version catalog
