@@ -1,0 +1,183 @@
+export interface Resource {
+  id: string;
+  resourceType: string;
+  iri?: string;
+  tenantId: string;
+  domainId?: string;
+  title: string;
+  description?: string;
+  issued?: string;
+  modified?: string;
+  language?: string[];
+  keywords?: string[];
+  themes?: string[];
+  license?: string;
+  conformsTo?: string[];
+  sourceUri?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Dataset extends Resource {
+  accrualPeriodicity?: string;
+  temporalStart?: string;
+  temporalEnd?: string;
+  spatial?: Record<string, unknown>;
+  version?: string;
+  isVersionOf?: string;
+  distributions?: Distribution[];
+  logicalModels?: LogicalModel[];
+}
+
+export interface Distribution extends Resource {
+  datasetId: string;
+  accessUrl?: string;
+  downloadUrl?: string;
+  mediaType?: string;
+  format?: string;
+  byteSize?: number;
+  checksumAlgorithm?: string;
+  checksumValue?: string;
+  csvwTableId?: string;
+  compressFormat?: string;
+  availability?: string;
+}
+
+export interface DataProduct extends Resource {
+  lifecycleStatus: 'Ideation' | 'Design' | 'Build' | 'Deploy' | 'Consume';
+  ownerId?: string;
+  purpose?: string;
+  informationSensitivity?: string;
+  hasPolicy?: Record<string, unknown>;
+  ports?: DataProductPort[];
+}
+
+export interface DataProductPort {
+  id: string;
+  dataProductId: string;
+  portType: 'input' | 'output';
+  dataServiceId?: string;
+  datasetId?: string;
+  distributionId?: string;
+}
+
+export interface Catalog extends Resource {
+  datasets?: Dataset[];
+}
+
+export interface CsvwTable {
+  id: string;
+  distributionId: string;
+  url?: string;
+  title?: string;
+  dialect?: Record<string, unknown>;
+  schema?: CsvwTableSchema;
+}
+
+export interface CsvwTableSchema {
+  id: string;
+  tableId: string;
+  primaryKey?: string[];
+  aboutUrl?: string;
+  columns?: CsvwColumn[];
+}
+
+export interface CsvwColumn {
+  id: string;
+  schemaId: string;
+  ordinal: number;
+  name: string;
+  titles?: string[];
+  datatype?: string;
+  required?: boolean;
+  propertyUrl?: string;
+  description?: string;
+  logicalDataElementId?: string;
+}
+
+export interface Vocabulary {
+  id: string;
+  name: string;
+  prefix: string;
+  baseIri: string;
+  vocabularyType: 'general' | 'financial' | 'healthcare' | 'geospatial' | 'custom';
+  description?: string;
+  version?: string;
+  homepage?: string;
+  isSystem: boolean;
+}
+
+export interface VocabularyConcept {
+  iri: string;
+  label: string;
+  definition?: string;
+}
+
+export interface DatasetVocabularyProfile {
+  id: string;
+  datasetId: string;
+  vocabularyId: string;
+  vocabulary?: Vocabulary;
+  isPrimary: boolean;
+  domainTags?: string[];
+  createdAt: string;
+}
+
+export interface LogicalModel {
+  id: string;
+  datasetId: string;
+  name: string;
+  description?: string;
+  version: string;
+  status: 'draft' | 'published' | 'deprecated';
+  elements?: LogicalDataElement[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LogicalDataElement {
+  id: string;
+  logicalModelId: string;
+  name: string;
+  label?: string;
+  description?: string;
+  logicalType?: string;
+  isRequired: boolean;
+  isIdentifier: boolean;
+  isNullable: boolean;
+  ordinal: number;
+  physicalColumnId?: string;
+  physicalColumnRef?: { table: string; column: string; type: string };
+  physicalColumn?: CsvwColumn;
+  vocabMappings?: LogicalElementVocabMapping[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LogicalElementVocabMapping {
+  id: string;
+  logicalElementId: string;
+  vocabularyId: string;
+  vocabulary?: Vocabulary;
+  conceptIri: string;
+  conceptLabel?: string;
+  conceptDefinition?: string;
+  matchType: 'exactMatch' | 'closeMatch' | 'relatedMatch' | 'broadMatch' | 'narrowMatch';
+  createdAt: string;
+}
+
+export interface ColumnElementSuggestion {
+  columnId: string;
+  columnName: string;
+  suggestedElementId: string;
+  suggestedElementName: string;
+  confidence: number;
+}
+
+export interface PageResponse<T> {
+  content: T[];
+  totalElements: number;
+  totalPages: number;
+  size: number;
+  number: number;
+}

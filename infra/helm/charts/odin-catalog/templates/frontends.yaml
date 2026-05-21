@@ -1,0 +1,99 @@
+{{- $root := . -}}
+
+{{/* ── frontend-producer (management app) ─────────────────────────────────── */}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "odin-catalog.fullname" $root }}-frontend-producer
+  labels: {{- include "odin-catalog.componentLabels" (dict "component" "frontend-producer" "root" $root) | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ $root.Values.services.frontendProducer.port }}
+      targetPort: 80
+  selector:
+    app.kubernetes.io/name: frontend-producer
+    app.kubernetes.io/instance: {{ $root.Release.Name }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "odin-catalog.fullname" $root }}-frontend-producer
+  labels: {{- include "odin-catalog.componentLabels" (dict "component" "frontend-producer" "root" $root) | nindent 4 }}
+spec:
+  replicas: {{ $root.Values.services.frontendProducer.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: frontend-producer
+      app.kubernetes.io/instance: {{ $root.Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: frontend-producer
+        app.kubernetes.io/instance: {{ $root.Release.Name }}
+        app.kubernetes.io/component: frontend-producer
+    spec:
+      containers:
+        - name: frontend-producer
+          image: {{ $root.Values.images.frontendProducer.repository }}:{{ $root.Values.images.frontendProducer.tag }}
+          imagePullPolicy: {{ $root.Values.images.frontendProducer.pullPolicy }}
+          ports:
+            - containerPort: 80
+          resources: {{- toYaml $root.Values.resources.frontend | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+{{/* ── frontend-consumer (discovery app) ──────────────────────────────────── */}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "odin-catalog.fullname" $root }}-frontend-consumer
+  labels: {{- include "odin-catalog.componentLabels" (dict "component" "frontend-consumer" "root" $root) | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ $root.Values.services.frontendConsumer.port }}
+      targetPort: 80
+  selector:
+    app.kubernetes.io/name: frontend-consumer
+    app.kubernetes.io/instance: {{ $root.Release.Name }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "odin-catalog.fullname" $root }}-frontend-consumer
+  labels: {{- include "odin-catalog.componentLabels" (dict "component" "frontend-consumer" "root" $root) | nindent 4 }}
+spec:
+  replicas: {{ $root.Values.services.frontendConsumer.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: frontend-consumer
+      app.kubernetes.io/instance: {{ $root.Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: frontend-consumer
+        app.kubernetes.io/instance: {{ $root.Release.Name }}
+        app.kubernetes.io/component: frontend-consumer
+    spec:
+      containers:
+        - name: frontend-consumer
+          image: {{ $root.Values.images.frontendConsumer.repository }}:{{ $root.Values.images.frontendConsumer.tag }}
+          imagePullPolicy: {{ $root.Values.images.frontendConsumer.pullPolicy }}
+          ports:
+            - containerPort: 80
+          resources: {{- toYaml $root.Values.resources.frontend | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10

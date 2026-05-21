@@ -1,0 +1,86 @@
+spring:
+  application:
+    name: ai-service
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5437/ai}
+    username: ${SPRING_DATASOURCE_USERNAME:ai}
+    password: ${SPRING_DATASOURCE_PASSWORD:ai}
+    hikari:
+      maximum-pool-size: 10
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ai-consumer-catalog
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      auto-offset-reset: earliest
+      properties:
+        spring.json.trusted.packages: "com.odin.catalog.*"
+        spring.json.use.type.headers: false
+        spring.json.value.default.type: java.util.LinkedHashMap
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:http://localhost:8180/realms/datacatalog}
+
+  ai:
+    ollama:
+      base-url: ${SPRING_AI_OLLAMA_BASE_URL:http://localhost:11434}
+      chat:
+        model: llama3.2
+      embedding:
+        model: nomic-embed-text
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+    vectorstore:
+      pgvector:
+        initialize-schema: true
+        index-type: ivfflat
+        distance-type: cosine_distance
+        dimensions: 768
+
+catalog:
+  service:
+    url: ${CATALOG_SERVICE_URL:http://inventory-service:8001}
+    api-key: ${CATALOG_SERVICE_API_KEY:dev-internal}
+
+server:
+  port: 8005
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+logging:
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5p [conv=%X{conversationId:-}] [%t] %-40.40logger{39} : %m%n"
+  level:
+    com.odin.catalog: DEBUG
+    org.springframework.ai: INFO
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+    tagsSorter: alpha
+    tryItOutEnabled: true

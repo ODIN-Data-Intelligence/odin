@@ -1,0 +1,2 @@
+com.odin.catalog.shared.kafka.producer.KafkaPublisherAutoConfiguration
+com.odin.catalog.shared.kafka.consumer.KafkaConsumerAutoConfiguration

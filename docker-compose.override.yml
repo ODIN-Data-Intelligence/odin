@@ -1,0 +1,50 @@
+# Dev overrides — local env vars, AI profile
+services:
+
+  inventory-service:
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+
+  harvest-service:
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+
+  lineage-service:
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+
+  search-service:
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+
+  identity-service:
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+
+  # AI service (optional — start with: docker compose --profile ai up)
+  ai-service:
+    profiles: [ai]
+    build:
+      context: .
+      dockerfile: services/ai-service/Dockerfile
+    container_name: ai-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-ai:5432/ai
+      SPRING_DATASOURCE_USERNAME: ai
+      SPRING_DATASOURCE_PASSWORD: ai
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_AI_OLLAMA_BASE_URL: http://10.0.0.115:11434
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8180/realms/datacatalog
+    ports:
+      - "8005:8005"
+    depends_on:
+      postgres-ai:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks: [catalog-net]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ai.rule=Host(`api.catalog.local`) && PathPrefix(`/ai`)"
+      - "traefik.http.services.ai.loadbalancer.server.port=8005"
+

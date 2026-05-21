@@ -1,0 +1,453 @@
+{{- $root := . -}}
+
+{{/* ── inventory-service ─────────────────────────────────────────────────── */}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "odin-catalog.fullname" $root }}-inventory-service
+  labels: {{- include "odin-catalog.componentLabels" (dict "component" "inventory-service" "root" $root) | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ $root.Values.services.inventoryService.port }}
+      targetPort: {{ $root.Values.services.inventoryService.port }}
+  selector:
+    app.kubernetes.io/name: inventory-service
+    app.kubernetes.io/instance: {{ $root.Release.Name }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "odin-catalog.fullname" $root }}-inventory-service
+  labels: {{- include "odin-catalog.componentLabels" (dict "component" "inventory-service" "root" $root) | nindent 4 }}
+spec:
+  replicas: {{ $root.Values.services.inventoryService.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: inventory-service
+      app.kubernetes.io/instance: {{ $root.Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: inventory-service
+        app.kubernetes.io/instance: {{ $root.Release.Name }}
+        app.kubernetes.io/component: inventory-service
+    spec:
+      serviceAccountName: {{ include "odin-catalog.serviceAccountName" $root }}
+      containers:
+        - name: inventory-service
+          image: {{ $root.Values.images.inventoryService.repository }}:{{ $root.Values.images.inventoryService.tag }}
+          imagePullPolicy: {{ $root.Values.images.inventoryService.pullPolicy }}
+          ports:
+            - containerPort: {{ $root.Values.services.inventoryService.port }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "odin-catalog.fullname" $root }}-common
+          env:
+            - name: SERVER_PORT
+              value: {{ $root.Values.services.inventoryService.port | quote }}
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://{{ include "odin-catalog.fullname" $root }}-postgres-inventory:5432/inventory"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: {{ $root.Values.postgres.inventory.username | quote }}
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "odin-catalog.fullname" $root }}-postgres
+                  key: inventory-password
+          resources: {{- toYaml $root.Values.resources.backend | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: {{ $root.Values.services.inventoryService.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: {{ $root.Values.services.inventoryService.port }}
+            initialDelaySeconds: 60
+            periodSeconds: 20
+
+{{/* ── harvest-service ──────────────────────────────────────────────────── */}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "odin-catalog.fullname" $root }}-harvest-service
+  labels: {{- include "odin-catalog.componentLabels" (dict "component" "harvest-service" "root" $root) | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ $root.Values.services.harvestService.port }}
+      targetPort: {{ $root.Values.services.harvestService.port }}
+  selector:
+    app.kubernetes.io/name: harvest-service
+    app.kubernetes.io/instance: {{ $root.Release.Name }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "odin-catalog.fullname" $root }}-harvest-service
+  labels: {{- include "odin-catalog.componentLabels" (dict "component" "harvest-service" "root" $root) | nindent 4 }}
+spec:
+  replicas: {{ $root.Values.services.harvestService.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: harvest-service
+      app.kubernetes.io/instance: {{ $root.Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: harvest-service
+        app.kubernetes.io/instance: {{ $root.Release.Name }}
+        app.kubernetes.io/component: harvest-service
+    spec:
+      serviceAccountName: {{ include "odin-catalog.serviceAccountName" $root }}
+      containers:
+        - name: harvest-service
+          image: {{ $root.Values.images.harvestService.repository }}:{{ $root.Values.images.harvestService.tag }}
+          imagePullPolicy: {{ $root.Values.images.harvestService.pullPolicy }}
+          ports:
+            - containerPort: {{ $root.Values.services.harvestService.port }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "odin-catalog.fullname" $root }}-common
+          env:
+            - name: SERVER_PORT
+              value: {{ $root.Values.services.harvestService.port | quote }}
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://{{ include "odin-catalog.fullname" $root }}-postgres-harvest:5432/harvest"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: {{ $root.Values.postgres.harvest.username | quote }}
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "odin-catalog.fullname" $root }}-postgres
+                  key: harvest-password
+            - name: MINIO_ENDPOINT
+              value: "http://{{ include "odin-catalog.fullname" $root }}-minio:9000"
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "odin-catalog.fullname" $root }}-minio
+                  key: root-user
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "odin-catalog.fullname" $root }}-minio
+                  key: root-password
+            - name: SPRING_QUARTZ_DATASOURCE_URL
+              value: "jdbc:postgresql://{{ include "odin-catalog.fullname" $root }}-postgres-harvest:5432/harvest"
+            - name: SPRING_REDIS_HOST
+              value: "{{ include "odin-catalog.fullname" $root }}-redis"
+          resources: {{- toYaml $root.Values.resources.backend | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: {{ $root.Values.services.harvestService.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: {{ $root.Values.services.harvestService.port }}
+            initialDelaySeconds: 60
+            periodSeconds: 20
+
+{{/* ── lineage-service ──────────────────────────────────────────────────── */}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "odin-catalog.fullname" $root }}-lineage-service
+  labels: {{- include "odin-catalog.componentLabels" (dict "component" "lineage-service" "root" $root) | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ $root.Values.services.lineageService.port }}
+      targetPort: {{ $root.Values.services.lineageService.port }}
+  selector:
+    app.kubernetes.io/name: lineage-service
+    app.kubernetes.io/instance: {{ $root.Release.Name }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "odin-catalog.fullname" $root }}-lineage-service
+  labels: {{- include "odin-catalog.componentLabels" (dict "component" "lineage-service" "root" $root) | nindent 4 }}
+spec:
+  replicas: {{ $root.Values.services.lineageService.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lineage-service
+      app.kubernetes.io/instance: {{ $root.Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: lineage-service
+        app.kubernetes.io/instance: {{ $root.Release.Name }}
+        app.kubernetes.io/component: lineage-service
+    spec:
+      serviceAccountName: {{ include "odin-catalog.serviceAccountName" $root }}
+      containers:
+        - name: lineage-service
+          image: {{ $root.Values.images.lineageService.repository }}:{{ $root.Values.images.lineageService.tag }}
+          imagePullPolicy: {{ $root.Values.images.lineageService.pullPolicy }}
+          ports:
+            - containerPort: {{ $root.Values.services.lineageService.port }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "odin-catalog.fullname" $root }}-common
+          env:
+            - name: SERVER_PORT
+              value: {{ $root.Values.services.lineageService.port | quote }}
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://{{ include "odin-catalog.fullname" $root }}-postgres-lineage:5432/lineage"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: {{ $root.Values.postgres.lineage.username | quote }}
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "odin-catalog.fullname" $root }}-postgres
+                  key: lineage-password
+          resources: {{- toYaml $root.Values.resources.backend | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: {{ $root.Values.services.lineageService.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: {{ $root.Values.services.lineageService.port }}
+            initialDelaySeconds: 60
+            periodSeconds: 20
+
+{{/* ── search-service ───────────────────────────────────────────────────── */}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "odin-catalog.fullname" $root }}-search-service
+  labels: {{- include "odin-catalog.componentLabels" (dict "component" "search-service" "root" $root) | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ $root.Values.services.searchService.port }}
+      targetPort: {{ $root.Values.services.searchService.port }}
+  selector:
+    app.kubernetes.io/name: search-service
+    app.kubernetes.io/instance: {{ $root.Release.Name }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "odin-catalog.fullname" $root }}-search-service
+  labels: {{- include "odin-catalog.componentLabels" (dict "component" "search-service" "root" $root) | nindent 4 }}
+spec:
+  replicas: {{ $root.Values.services.searchService.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: search-service
+      app.kubernetes.io/instance: {{ $root.Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: search-service
+        app.kubernetes.io/instance: {{ $root.Release.Name }}
+        app.kubernetes.io/component: search-service
+    spec:
+      serviceAccountName: {{ include "odin-catalog.serviceAccountName" $root }}
+      containers:
+        - name: search-service
+          image: {{ $root.Values.images.searchService.repository }}:{{ $root.Values.images.searchService.tag }}
+          imagePullPolicy: {{ $root.Values.images.searchService.pullPolicy }}
+          ports:
+            - containerPort: {{ $root.Values.services.searchService.port }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "odin-catalog.fullname" $root }}-common
+          env:
+            - name: SERVER_PORT
+              value: {{ $root.Values.services.searchService.port | quote }}
+            - name: OPENSEARCH_URIS
+              value: "http://{{ include "odin-catalog.fullname" $root }}-opensearch:9200"
+          resources: {{- toYaml $root.Values.resources.backend | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: {{ $root.Values.services.searchService.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: {{ $root.Values.services.searchService.port }}
+            initialDelaySeconds: 60
+            periodSeconds: 20
+
+{{/* ── ai-service ───────────────────────────────────────────────────────── */}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "odin-catalog.fullname" $root }}-ai-service
+  labels: {{- include "odin-catalog.componentLabels" (dict "component" "ai-service" "root" $root) | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ $root.Values.services.aiService.port }}
+      targetPort: {{ $root.Values.services.aiService.port }}
+  selector:
+    app.kubernetes.io/name: ai-service
+    app.kubernetes.io/instance: {{ $root.Release.Name }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "odin-catalog.fullname" $root }}-ai-service
+  labels: {{- include "odin-catalog.componentLabels" (dict "component" "ai-service" "root" $root) | nindent 4 }}
+spec:
+  replicas: {{ $root.Values.services.aiService.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ai-service
+      app.kubernetes.io/instance: {{ $root.Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ai-service
+        app.kubernetes.io/instance: {{ $root.Release.Name }}
+        app.kubernetes.io/component: ai-service
+    spec:
+      serviceAccountName: {{ include "odin-catalog.serviceAccountName" $root }}
+      containers:
+        - name: ai-service
+          image: {{ $root.Values.images.aiService.repository }}:{{ $root.Values.images.aiService.tag }}
+          imagePullPolicy: {{ $root.Values.images.aiService.pullPolicy }}
+          ports:
+            - containerPort: {{ $root.Values.services.aiService.port }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "odin-catalog.fullname" $root }}-common
+          env:
+            - name: SERVER_PORT
+              value: {{ $root.Values.services.aiService.port | quote }}
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://{{ include "odin-catalog.fullname" $root }}-postgres-ai:5432/ai"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: {{ $root.Values.postgres.ai.username | quote }}
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "odin-catalog.fullname" $root }}-postgres
+                  key: ai-password
+            - name: SPRING_AI_VECTORSTORE_PGVECTOR_INDEX_TYPE
+              value: "ivfflat"
+            - name: SPRING_AI_VECTORSTORE_PGVECTOR_DISTANCE_TYPE
+              value: "cosine_distance"
+            - name: SPRING_AI_VECTORSTORE_PGVECTOR_DIMENSIONS
+              value: "768"
+          resources: {{- toYaml $root.Values.resources.backend | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: {{ $root.Values.services.aiService.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: {{ $root.Values.services.aiService.port }}
+            initialDelaySeconds: 60
+            periodSeconds: 20
+
+{{/* ── identity-service ─────────────────────────────────────────────────── */}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "odin-catalog.fullname" $root }}-identity-service
+  labels: {{- include "odin-catalog.componentLabels" (dict "component" "identity-service" "root" $root) | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ $root.Values.services.identityService.port }}
+      targetPort: {{ $root.Values.services.identityService.port }}
+  selector:
+    app.kubernetes.io/name: identity-service
+    app.kubernetes.io/instance: {{ $root.Release.Name }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "odin-catalog.fullname" $root }}-identity-service
+  labels: {{- include "odin-catalog.componentLabels" (dict "component" "identity-service" "root" $root) | nindent 4 }}
+spec:
+  replicas: {{ $root.Values.services.identityService.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: identity-service
+      app.kubernetes.io/instance: {{ $root.Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: identity-service
+        app.kubernetes.io/instance: {{ $root.Release.Name }}
+        app.kubernetes.io/component: identity-service
+    spec:
+      serviceAccountName: {{ include "odin-catalog.serviceAccountName" $root }}
+      containers:
+        - name: identity-service
+          image: {{ $root.Values.images.identityService.repository }}:{{ $root.Values.images.identityService.tag }}
+          imagePullPolicy: {{ $root.Values.images.identityService.pullPolicy }}
+          ports:
+            - containerPort: {{ $root.Values.services.identityService.port }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "odin-catalog.fullname" $root }}-common
+          env:
+            - name: SERVER_PORT
+              value: {{ $root.Values.services.identityService.port | quote }}
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://{{ include "odin-catalog.fullname" $root }}-postgres-identity:5432/identity"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: {{ $root.Values.postgres.identity.username | quote }}
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "odin-catalog.fullname" $root }}-postgres
+                  key: identity-password
+            - name: KEYCLOAK_SERVER_URL
+              value: "http://{{ include "odin-catalog.fullname" $root }}-keycloak:8180"
+            - name: KEYCLOAK_REALM
+              value: {{ $root.Values.keycloak.realm | quote }}
+            - name: KEYCLOAK_CLIENT_ID
+              value: {{ $root.Values.keycloak.clientId | quote }}
+            - name: KEYCLOAK_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "odin-catalog.fullname" $root }}-keycloak
+                  key: client-secret
+          resources: {{- toYaml $root.Values.resources.backend | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: {{ $root.Values.services.identityService.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: {{ $root.Values.services.identityService.port }}
+            initialDelaySeconds: 60
+            periodSeconds: 20

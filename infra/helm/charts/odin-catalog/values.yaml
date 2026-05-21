@@ -1,0 +1,220 @@
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+
+# ─── Image defaults ───────────────────────────────────────────────────────────
+images:
+  inventoryService:
+    repository: odin/inventory-service
+    tag: latest
+    pullPolicy: IfNotPresent
+  harvestService:
+    repository: odin/harvest-service
+    tag: latest
+    pullPolicy: IfNotPresent
+  lineageService:
+    repository: odin/lineage-service
+    tag: latest
+    pullPolicy: IfNotPresent
+  searchService:
+    repository: odin/search-service
+    tag: latest
+    pullPolicy: IfNotPresent
+  aiService:
+    repository: odin/ai-service
+    tag: latest
+    pullPolicy: IfNotPresent
+  identityService:
+    repository: odin/identity-service
+    tag: latest
+    pullPolicy: IfNotPresent
+  frontendProducer:
+    repository: odin/frontend-producer
+    tag: latest
+    pullPolicy: IfNotPresent
+  frontendConsumer:
+    repository: odin/frontend-consumer
+    tag: latest
+    pullPolicy: IfNotPresent
+
+# ─── PostgreSQL databases (one per service) ───────────────────────────────────
+postgres:
+  inventory:
+    image: postgres:16-alpine
+    database: inventory
+    username: inventory
+    password: inventory
+    storage: 10Gi
+  harvest:
+    image: postgres:16-alpine
+    database: harvest
+    username: harvest
+    password: harvest
+    storage: 10Gi
+  lineage:
+    image: apache/age:latest
+    database: lineage
+    username: lineage
+    password: lineage
+    storage: 10Gi
+  identity:
+    image: postgres:16-alpine
+    database: identity
+    username: identity
+    password: identity
+    storage: 5Gi
+  ai:
+    image: pgvector/pgvector:pg16
+    database: ai
+    username: ai
+    password: ai
+    storage: 20Gi
+
+# ─── Kafka ────────────────────────────────────────────────────────────────────
+kafka:
+  image: apache/kafka:3.7.0
+  clusterId: MkU3OEVBNTcwNTJENDM2Qk
+  storage: 20Gi
+  replicas: 1
+  heapOpts: "-Xmx512m -Xms512m"
+
+# ─── OpenSearch ───────────────────────────────────────────────────────────────
+opensearch:
+  image: opensearchproject/opensearch:2.13.0
+  storage: 20Gi
+  javaOpts: "-Xms512m -Xmx512m"
+  disableSecurity: "true"
+
+# ─── MinIO ───────────────────────────────────────────────────────────────────
+minio:
+  image: minio/minio:latest
+  storage: 50Gi
+  rootUser: minioadmin
+  rootPassword: minioadmin
+
+# ─── Redis ───────────────────────────────────────────────────────────────────
+redis:
+  image: redis:7-alpine
+  storage: 2Gi
+
+# ─── Keycloak ────────────────────────────────────────────────────────────────
+keycloak:
+  image: quay.io/keycloak/keycloak:24.0
+  adminUser: admin
+  adminPassword: admin
+  realm: datacatalog
+  clientId: odin-catalog
+  clientSecret: change-me-in-production
+  # Points to identity-service postgres (uses 'keycloak' db within it)
+  dbUrl: "jdbc:postgresql://postgres-identity:5432/keycloak"
+
+# ─── Service ports ───────────────────────────────────────────────────────────
+services:
+  inventoryService:
+    port: 8001
+    replicas: 1
+  harvestService:
+    port: 8002
+    replicas: 1
+  lineageService:
+    port: 8003
+    replicas: 1
+  searchService:
+    port: 8004
+    replicas: 1
+  aiService:
+    port: 8005
+    replicas: 1
+  identityService:
+    port: 8006
+    replicas: 1
+  frontendProducer:
+    port: 3000
+    replicas: 1
+  frontendConsumer:
+    port: 3001
+    replicas: 1
+
+# ─── Ingress ─────────────────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  className: nginx
+  consumerHost: catalog.local
+  producerHost: manage.catalog.local
+  apiHost: api.catalog.local
+  tls: []
+
+# ─── Spring Boot common env ──────────────────────────────────────────────────
+spring:
+  profiles: kubernetes
+  jpa:
+    ddlAuto: validate
+  security:
+    oauth2:
+      issuerUri: "http://keycloak:8180/realms/datacatalog"
+
+# ─── HPA ─────────────────────────────────────────────────────────────────────
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 70
+
+# ─── Resources (defaults — override per environment) ─────────────────────────
+resources:
+  backend:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  frontend:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  postgres:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  kafka:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  opensearch:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+  minio:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  redis:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  keycloak:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi

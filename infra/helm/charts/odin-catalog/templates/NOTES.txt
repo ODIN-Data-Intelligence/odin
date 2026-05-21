@@ -1,0 +1,53 @@
+ODIN Data Catalog has been deployed.
+
+Release: {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SERVICES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Inventory Service:  http://{{ .Release.Name }}-inventory-service:8001/swagger-ui.html
+  Harvest Service:    http://{{ .Release.Name }}-harvest-service:8002/swagger-ui.html
+  Lineage Service:    http://{{ .Release.Name }}-lineage-service:8003/swagger-ui.html
+  Search Service:     http://{{ .Release.Name }}-search-service:8004/swagger-ui.html
+  AI Service:         http://{{ .Release.Name }}-ai-service:8005/swagger-ui.html
+  Identity Service:   http://{{ .Release.Name }}-identity-service:8006/swagger-ui.html
+
+{{- if .Values.ingress.enabled }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INGRESS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Consumer (Discovery):  http://{{ .Values.ingress.consumerHost }}/
+  Producer (Management): http://{{ .Values.ingress.producerHost }}/
+  API Gateway:           http://{{ .Values.ingress.apiHost }}/
+
+  Add these entries to /etc/hosts or configure DNS:
+    <INGRESS_IP>  {{ .Values.ingress.consumerHost }} {{ .Values.ingress.producerHost }} {{ .Values.ingress.apiHost }}
+
+{{- end }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INFRASTRUCTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Keycloak admin:  http://{{ .Release.Name }}-keycloak:8180/admin
+  MinIO console:   http://{{ .Release.Name }}-minio:9001
+  OpenSearch:      http://{{ .Release.Name }}-opensearch:9200
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FIRST-RUN STEPS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. Wait for all Pods to be Ready:
+       kubectl get pods -n {{ .Release.Namespace }} -w
+
+  2. Kafka topics are created by the kafka-init Job automatically.
+
+  3. OpenSearch index 'catalog_entities' is created by the opensearch-init Job automatically.
+
+  4. Log in to Keycloak and verify the 'datacatalog' realm was imported.
+
+  5. Configure a harvest source via the Harvest Service API or Management UI.

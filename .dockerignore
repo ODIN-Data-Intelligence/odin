@@ -1,0 +1,12 @@
+.git
+frontend
+infra
+**/node_modules
+**/.gradle
+**/build
+!services/inventory-service/build/libs/app.jar
+!services/lineage-service/build/libs/app.jar
+!services/harvest-service/build/libs/app.jar
+!services/search-service/build/libs/app.jar
+!services/ai-service/build/libs/app.jar
+!services/identity-service/build/libs/app.jar

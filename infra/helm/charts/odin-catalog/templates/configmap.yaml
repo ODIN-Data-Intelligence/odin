@@ -1,0 +1,91 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "odin-catalog.fullname" . }}-common
+  labels: {{- include "odin-catalog.labels" . | nindent 4 }}
+data:
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: {{ include "odin-catalog.kafkaBootstrap" . | quote }}
+  SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: {{ include "odin-catalog.keycloakIssuer" . | quote }}
+  SPRING_JPA_HIBERNATE_DDL_AUTO: "validate"
+  MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,prometheus"
+  MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: "always"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "odin-catalog.fullname" . }}-kafka-scripts
+  labels: {{- include "odin-catalog.labels" . | nindent 4 }}
+data:
+  create-topics.sh: |
+    #!/bin/bash
+    set -e
+    BOOTSTRAP={{ include "odin-catalog.kafkaBootstrap" . }}
+
+    create_topic() {
+      local name=$1 partitions=$2 cleanup=$3
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server "$BOOTSTRAP" \
+        --create --if-not-exists \
+        --topic "$name" \
+        --partitions "$partitions" \
+        --replication-factor 1 \
+        --config cleanup.policy="$cleanup"
+      echo "Topic $name ready"
+    }
+
+    create_topic inventory.data-products.changes   12 compact
+    create_topic inventory.datasets.changes        12 compact
+    create_topic inventory.distributions.changes    6 compact
+    create_topic harvest.runs.events                6 delete
+    create_topic harvest.entities.discovered       12 delete
+    create_topic harvest.ddl.discovered             3 delete
+    create_topic lineage.run-events.received       12 delete
+    create_topic lineage.graph.updated              6 delete
+    create_topic ai.embeddings.requested            6 delete
+    create_topic identity.users.changes             3 compact
+
+    echo "All Kafka topics created."
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "odin-catalog.fullname" . }}-opensearch-init
+  labels: {{- include "odin-catalog.labels" . | nindent 4 }}
+data:
+  init-index.sh: |
+    #!/bin/bash
+    set -e
+    OPENSEARCH_URL="http://{{ .Release.Name }}-opensearch:9200"
+
+    until curl -sf "$OPENSEARCH_URL/_cluster/health" > /dev/null; do
+      echo "Waiting for OpenSearch..."
+      sleep 5
+    done
+
+    echo "Creating catalog_entities index..."
+    curl -sf -X PUT "$OPENSEARCH_URL/catalog_entities" \
+      -H 'Content-Type: application/json' \
+      -d @/config/catalog_entities.json
+    echo ""
+    echo "OpenSearch index ready."
+  catalog_entities.json: |
+{{ .Files.Get "files/catalog_entities.json" | indent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "odin-catalog.fullname" . }}-keycloak-realm
+  labels: {{- include "odin-catalog.labels" . | nindent 4 }}
+data:
+  datacatalog-realm.json: |
+{{ .Files.Get "files/datacatalog-realm.json" | indent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "odin-catalog.fullname" . }}-postgres-init
+  labels: {{- include "odin-catalog.labels" . | nindent 4 }}
+data:
+  lineage-init.sql: |
+{{ .Files.Get "files/lineage-init.sql" | indent 4 }}
+  identity-init.sql: |
+{{ .Files.Get "files/identity-init.sql" | indent 4 }}

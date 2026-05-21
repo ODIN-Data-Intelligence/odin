@@ -1,0 +1,30 @@
+api:
+  dashboard: true
+  insecure: true
+
+entryPoints:
+  web:
+    address: ":80"
+    transport:
+      respondingTimeouts:
+        readTimeout: 300s
+        writeTimeout: 0s    # 0 = no timeout; required for SSE streaming responses
+        idleTimeout: 300s
+
+serversTransport:
+  forwardingTimeouts:
+    dialTimeout: 30s
+    responseHeaderTimeout: 0s   # 0 = unlimited; prevents 504 on slow/streaming backends
+    idleConnTimeout: 600s
+    readIdleTimeout: 0s
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: catalog-net
+
+log:
+  level: INFO
+
+accessLog: {}

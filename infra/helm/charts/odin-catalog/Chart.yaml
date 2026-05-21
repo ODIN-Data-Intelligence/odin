@@ -1,0 +1,14 @@
+apiVersion: v2
+name: odin-catalog
+description: ODIN Data Catalog — full-stack deployment (6 backend services, 2 frontends, infrastructure)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - data-catalog
+  - dcat
+  - dprod
+  - openlineage
+home: https://github.com/odin/data-catalog
+maintainers:
+  - name: ODIN Platform Team

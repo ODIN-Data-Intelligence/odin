@@ -1,0 +1,97 @@
+{{- $root := . -}}
+{{- range $name, $cfg := .Values.postgres }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "odin-catalog.fullname" $root }}-postgres-{{ $name }}
+  labels: {{- include "odin-catalog.componentLabels" (dict "component" (printf "postgres-%s" $name) "root" $root) | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+  selector:
+    app.kubernetes.io/name: postgres-{{ $name }}
+    app.kubernetes.io/instance: {{ $root.Release.Name }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "odin-catalog.fullname" $root }}-postgres-{{ $name }}
+  labels: {{- include "odin-catalog.componentLabels" (dict "component" (printf "postgres-%s" $name) "root" $root) | nindent 4 }}
+spec:
+  serviceName: {{ include "odin-catalog.fullname" $root }}-postgres-{{ $name }}
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres-{{ $name }}
+      app.kubernetes.io/instance: {{ $root.Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres-{{ $name }}
+        app.kubernetes.io/instance: {{ $root.Release.Name }}
+        app.kubernetes.io/component: postgres-{{ $name }}
+    spec:
+      containers:
+        - name: postgres
+          image: {{ $cfg.image }}
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: {{ $cfg.database | quote }}
+            - name: POSTGRES_USER
+              value: {{ $cfg.username | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "odin-catalog.fullname" $root }}-postgres
+                  key: {{ $name }}-password
+            {{- if eq $name "lineage" }}
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            {{- if eq $name "lineage" }}
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d/lineage-init.sql
+              subPath: lineage-init.sql
+            {{- end }}
+            {{- if eq $name "identity" }}
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d/identity-init.sql
+              subPath: identity-init.sql
+            {{- end }}
+          resources: {{- toYaml $root.Values.resources.postgres | nindent 12 }}
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ $cfg.username | quote }}, "-d", {{ $cfg.database | quote }}]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ $cfg.username | quote }}, "-d", {{ $cfg.database | quote }}]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      {{- if or (eq $name "lineage") (eq $name "identity") }}
+      volumes:
+        - name: init-scripts
+          configMap:
+            name: {{ include "odin-catalog.fullname" $root }}-postgres-init
+            defaultMode: 0755
+      {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ $cfg.storage }}
+{{- end }}

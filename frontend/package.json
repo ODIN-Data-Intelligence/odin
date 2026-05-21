@@ -1,0 +1,17 @@
+{
+  "name": "@datacatalog/frontend",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "shared",
+    "producer",
+    "consumer"
+  ],
+  "scripts": {
+    "dev:producer": "npm run dev --workspace=producer",
+    "dev:consumer": "npm run dev --workspace=consumer",
+    "build:producer": "npm run build --workspace=producer",
+    "build:consumer": "npm run build --workspace=consumer",
+    "build": "npm run build:producer && npm run build:consumer"
+  }
+}

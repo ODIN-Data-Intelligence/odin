@@ -1,0 +1,114 @@
+{{- if .Values.ingress.enabled }}
+{{- $root := . -}}
+
+{{/* ── Consumer frontend ──────────────────────────────────────────────────── */}}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "odin-catalog.fullname" . }}-consumer
+  labels: {{- include "odin-catalog.labels" . | nindent 4 }}
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ .Values.ingress.consumerHost }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "odin-catalog.fullname" . }}-frontend-consumer
+                port:
+                  number: {{ .Values.services.frontendConsumer.port }}
+  {{- with .Values.ingress.tls }}
+  tls: {{- toYaml . | nindent 4 }}
+  {{- end }}
+
+{{/* ── Producer frontend ──────────────────────────────────────────────────── */}}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "odin-catalog.fullname" . }}-producer
+  labels: {{- include "odin-catalog.labels" . | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ .Values.ingress.producerHost }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "odin-catalog.fullname" . }}-frontend-producer
+                port:
+                  number: {{ .Values.services.frontendProducer.port }}
+  {{- with .Values.ingress.tls }}
+  tls: {{- toYaml . | nindent 4 }}
+  {{- end }}
+
+{{/* ── API gateway (routes to each service by path prefix) ─────────────── */}}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "odin-catalog.fullname" . }}-api
+  labels: {{- include "odin-catalog.labels" . | nindent 4 }}
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ .Values.ingress.apiHost }}
+      http:
+        paths:
+          - path: /inventory/
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "odin-catalog.fullname" . }}-inventory-service
+                port:
+                  number: {{ .Values.services.inventoryService.port }}
+          - path: /harvest/
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "odin-catalog.fullname" . }}-harvest-service
+                port:
+                  number: {{ .Values.services.harvestService.port }}
+          - path: /lineage/
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "odin-catalog.fullname" . }}-lineage-service
+                port:
+                  number: {{ .Values.services.lineageService.port }}
+          - path: /search/
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "odin-catalog.fullname" . }}-search-service
+                port:
+                  number: {{ .Values.services.searchService.port }}
+          - path: /ai/
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "odin-catalog.fullname" . }}-ai-service
+                port:
+                  number: {{ .Values.services.aiService.port }}
+          - path: /identity/
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "odin-catalog.fullname" . }}-identity-service
+                port:
+                  number: {{ .Values.services.identityService.port }}
+  {{- with .Values.ingress.tls }}
+  tls: {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
