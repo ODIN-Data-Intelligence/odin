@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { SearchFacets } from '@datacatalog/shared';
 import { useSearchStore } from '../store/searchStore';
 
-function humanizeConcept(k: string): string {
+export function humanizeConcept(k: string): string {
   const fragment = k.split(/[/#:]/).pop() ?? k;
   return fragment.replace(/([A-Z])/g, ' $1').trim();
 }

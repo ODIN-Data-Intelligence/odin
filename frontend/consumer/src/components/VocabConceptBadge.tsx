@@ -14,7 +14,7 @@ const MATCH_TYPE_COLORS: Record<string, string> = {
   narrowMatch: 'bg-yellow-100 text-yellow-700 border-yellow-200 hover:bg-yellow-200',
 };
 
-function humanize(iri: string): string {
+export function humanize(iri: string): string {
   const fragment = iri.split(/[/#]/).pop() ?? iri;
   return fragment.replace(/([A-Z])/g, ' $1').trim();
 }
