@@ -8,5 +8,10 @@
     ".": "./src/index.ts",
     "./api/*": "./src/api/*.ts",
     "./types/*": "./src/types/*.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   }
 }

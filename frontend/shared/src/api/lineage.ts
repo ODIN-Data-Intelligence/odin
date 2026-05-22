@@ -3,8 +3,11 @@ import type { LineageGraph, LineageIdentity, ColumnLineage, LineageRun } from '.
 
 const BASE = '/api/v1';
 
-async function getLineageGraph(url: string): Promise<LineageGraph> {
-  const raw = await get<Record<string, unknown>>(url);
+/**
+ * Normalises raw backend lineage response into the typed LineageGraph.
+ * Extracted as a pure function so it can be unit-tested without HTTP.
+ */
+export function normalizeLineageGraph(raw: Record<string, unknown>): LineageGraph {
   // Normalise backend edge keys: {from_ns, from_name, to_ns, to_name} → LineageEdge
   const edges = ((raw.edges ?? []) as Record<string, unknown>[]).map(e => ({
     fromNamespace: e['from_ns'] as string,
@@ -28,6 +31,11 @@ async function getLineageGraph(url: string): Promise<LineageGraph> {
     nodes,
     edges,
   };
+}
+
+async function getLineageGraph(url: string): Promise<LineageGraph> {
+  const raw = await get<Record<string, unknown>>(url);
+  return normalizeLineageGraph(raw);
 }
 
 export const lineageApi = {

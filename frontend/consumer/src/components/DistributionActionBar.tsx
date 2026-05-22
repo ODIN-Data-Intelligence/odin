@@ -3,13 +3,15 @@ import type { Distribution } from '@datacatalog/shared';
 
 interface DistributionActionBarProps {
   distributions: Distribution[];
+  copyFn?: (text: string) => Promise<void>;
 }
 
-export default function DistributionActionBar({ distributions }: DistributionActionBarProps) {
+export default function DistributionActionBar({ distributions, copyFn }: DistributionActionBarProps) {
   const [copied, setCopied] = useState<string | null>(null);
+  const doCopy = copyFn ?? ((text: string) => navigator.clipboard.writeText(text));
 
   function copyUrl(url: string) {
-    navigator.clipboard.writeText(url).then(() => {
+    doCopy(url).then(() => {
       setCopied(url);
       setTimeout(() => setCopied(null), 1500);
     });
