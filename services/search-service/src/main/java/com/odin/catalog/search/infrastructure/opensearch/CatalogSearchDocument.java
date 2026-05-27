@@ -38,6 +38,7 @@ public record CatalogSearchDocument(
     List<String> vocabConceptLabels,
     List<String> vocabularyTypes,
     List<String> fiboConcepts,
+    List<String> semanticTypes,
     // Physical schema fields
     List<String> columnNames,
     List<String> columnDescriptions,

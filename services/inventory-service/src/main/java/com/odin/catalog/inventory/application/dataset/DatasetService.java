@@ -283,7 +283,7 @@ public class DatasetService {
             e.getLanguage(), e.getLicense(), e.getVersion(),
             e.getSourceUri(), e.isDeleted(),
             e.getCreatedAt(), e.getUpdatedAt(),
-            e.getOwnerId()
+            e.getOwnerId(), null
         );
     }
 

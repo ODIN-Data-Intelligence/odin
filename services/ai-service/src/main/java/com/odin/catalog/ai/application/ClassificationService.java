@@ -39,7 +39,11 @@ public class ClassificationService {
         String raw;
         try {
             raw = CompletableFuture
-                .supplyAsync(() -> chatClient.prompt().user(prompt).call().content(), VIRTUAL_EXECUTOR)
+                .supplyAsync(() -> chatClient.prompt()
+                    .system("/no_think")
+                    .user(prompt)
+                    .call()
+                    .content(), VIRTUAL_EXECUTOR)
                 .orTimeout(CLASSIFICATION_TIMEOUT_MINUTES, TimeUnit.MINUTES)
                 .join();
         } catch (CompletionException e) {
@@ -74,8 +78,8 @@ public class ClassificationService {
               CONFIDENTIAL     – Personal or financial data that must be protected (name, email, trade positions)
               HIGH_CONFIDENTIAL – Highly sensitive: identifiers, credentials, health, payment card data, SSNs
 
-	    Apply Schema.org and FIBO ontologies to inform your classifications, but use only the provided
-            metadata (name, description, logical type, vocab concepts) for your reasoning. Do not make assumptions
+            Apply Schema.org and FIBO ontologies to inform your classifications, but use only the provided 
+            metadata (name, description, logical type, vocab concepts) for your reasoning. Do not make assumptions 
             beyond the given information.
 
             Classification signals:
@@ -90,9 +94,10 @@ public class ClassificationService {
             - Respond with a JSON array only. No markdown fences. No explanation outside the JSON.
             - Each array element must be a JSON object (not a string).
             - The "classification" field must contain exactly one word: PUBLIC, INTERNAL, CONFIDENTIAL, or HIGH_CONFIDENTIAL.
+            - The "reasoning" field is REQUIRED and must be a non-empty sentence explaining why you chose that classification level.
 
             Example output:
-            [{"elementId":"abc-123","classification":"CONFIDENTIAL","reasoning":"Contains personal financial position data"}]
+            [{"elementId":"abc-123","classification":"CONFIDENTIAL","reasoning":"Contains personal financial position data linked to a trading party"}]
 
             Elements to classify:
             %s

@@ -12,6 +12,7 @@ import PhysicalSchemaSection from '../components/catalog/PhysicalSchemaSection';
 import LineageGraph from '../components/lineage/LineageGraph';
 import OwnershipPanel from '../components/catalog/OwnershipPanel';
 import DatasetHistoryTab from '../components/catalog/DatasetHistoryTab';
+import SemanticContextPanel from '../components/catalog/SemanticContextPanel';
 import { cn } from '../lib/utils';
 import { formatDate } from '../lib/utils';
 
@@ -124,7 +125,12 @@ export default function DatasetDetailPage() {
               />
             </div>
           ) : (
-            <OverviewTab dataset={dataset} />
+            <div className="max-w-2xl space-y-8">
+              <OverviewTab dataset={dataset} />
+              <div className="border-t pt-6">
+                <SemanticContextPanel datasetId={id!} />
+              </div>
+            </div>
           )
         )}
         {activeTab === 'Distributions' && (

@@ -37,6 +37,44 @@ public class AiServiceClient {
             .build();
     }
 
+    public SemanticRecommendationResponse recommendSemanticContext(SemanticRecommendationRequest request) {
+        try {
+            return restClient.post()
+                .uri("/api/v1/recommend-semantic-context")
+                .body(request)
+                .retrieve()
+                .body(SemanticRecommendationResponse.class);
+        } catch (Exception e) {
+            log.warn("AI semantic recommendation service unavailable: {}", e.getMessage());
+            throw new AiServiceUnavailableException("Semantic recommendation service is unavailable", e);
+        }
+    }
+
+    public record SemanticRecommendationRequest(
+        String datasetId,
+        String title,
+        String description,
+        List<String> keywords,
+        List<String> themes,
+        List<String> elementNames,
+        List<String> logicalTypes,
+        List<String> currentVocabLabels,
+        List<String> currentVocabIris
+    ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record SemanticRecommendationResponse(
+        List<RecommendedType> types,
+        String rationale
+    ) {
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        public record RecommendedType(
+            String type,
+            String rationale,
+            String vocabularyHint
+        ) {}
+    }
+
     public List<ElementClassificationResult> classify(List<ElementClassificationInput> elements) {
         try {
             ClassifyResponse response = restClient.post()

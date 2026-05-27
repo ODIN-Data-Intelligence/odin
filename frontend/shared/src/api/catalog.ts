@@ -4,7 +4,8 @@ import type {
   LogicalModel, LogicalDataElement, LogicalElementVocabMapping,
   Vocabulary, DatasetVocabularyProfile, VocabularyConcept,
   ColumnElementSuggestion, DatasetAuditEntry, OwnershipProposal,
-  BulkRecommendationJob,
+  BulkRecommendationJob, DatasetSemanticContext, SemanticContextRecommendation,
+  AcceptedSemanticTag,
 } from '../types/catalog';
 
 const BASE = '/api/v1';
@@ -48,6 +49,15 @@ export const datasetApi = {
   // Audit history
   getHistory: (id: string, page = 0, size = 20) =>
     get<PageResponse<DatasetAuditEntry>>(`${BASE}/datasets/${id}/history?page=${page}&size=${size}`),
+  // Semantic context
+  getSemanticContext: (id: string) =>
+    get<DatasetSemanticContext>(`${BASE}/datasets/${id}/semantic-context`),
+  recommendSemanticContext: (id: string) =>
+    post<SemanticContextRecommendation>(`${BASE}/datasets/${id}/recommend-semantic-context`, {}),
+  acceptSemanticTag: (id: string, body: { type: string; vocabularyIri?: string }) =>
+    post<AcceptedSemanticTag>(`${BASE}/datasets/${id}/semantic-tags`, body),
+  deleteSemanticTag: (id: string, tagId: string) =>
+    del<void>(`${BASE}/datasets/${id}/semantic-tags/${tagId}`),
 };
 
 // Distributions

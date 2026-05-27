@@ -1,5 +1,6 @@
 package com.odin.catalog.inventory.infrastructure.kafka;
 
+import com.odin.catalog.inventory.api.v1.dto.DatasetSemanticContext;
 import com.odin.catalog.inventory.infrastructure.jpa.entity.DataProductEntity;
 import com.odin.catalog.inventory.infrastructure.jpa.entity.DatasetEntity;
 import com.odin.catalog.shared.kafka.producer.KafkaEventPublisher;
@@ -18,49 +19,32 @@ public class CatalogEventProducer {
     private final KafkaEventPublisher publisher;
 
     public void publishDatasetChanged(String changeType, DatasetEntity entity) {
-        DcatResource resource = new DcatResource(
-            entity.getId().toString(),
-            entity.getResourceType(),
-            entity.getIri(),
-            entity.getTenantId().toString(),
-            entity.getDomainId() != null ? entity.getDomainId().toString() : null,
-            entity.getTitle(),
-            entity.getDescription(),
-            entity.getLanguage(),
-            entity.getKeywords(),
-            entity.getThemes(),
-            entity.getIssued() != null ? entity.getIssued().toString() : null,
-            entity.getModified() != null ? entity.getModified().toString() : null,
-            entity.getLicense(),
-            entity.getRightsStatement(),
-            entity.getAccessRights(),
-            entity.getConformsTo(),
-            entity.getCreatorId() != null ? entity.getCreatorId().toString() : null,
-            entity.getPublisherId() != null ? entity.getPublisherId().toString() : null,
-            null,
-            entity.getSourceUri(),
-            null
-        );
-        DcatDataset dataset = new DcatDataset(
-            resource,
-            entity.getAccrualPeriodicity(),
-            null,
-            entity.getSpatialResolutionM() != null ? entity.getSpatialResolutionM().toString() : null,
-            entity.getTemporalResolution(),
-            entity.getVersion(),
-            entity.getVersionNotes(),
-            entity.getIsVersionOf() != null ? entity.getIsVersionOf().getId().toString() : null,
-            null,
-            null
-        );
-        var payload = new DatasetChangedPayload(
-            changeType,
-            entity.getId().toString(),
-            entity.getCatalogId() != null ? entity.getCatalogId().toString() : null,
-            entity.getDomainId() != null ? entity.getDomainId().toString() : null,
-            entity.getTenantId().toString(),
-            dataset
-        );
+        publishDatasetChanged(changeType, entity, null);
+    }
+
+    public void publishDatasetChanged(String changeType, DatasetEntity entity, DatasetSemanticContext ctx) {
+        DcatDataset dataset = buildDcatDataset(entity);
+        DatasetChangedPayload payload = ctx != null
+            ? new DatasetChangedPayload(
+                changeType,
+                entity.getId().toString(),
+                entity.getCatalogId() != null ? entity.getCatalogId().toString() : null,
+                entity.getDomainId() != null ? entity.getDomainId().toString() : null,
+                entity.getTenantId().toString(),
+                dataset,
+                ctx.semanticTypes(),
+                ctx.vocabConceptLabels(),
+                ctx.vocabConceptIris(),
+                ctx.fiboConcepts(),
+                ctx.logicalElementNames(),
+                ctx.logicalTypes())
+            : DatasetChangedPayload.ofBasic(
+                changeType,
+                entity.getId().toString(),
+                entity.getCatalogId() != null ? entity.getCatalogId().toString() : null,
+                entity.getDomainId() != null ? entity.getDomainId().toString() : null,
+                entity.getTenantId().toString(),
+                dataset);
         publisher.publishAsync(
             CatalogTopics.DATASETS_CHANGES,
             entity.getId().toString(),
@@ -89,6 +73,44 @@ public class CatalogEventProducer {
             "DataProductChanged",
             entity.getTenantId().toString(),
             payload
+        );
+    }
+
+    private DcatDataset buildDcatDataset(DatasetEntity entity) {
+        DcatResource resource = new DcatResource(
+            entity.getId().toString(),
+            entity.getResourceType(),
+            entity.getIri(),
+            entity.getTenantId().toString(),
+            entity.getDomainId() != null ? entity.getDomainId().toString() : null,
+            entity.getTitle(),
+            entity.getDescription(),
+            entity.getLanguage(),
+            entity.getKeywords(),
+            entity.getThemes(),
+            entity.getIssued() != null ? entity.getIssued().toString() : null,
+            entity.getModified() != null ? entity.getModified().toString() : null,
+            entity.getLicense(),
+            entity.getRightsStatement(),
+            entity.getAccessRights(),
+            entity.getConformsTo(),
+            entity.getCreatorId() != null ? entity.getCreatorId().toString() : null,
+            entity.getPublisherId() != null ? entity.getPublisherId().toString() : null,
+            null,
+            entity.getSourceUri(),
+            null
+        );
+        return new DcatDataset(
+            resource,
+            entity.getAccrualPeriodicity(),
+            null,
+            entity.getSpatialResolutionM() != null ? entity.getSpatialResolutionM().toString() : null,
+            entity.getTemporalResolution(),
+            entity.getVersion(),
+            entity.getVersionNotes(),
+            entity.getIsVersionOf() != null ? entity.getIsVersionOf().getId().toString() : null,
+            null,
+            null
         );
     }
 }

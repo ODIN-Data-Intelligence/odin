@@ -6,7 +6,10 @@ import com.odin.catalog.inventory.infrastructure.ai.AiServiceClient.ElementClass
 import com.odin.catalog.inventory.infrastructure.ai.AiServiceClient.ElementClassificationResult;
 import com.odin.catalog.inventory.infrastructure.jpa.entity.*;
 import com.odin.catalog.inventory.infrastructure.jpa.repository.*;
+import com.odin.catalog.inventory.infrastructure.kafka.CatalogEventProducer;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -22,10 +25,15 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class LogicalModelService {
 
+    private static final Logger log = LoggerFactory.getLogger(LogicalModelService.class);
+
     private final LogicalModelRepository modelRepository;
     private final LogicalDataElementRepository elementRepository;
     private final VocabMappingRepository mappingRepository;
     private final CsvwColumnRepository columnRepository;
+    private final DatasetRepository datasetRepository;
+    private final DatasetSemanticTagRepository semanticTagRepository;
+    private final CatalogEventProducer eventProducer;
     private final AiServiceClient aiServiceClient;
     private final PlatformTransactionManager transactionManager;
     private final BulkRecommendationJobRegistry jobRegistry;
@@ -55,7 +63,11 @@ public class LogicalModelService {
     public LogicalModelResponse updateStatus(UUID id, String newStatus) {
         LogicalModelEntity entity = findModelOrThrow(id);
         entity.setStatus(newStatus);
-        return toResponse(modelRepository.save(entity));
+        LogicalModelResponse result = toResponse(modelRepository.save(entity));
+        if ("published".equals(newStatus)) {
+            publishSemanticUpdate(entity.getDatasetId());
+        }
+        return result;
     }
 
     @Transactional
@@ -108,7 +120,7 @@ public class LogicalModelService {
 
     @Transactional
     public VocabMappingResponse addVocabMapping(UUID elementId, VocabMappingRequest request) {
-        findElementOrThrow(elementId);
+        LogicalDataElementEntity element = findElementOrThrow(elementId);
         VocabMappingEntity entity = new VocabMappingEntity();
         entity.setLogicalElementId(elementId);
         entity.setVocabularyId(request.vocabularyId());
@@ -116,7 +128,11 @@ public class LogicalModelService {
         entity.setConceptLabel(request.conceptLabel());
         entity.setConceptDefinition(request.conceptDefinition());
         entity.setMatchType(request.matchType() != null ? request.matchType() : "exactMatch");
-        return toMappingResponse(mappingRepository.save(entity));
+        VocabMappingResponse response = toMappingResponse(mappingRepository.save(entity));
+        modelRepository.findById(element.getLogicalModelId())
+            .map(LogicalModelEntity::getDatasetId)
+            .ifPresent(this::publishSemanticUpdate);
+        return response;
     }
 
     @Transactional(readOnly = true)
@@ -127,7 +143,13 @@ public class LogicalModelService {
 
     @Transactional
     public void deleteVocabMapping(UUID mappingId) {
+        UUID datasetId = mappingRepository.findById(mappingId)
+            .flatMap(m -> elementRepository.findById(m.getLogicalElementId()))
+            .flatMap(e -> modelRepository.findById(e.getLogicalModelId()))
+            .map(LogicalModelEntity::getDatasetId)
+            .orElse(null);
         mappingRepository.deleteById(mappingId);
+        if (datasetId != null) publishSemanticUpdate(datasetId);
     }
 
     @Transactional(readOnly = true)
@@ -260,6 +282,117 @@ public class LogicalModelService {
         entity.setClassificationReasoning(null);
         entity.setClassificationRecommendedAt(null);
         return toElementResponse(elementRepository.save(entity));
+    }
+
+    @Transactional(readOnly = true)
+    public DatasetSemanticContext getSemanticContext(UUID datasetId) {
+        List<LogicalModelEntity> models = modelRepository.findByDatasetIdOrderByCreatedAtDesc(datasetId);
+        List<String> semanticTypes = mappingRepository.findSemanticTypesByDatasetId(datasetId);
+        List<String> vocabConceptLabels = new ArrayList<>();
+        List<String> vocabConceptIris = new ArrayList<>();
+        List<String> fiboConcepts = new ArrayList<>();
+        List<String> logicalElementNames = new ArrayList<>();
+        List<String> logicalTypes = new ArrayList<>();
+
+        for (LogicalModelEntity model : models) {
+            if (model.getElements() == null) continue;
+            for (LogicalDataElementEntity el : model.getElements()) {
+                if (el.getName() != null) logicalElementNames.add(el.getName());
+                if (el.getLogicalType() != null) logicalTypes.add(el.getLogicalType());
+                if (el.getVocabMappings() == null) continue;
+                for (VocabMappingEntity m : el.getVocabMappings()) {
+                    if (m.getConceptLabel() != null) vocabConceptLabels.add(m.getConceptLabel());
+                    if (m.getConceptIri() != null) {
+                        vocabConceptIris.add(m.getConceptIri());
+                        if (m.getConceptIri().contains("edmcouncil.org/fibo")) {
+                            fiboConcepts.add(m.getConceptIri());
+                        }
+                    }
+                }
+            }
+        }
+
+        List<DatasetSemanticContext.AcceptedTag> acceptedTags =
+            semanticTagRepository.findByDatasetIdOrderByCreatedAtDesc(datasetId)
+                .stream()
+                .map(t -> new DatasetSemanticContext.AcceptedTag(t.getId(), t.getSemanticType(), t.getVocabularyIri()))
+                .toList();
+
+        return new DatasetSemanticContext(
+            semanticTypes,
+            vocabConceptLabels.stream().distinct().toList(),
+            vocabConceptIris.stream().distinct().toList(),
+            fiboConcepts.stream().distinct().toList(),
+            logicalElementNames.stream().distinct().toList(),
+            logicalTypes.stream().distinct().toList(),
+            acceptedTags
+        );
+    }
+
+    @Transactional
+    public DatasetSemanticTagResponse acceptSemanticTag(UUID datasetId, DatasetSemanticTagRequest request) {
+        DatasetSemanticTagEntity tag = new DatasetSemanticTagEntity();
+        tag.setDatasetId(datasetId);
+        tag.setSemanticType(request.type());
+        tag.setVocabularyIri(request.vocabularyIri());
+        tag = semanticTagRepository.save(tag);
+        publishSemanticUpdate(datasetId);
+        return toTagResponse(tag);
+    }
+
+    @Transactional
+    public void deleteSemanticTag(UUID datasetId, UUID tagId) {
+        semanticTagRepository.findByIdAndDatasetId(tagId, datasetId)
+            .orElseThrow(() -> new NoSuchElementException("Semantic tag not found: " + tagId));
+        semanticTagRepository.deleteById(tagId);
+        publishSemanticUpdate(datasetId);
+    }
+
+    @Transactional(readOnly = true)
+    public AiServiceClient.SemanticRecommendationResponse recommendSemanticContext(UUID datasetId) {
+        DatasetSemanticContext ctx = getSemanticContext(datasetId);
+        var dataset = datasetRepository.findById(datasetId)
+            .orElseThrow(() -> new NoSuchElementException("Dataset not found: " + datasetId));
+
+        var request = new AiServiceClient.SemanticRecommendationRequest(
+            datasetId.toString(),
+            dataset.getTitle(),
+            dataset.getDescription(),
+            dataset.getKeywords(),
+            dataset.getThemes(),
+            ctx.logicalElementNames(),
+            ctx.logicalTypes(),
+            ctx.vocabConceptLabels(),
+            ctx.vocabConceptIris()
+        );
+        return aiServiceClient.recommendSemanticContext(request);
+    }
+
+    private void publishSemanticUpdate(UUID datasetId) {
+        try {
+            datasetRepository.findById(datasetId).ifPresent(dataset -> {
+                DatasetSemanticContext ctx = getSemanticContext(datasetId);
+                // Merge accepted tags into semanticTypes for downstream consumers
+                List<String> mergedTypes = new ArrayList<>(ctx.semanticTypes());
+                ctx.acceptedTags().stream().map(DatasetSemanticContext.AcceptedTag::type)
+                    .filter(t -> !mergedTypes.contains(t))
+                    .forEach(mergedTypes::add);
+                DatasetSemanticContext enriched = new DatasetSemanticContext(
+                    mergedTypes,
+                    ctx.vocabConceptLabels(), ctx.vocabConceptIris(), ctx.fiboConcepts(),
+                    ctx.logicalElementNames(), ctx.logicalTypes(), ctx.acceptedTags()
+                );
+                eventProducer.publishDatasetChanged("UPDATED", dataset, enriched);
+            });
+        } catch (Exception e) {
+            log.warn("Failed to publish semantic update for dataset {}: {}", datasetId, e.getMessage());
+        }
+    }
+
+    private DatasetSemanticTagResponse toTagResponse(DatasetSemanticTagEntity t) {
+        return new DatasetSemanticTagResponse(
+            t.getId(), t.getDatasetId(), t.getSemanticType(), t.getVocabularyIri(), t.getCreatedAt()
+        );
     }
 
     private ElementClassificationInput toClassificationInput(LogicalDataElementEntity e) {

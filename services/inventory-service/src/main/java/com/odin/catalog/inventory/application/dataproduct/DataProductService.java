@@ -140,7 +140,7 @@ public class DataProductService {
             ds.getAccrualPeriodicity(), ds.getKeywords(), ds.getThemes(),
             ds.getLanguage(), ds.getLicense(), ds.getVersion(),
             ds.getSourceUri(), ds.isDeleted(), ds.getCreatedAt(), ds.getUpdatedAt(),
-            ds.getOwnerId()
+            ds.getOwnerId(), null
         );
     }
 

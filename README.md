@@ -156,6 +156,100 @@ make seed
 
 ---
 
+## Kubernetes / Helm Deployment
+
+A single Helm chart covers the full stack. Requires Helm 3.x and a running Kubernetes cluster.
+
+### Install
+
+```bash
+# Add to your cluster in a dedicated namespace
+helm install odin infra/helm/charts/odin-catalog/ \
+  --namespace odin-catalog \
+  --create-namespace
+
+# Watch pods come up
+kubectl get pods -n odin-catalog -w
+```
+
+Two post-install Jobs run automatically:
+
+- **kafka-init** — creates all 10 Kafka topics with correct partition counts and cleanup policies
+- **opensearch-init** — creates the `catalog_entities` index with the English analyzer mapping
+
+Both Jobs complete in under 30 seconds and are deleted on success.
+
+### Configure
+
+Override values with `--set` or a values file:
+
+```bash
+# Minimal production overrides
+helm install odin infra/helm/charts/odin-catalog/ \
+  --namespace odin-catalog --create-namespace \
+  --set postgres.inventory.password=<secret> \
+  --set postgres.harvest.password=<secret> \
+  --set postgres.lineage.password=<secret> \
+  --set postgres.identity.password=<secret> \
+  --set postgres.ai.password=<secret> \
+  --set keycloak.adminPassword=<secret> \
+  --set keycloak.clientSecret=<secret> \
+  --set minio.rootPassword=<secret> \
+  --set ingress.consumerHost=catalog.example.com \
+  --set ingress.producerHost=manage.catalog.example.com \
+  --set ingress.apiHost=api.catalog.example.com
+```
+
+Or use a values file:
+
+```bash
+cp infra/helm/charts/odin-catalog/values.yaml my-values.yaml
+# edit my-values.yaml
+helm install odin infra/helm/charts/odin-catalog/ -f my-values.yaml -n odin-catalog --create-namespace
+```
+
+### Ingress
+
+The chart creates three Ingress resources (requires an nginx ingress controller):
+
+| Ingress | Default host | Routes to |
+|---------|-------------|-----------|
+| consumer | `catalog.local` | Consumer (discovery) frontend |
+| producer | `manage.catalog.local` | Producer (management) frontend |
+| api | `api.catalog.local` | API gateway — `/inventory/`, `/harvest/`, `/lineage/`, `/search/`, `/ai/`, `/identity/` |
+
+Disable ingress with `--set ingress.enabled=false` and use `kubectl port-forward` instead.
+
+### Upgrade and uninstall
+
+```bash
+# Apply chart changes or value updates
+helm upgrade odin infra/helm/charts/odin-catalog/ -n odin-catalog -f my-values.yaml
+
+# Remove all resources (PVCs are retained by default)
+helm uninstall odin -n odin-catalog
+```
+
+### Resource customisation
+
+Default resource requests are conservative (250 m CPU / 512 Mi for backends). Override per environment:
+
+```yaml
+# values-prod.yaml
+resources:
+  backend:
+    requests: { cpu: 500m, memory: 1Gi }
+    limits:   { cpu: "2",  memory: 2Gi }
+  opensearch:
+    requests: { cpu: "1",  memory: 2Gi }
+    limits:   { cpu: "2",  memory: 4Gi }
+  kafka:
+    requests: { cpu: 500m, memory: 1Gi }
+    limits:   { cpu: "1",  memory: 2Gi }
+```
+
+---
+
 ## Monorepo Layout
 
 ```
@@ -179,7 +273,9 @@ data-catalog/
 │   ├── traefik/              # Traefik routing config
 │   ├── kafka/                # Topic definitions
 │   ├── keycloak/             # Realm export
-│   └── opensearch/           # Index mappings
+│   ├── opensearch/           # Index mappings
+│   └── helm/charts/odin-catalog/  # Helm chart (52 Kubernetes resources)
+├── marketing/                # Marketing landing page
 ├── docker-compose.yml
 ├── Makefile
 └── gradle/libs.versions.toml # Gradle version catalog

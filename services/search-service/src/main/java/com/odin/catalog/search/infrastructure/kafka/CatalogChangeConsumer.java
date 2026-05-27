@@ -85,6 +85,8 @@ public class CatalogChangeConsumer {
 
     private CatalogSearchDocument buildDatasetDocument(DatasetChangedPayload payload) {
         var ds = payload.dataset();
+        List<String> elemNames = orEmpty(payload.logicalElementNames());
+        boolean hasLogicalModel = !elemNames.isEmpty();
         return new CatalogSearchDocument(
             payload.datasetId(), payload.tenantId(), "DATASET",
             ds != null ? ds.resource().title() : null,
@@ -95,10 +97,21 @@ public class CatalogChangeConsumer {
             ds != null ? ds.resource().license() : null,
             null, null, ds != null ? ds.accrualPeriodicity() : null,
             ds != null ? ds.resource().sourceUri() : null,
-            null, null, false, false, false, 0,
-            List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+            null, null, false, false, hasLogicalModel, 0,
+            elemNames,
+            List.of(),
+            orEmpty(payload.logicalTypes()),
+            orEmpty(payload.vocabConceptIris()),
+            orEmpty(payload.vocabConceptLabels()),
+            List.of(),
+            orEmpty(payload.fiboConcepts()),
+            orEmpty(payload.semanticTypes()),
             List.of(), List.of(), null
         );
+    }
+
+    private static List<String> orEmpty(List<String> lst) {
+        return lst != null ? lst : List.of();
     }
 
     private CatalogSearchDocument buildDataProductDocument(DataProductChangedPayload payload) {
@@ -114,7 +127,7 @@ public class CatalogChangeConsumer {
             null, dp != null ? dp.resource().license() : null,
             null, null, null, null, null, null,
             false, false, false, 0,
-            List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+            List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
             List.of(), List.of(), null
         );
     }
@@ -163,7 +176,7 @@ public class CatalogChangeConsumer {
             (String) dist.get("format"),
             (String) dist.get("mediaType"),
             null, null, null, null, false, false, false, 0,
-            List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+            List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
             List.of(), List.of(), (String) dist.get("datasetId")
         );
     }
