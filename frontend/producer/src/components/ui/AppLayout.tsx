@@ -3,8 +3,10 @@ import { cn } from '../../lib/utils';
 
 const navItems = [
   { label: 'Dashboard', to: '' },
+  { label: 'Search', to: 'search' },
   { label: 'Data Products', to: 'data-products' },
   { label: 'Datasets', to: 'datasets' },
+  { label: 'Distributions', to: 'distributions' },
   { label: 'Lineage', to: 'lineage' },
 ];
 

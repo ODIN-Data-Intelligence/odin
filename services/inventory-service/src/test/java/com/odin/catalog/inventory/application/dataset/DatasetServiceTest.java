@@ -1,10 +1,13 @@
 package com.odin.catalog.inventory.application.dataset;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.odin.catalog.inventory.api.v1.dto.DatasetRequest;
 import com.odin.catalog.inventory.api.v1.dto.DatasetResponse;
 import com.odin.catalog.inventory.api.v1.dto.PageResponse;
 import com.odin.catalog.inventory.infrastructure.jpa.entity.DatasetEntity;
+import com.odin.catalog.inventory.infrastructure.jpa.repository.DatasetAuditLogRepository;
 import com.odin.catalog.inventory.infrastructure.jpa.repository.DatasetRepository;
+import com.odin.catalog.inventory.infrastructure.jpa.repository.OwnershipProposalRepository;
 import com.odin.catalog.inventory.infrastructure.kafka.CatalogEventProducer;
 import com.odin.catalog.shared.auth.filter.TenantContextHolder;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,6 +30,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import org.mockito.Spy;
 
 @ExtendWith(MockitoExtension.class)
 class DatasetServiceTest {
@@ -34,7 +38,10 @@ class DatasetServiceTest {
     static final UUID TENANT = UUID.fromString("00000000-0000-0000-0000-000000000001");
 
     @Mock DatasetRepository datasetRepository;
+    @Mock DatasetAuditLogRepository auditLogRepository;
+    @Mock OwnershipProposalRepository proposalRepository;
     @Mock CatalogEventProducer eventProducer;
+    @Spy  ObjectMapper objectMapper = new ObjectMapper();
 
     @InjectMocks DatasetService service;
 

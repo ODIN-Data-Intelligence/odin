@@ -1,0 +1,76 @@
+# MicroK8s-specific Helm values override.
+# Usage:
+#   helm install odin infra/helm/charts/odin-catalog \
+#     --namespace odin-catalog \
+#     -f infra/microk8s/values.yaml
+
+global:
+  imageRegistry: localhost:32000
+
+ingress:
+  enabled: true
+  className: nginx
+  consumerHost: catalog.local
+  producerHost: manage.catalog.local
+  apiHost: api.catalog.local
+  tls: []
+
+# ─── Resource overrides for a single developer machine (16 GB RAM) ───────────
+# Reduce these further if your machine has < 16 GB (see reduced-resources.yaml).
+resources:
+  backend:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  frontend:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  postgres:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  kafka:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  opensearch:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+  minio:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  redis:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  keycloak:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi

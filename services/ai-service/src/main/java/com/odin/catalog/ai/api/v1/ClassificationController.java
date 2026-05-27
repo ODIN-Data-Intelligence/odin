@@ -1,0 +1,36 @@
+package com.odin.catalog.ai.api.v1;
+
+import com.odin.catalog.ai.api.v1.dto.ClassifyElementsRequest;
+import com.odin.catalog.ai.api.v1.dto.ClassifyElementsResponse;
+import com.odin.catalog.ai.application.ClassificationService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
+@Tag(name = "Classification", description = "AI-powered data element classification")
+@RestController
+@RequiredArgsConstructor
+public class ClassificationController {
+
+    private final ClassificationService classificationService;
+
+    @Operation(summary = "Classify data elements",
+        description = "Uses the LLM to infer data classification levels (PUBLIC / INTERNAL / CONFIDENTIAL / HIGH_CONFIDENTIAL) "
+            + "from element names, logical types, and FIBO/Schema.org vocabulary mappings. "
+            + "Returns one classification with a one-sentence reasoning for each input element.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Classification results"),
+        @ApiResponse(responseCode = "400", description = "Validation error", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @PostMapping("/api/v1/classify/elements")
+    public ClassifyElementsResponse classify(@RequestBody ClassifyElementsRequest request) {
+        return classificationService.classify(request);
+    }
+}

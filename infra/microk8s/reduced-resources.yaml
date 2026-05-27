@@ -1,0 +1,35 @@
+# Additional override for machines with < 16 GB RAM.
+# Layer this on top of values.yaml:
+#   helm upgrade odin infra/helm/charts/odin-catalog \
+#     --namespace odin-catalog \
+#     -f infra/microk8s/values.yaml \
+#     -f infra/microk8s/reduced-resources.yaml
+
+resources:
+  backend:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  opensearch:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  kafka:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+opensearch:
+  javaOpts: "-Xms256m -Xmx512m"
+
+kafka:
+  heapOpts: "-Xmx256m -Xms256m"

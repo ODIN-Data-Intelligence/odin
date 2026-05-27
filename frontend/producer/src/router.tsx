@@ -4,8 +4,11 @@ import DashboardPage from './pages/DashboardPage';
 import DataProductsPage from './pages/DataProductsPage';
 import DataProductDetailPage from './pages/DataProductDetailPage';
 import DatasetsPage from './pages/DatasetsPage';
+import DatasetCreatePage from './pages/DatasetCreatePage';
 import DatasetDetailPage from './pages/DatasetDetailPage';
 import DistributionDetailPage from './pages/DistributionDetailPage';
+import DistributionsPage from './pages/DistributionsPage';
+import SearchPage from './pages/SearchPage';
 import LineagePage from './pages/LineagePage';
 import HarvestPage from './pages/admin/HarvestPage';
 import HarvestSourceDetailPage from './pages/admin/HarvestSourceDetailPage';
@@ -27,8 +30,11 @@ export const router = createBrowserRouter([
       { path: 'data-products', element: <DataProductsPage /> },
       { path: 'data-products/:id', element: <DataProductDetailPage /> },
       { path: 'datasets', element: <DatasetsPage /> },
+      { path: 'datasets/new', element: <DatasetCreatePage /> },
       { path: 'datasets/:datasetId/distributions/:id', element: <DistributionDetailPage /> },
       { path: 'datasets/:id', element: <DatasetDetailPage /> },
+      { path: 'distributions', element: <DistributionsPage /> },
+      { path: 'search', element: <SearchPage /> },
       { path: 'lineage', element: <LineagePage /> },
       { path: 'admin/harvest', element: <HarvestPage /> },
       { path: 'admin/harvest/sources/:id', element: <HarvestSourceDetailPage /> },

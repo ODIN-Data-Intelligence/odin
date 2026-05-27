@@ -1,5 +1,6 @@
 package com.odin.catalog.inventory.api.v1.error;
 
+import com.odin.catalog.inventory.infrastructure.ai.AiServiceUnavailableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -32,6 +33,16 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     public ProblemDetail handleIllegalArg(IllegalArgumentException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    public ProblemDetail handleConflict(IllegalStateException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    @ExceptionHandler(AiServiceUnavailableException.class)
+    public ProblemDetail handleAiUnavailable(AiServiceUnavailableException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
     }
 
     @ExceptionHandler(Exception.class)

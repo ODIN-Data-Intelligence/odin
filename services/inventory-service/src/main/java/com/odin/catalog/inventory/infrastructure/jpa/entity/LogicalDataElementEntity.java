@@ -8,6 +8,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
+
 @Entity
 @Table(name = "logical_data_elements")
 @Getter @Setter
@@ -47,6 +48,11 @@ public class LogicalDataElementEntity {
 
     @OneToMany(mappedBy = "logicalElementId", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<VocabMappingEntity> vocabMappings;
+
+    private String classification;
+    private String recommendedClassification;
+    private String classificationReasoning;
+    private OffsetDateTime classificationRecommendedAt;
 
     @PrePersist
     void prePersist() {

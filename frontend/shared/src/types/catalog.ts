@@ -25,8 +25,30 @@ export interface Dataset extends Resource {
   spatial?: Record<string, unknown>;
   version?: string;
   isVersionOf?: string;
+  ownerId?: string;
   distributions?: Distribution[];
   logicalModels?: LogicalModel[];
+}
+
+export interface DatasetAuditEntry {
+  id: string;
+  datasetId: string;
+  eventType: string;
+  changedById?: string;
+  changedByEmail?: string;
+  payloadBefore?: string;
+  payloadAfter?: string;
+  createdAt: string;
+}
+
+export interface OwnershipProposal {
+  id: string;
+  datasetId: string;
+  proposedOwnerId: string;
+  proposedById: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  createdAt: string;
+  resolvedAt?: string;
 }
 
 export interface Distribution extends Resource {
@@ -152,6 +174,10 @@ export interface LogicalDataElement {
   vocabMappings?: LogicalElementVocabMapping[];
   createdAt: string;
   updatedAt: string;
+  classification?: 'PUBLIC' | 'INTERNAL' | 'CONFIDENTIAL' | 'HIGH_CONFIDENTIAL';
+  recommendedClassification?: 'PUBLIC' | 'INTERNAL' | 'CONFIDENTIAL' | 'HIGH_CONFIDENTIAL';
+  classificationReasoning?: string;
+  classificationRecommendedAt?: string;
 }
 
 export interface LogicalElementVocabMapping {
@@ -164,6 +190,15 @@ export interface LogicalElementVocabMapping {
   conceptDefinition?: string;
   matchType: 'exactMatch' | 'closeMatch' | 'relatedMatch' | 'broadMatch' | 'narrowMatch';
   createdAt: string;
+}
+
+export interface BulkRecommendationJob {
+  jobId: string;
+  modelId: string;
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  createdAt: string;
+  completedAt?: string;
+  error?: string;
 }
 
 export interface ColumnElementSuggestion {

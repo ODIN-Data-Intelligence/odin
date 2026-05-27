@@ -1,0 +1,111 @@
+# Requires an NGINX Ingress Controller in the cluster.
+# MicroK8s: microk8s enable ingress
+# Other: kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.1/deploy/static/provider/cloud/deploy.yaml
+
+---
+# ── Consumer frontend ─────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: odin-catalog-consumer
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/part-of: odin-catalog
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: catalog.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: odin-catalog-frontend-consumer
+                port:
+                  number: 3001
+
+---
+# ── Producer frontend ─────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: odin-catalog-producer
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/part-of: odin-catalog
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: manage.catalog.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: odin-catalog-frontend-producer
+                port:
+                  number: 3000
+
+---
+# ── API gateway (path-based routing to each backend) ─────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: odin-catalog-api
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/part-of: odin-catalog
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: api.catalog.local
+      http:
+        paths:
+          - path: /inventory/
+            pathType: Prefix
+            backend:
+              service:
+                name: odin-catalog-inventory-service
+                port:
+                  number: 8001
+          - path: /harvest/
+            pathType: Prefix
+            backend:
+              service:
+                name: odin-catalog-harvest-service
+                port:
+                  number: 8002
+          - path: /lineage/
+            pathType: Prefix
+            backend:
+              service:
+                name: odin-catalog-lineage-service
+                port:
+                  number: 8003
+          - path: /search/
+            pathType: Prefix
+            backend:
+              service:
+                name: odin-catalog-search-service
+                port:
+                  number: 8004
+          - path: /ai/
+            pathType: Prefix
+            backend:
+              service:
+                name: odin-catalog-ai-service
+                port:
+                  number: 8005
+          - path: /identity/
+            pathType: Prefix
+            backend:
+              service:
+                name: odin-catalog-identity-service
+                port:
+                  number: 8006

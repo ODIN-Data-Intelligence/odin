@@ -3,7 +3,8 @@ import type {
   Catalog, Dataset, DataProduct, Distribution, CsvwColumn, PageResponse,
   LogicalModel, LogicalDataElement, LogicalElementVocabMapping,
   Vocabulary, DatasetVocabularyProfile, VocabularyConcept,
-  ColumnElementSuggestion,
+  ColumnElementSuggestion, DatasetAuditEntry, OwnershipProposal,
+  BulkRecommendationJob,
 } from '../types/catalog';
 
 const BASE = '/api/v1';
@@ -33,6 +34,28 @@ export const datasetApi = {
   getDistributionPhysicalSchema: (id: string) => get<CsvwColumn[]>(`${BASE}/distributions/${id}/physical-schema`),
   suggestElementMappings: (distributionId: string, modelId: string) =>
     get<ColumnElementSuggestion[]>(`${BASE}/distributions/${distributionId}/suggest-element-mappings?modelId=${modelId}`),
+  // Ownership
+  assignOwner: (id: string, userId: string) =>
+    put<Dataset>(`${BASE}/datasets/${id}/owner`, { userId }),
+  proposeTransfer: (id: string, proposedOwnerId: string) =>
+    post<OwnershipProposal>(`${BASE}/datasets/${id}/ownership-proposals`, { proposedOwnerId }),
+  getPendingProposal: (id: string) =>
+    get<OwnershipProposal | null>(`${BASE}/datasets/${id}/ownership-proposals/pending`),
+  approveTransfer: (id: string, proposalId: string) =>
+    post<Dataset>(`${BASE}/datasets/${id}/ownership-proposals/${proposalId}/approve`, {}),
+  rejectTransfer: (id: string, proposalId: string) =>
+    post<OwnershipProposal>(`${BASE}/datasets/${id}/ownership-proposals/${proposalId}/reject`, {}),
+  // Audit history
+  getHistory: (id: string, page = 0, size = 20) =>
+    get<PageResponse<DatasetAuditEntry>>(`${BASE}/datasets/${id}/history?page=${page}&size=${size}`),
+};
+
+// Distributions
+export const distributionApi = {
+  list: (params?: { page?: number; size?: number }) => {
+    const q = new URLSearchParams(params as Record<string, string>).toString();
+    return get<PageResponse<Distribution>>(`${BASE}/distributions${q ? '?' + q : ''}`);
+  },
 };
 
 // Data Products
@@ -99,6 +122,16 @@ export const logicalElementApi = {
     post<LogicalDataElement>(`${BASE}/logical-data-elements/${id}/bind`, { physicalColumnId }),
   unbind: (id: string) =>
     del<LogicalDataElement>(`${BASE}/logical-data-elements/${id}/bind`),
+  recommendClassification: (id: string) =>
+    post<LogicalDataElement>(`${BASE}/logical-data-elements/${id}/recommend-classification`, {}),
+  acceptClassification: (id: string) =>
+    post<LogicalDataElement>(`${BASE}/logical-data-elements/${id}/accept-classification`, {}),
+  rejectClassification: (id: string) =>
+    post<LogicalDataElement>(`${BASE}/logical-data-elements/${id}/reject-classification`, {}),
+  recommendModelClassifications: (modelId: string) =>
+    post<BulkRecommendationJob>(`${BASE}/logical-models/${modelId}/recommend-classifications`, {}),
+  getRecommendationJob: (jobId: string) =>
+    get<BulkRecommendationJob>(`${BASE}/logical-models/recommend-classifications/jobs/${jobId}`),
 };
 
 // Vocabulary Mappings

@@ -20,5 +20,6 @@
       "@datacatalog/shared/*": ["../shared/src/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test-setup.ts"]
 }

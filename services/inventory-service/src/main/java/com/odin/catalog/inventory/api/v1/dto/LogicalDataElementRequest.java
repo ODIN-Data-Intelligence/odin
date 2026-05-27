@@ -34,6 +34,10 @@ public record LogicalDataElementRequest(
     boolean isIdentifier,
 
     @Schema(description = "Whether null values are permitted", example = "false")
-    boolean isNullable
+    boolean isNullable,
+
+    @Schema(description = "Data classification override set by the data owner",
+        allowableValues = {"PUBLIC", "INTERNAL", "CONFIDENTIAL", "HIGH_CONFIDENTIAL"})
+    String classification
 
 ) {}
