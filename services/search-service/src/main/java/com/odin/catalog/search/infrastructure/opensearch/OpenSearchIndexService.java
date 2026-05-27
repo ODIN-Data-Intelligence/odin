@@ -55,7 +55,7 @@ public class OpenSearchIndexService {
             List<Query> filters = new ArrayList<>();
 
             if (tenantId != null) {
-                filters.add(Query.of(q -> q.term(t -> t.field("tenantId.keyword").value(FieldValue.of(tenantId)))));
+                filters.add(Query.of(q -> q.term(t -> t.field("tenantId").value(FieldValue.of(tenantId)))));
             }
             filters.add(Query.of(q -> q.term(t -> t.field("isDeleted").value(FieldValue.of(false)))));
 
@@ -65,7 +65,7 @@ public class OpenSearchIndexService {
             if (format != null) filters.add(Query.of(q -> q.term(t -> t.field("format").value(FieldValue.of(format)))));
             if (hasLineage != null) filters.add(Query.of(q -> q.term(t -> t.field("hasLineage").value(FieldValue.of(hasLineage)))));
             if (keyword != null) filters.add(Query.of(q -> q.term(t -> t.field("keywords.keyword").value(FieldValue.of(keyword)))));
-            if (theme != null) filters.add(Query.of(q -> q.term(t -> t.field("themes.keyword").value(FieldValue.of(theme)))));
+            if (theme != null) filters.add(Query.of(q -> q.term(t -> t.field("themes").value(FieldValue.of(theme)))));
             if (vocabConcept != null) filters.add(Query.of(q -> q.term(t -> t.field("vocabConceptLabels.keyword").value(FieldValue.of(vocabConcept)))));
             if (vocab != null) filters.add(Query.of(q -> q.term(t -> t.field("vocabularyTypes.keyword").value(FieldValue.of(vocab)))));
 
@@ -84,13 +84,13 @@ public class OpenSearchIndexService {
             ));
 
             Map<String, Aggregation> aggs = Map.of(
-                "entityTypes",      Aggregation.of(a -> a.terms(t -> t.field("entityType.keyword").size(10))),
-                "formats",          Aggregation.of(a -> a.terms(t -> t.field("format.keyword").size(20))),
-                "lifecycleStatuses",Aggregation.of(a -> a.terms(t -> t.field("lifecycleStatus.keyword").size(10))),
+                "entityTypes",      Aggregation.of(a -> a.terms(t -> t.field("entityType").size(10))),
+                "formats",          Aggregation.of(a -> a.terms(t -> t.field("format").size(20))),
+                "lifecycleStatuses",Aggregation.of(a -> a.terms(t -> t.field("lifecycleStatus").size(10))),
                 "vocabularyTypes",  Aggregation.of(a -> a.terms(t -> t.field("vocabularyTypes.keyword").size(10))),
                 "fiboConcepts",     Aggregation.of(a -> a.terms(t -> t.field("fiboConcepts.keyword").size(20))),
                 "keywords",         Aggregation.of(a -> a.terms(t -> t.field("keywords.keyword").size(30))),
-                "themes",           Aggregation.of(a -> a.terms(t -> t.field("themes.keyword").size(30))),
+                "themes",           Aggregation.of(a -> a.terms(t -> t.field("themes").size(30))),
                 "vocabConcepts",    Aggregation.of(a -> a.terms(t -> t.field("vocabConceptLabels.keyword").size(30)))
             );
 
@@ -157,7 +157,7 @@ public class OpenSearchIndexService {
         try {
             List<Query> filters = new ArrayList<>();
             if (tenantId != null) {
-                filters.add(Query.of(q -> q.term(t -> t.field("tenantId.keyword").value(FieldValue.of(tenantId)))));
+                filters.add(Query.of(q -> q.term(t -> t.field("tenantId").value(FieldValue.of(tenantId)))));
             }
             filters.add(Query.of(q -> q.term(t -> t.field("isDeleted").value(FieldValue.of(false)))));
 

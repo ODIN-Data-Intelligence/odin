@@ -53,6 +53,7 @@ public class AdminController {
         hdrs.set("X-Tenant-Id", tenantId);
 
         int indexed = 0;
+        int distIndexed = 0;
         int page = 0;
         boolean hasMore = true;
 
@@ -74,6 +75,7 @@ public class AdminController {
                         CatalogSearchDocument doc = buildEnrichedDatasetDoc(ds, rt, hdrs, tenantId);
                         indexService.index(doc);
                         indexed++;
+                        distIndexed += indexDistributions((String) ds.get("id"), rt, hdrs, tenantId);
                     } catch (Exception e) {
                         log.warn("Failed to reindex dataset {}: {}", ds.get("id"), e.getMessage());
                     }
@@ -89,7 +91,7 @@ public class AdminController {
         }
 
         int dpIndexed = reindexDataProducts(rt, hdrs, tenantId);
-        return Map.of("datasetsIndexed", indexed, "dataProductsIndexed", dpIndexed);
+        return Map.of("datasetsIndexed", indexed, "dataProductsIndexed", dpIndexed, "distributionsIndexed", distIndexed);
     }
 
     @SuppressWarnings("unchecked")
@@ -194,8 +196,45 @@ public class AdminController {
             (String) ds.get("sourceUri"), null, null,
             Boolean.TRUE.equals(deleted), false, hasLogicalModel, distCount,
             elemNames, List.of(), logicalTypes, vocabIris, vocabLabels, vocabTypes, fiboConcepts,
-            List.of(), List.of()
+            List.of(), List.of(), null
         );
+    }
+
+    @SuppressWarnings("unchecked")
+    private int indexDistributions(String datasetId, RestTemplate rt, HttpHeaders hdrs, String tenantId) {
+        int count = 0;
+        try {
+            ResponseEntity<List<Map<String, Object>>> resp = rt.exchange(
+                catalogServiceUrl + "/api/v1/datasets/" + datasetId + "/distributions",
+                HttpMethod.GET, new HttpEntity<>(hdrs),
+                new ParameterizedTypeReference<List<Map<String, Object>>>() {});
+            List<Map<String, Object>> distributions = resp.getBody();
+            if (distributions != null) {
+                for (Map<String, Object> dist : distributions) {
+                    List<String> keywords = (List<String>) dist.getOrDefault("keywords", List.of());
+                    List<String> themes = (List<String>) dist.getOrDefault("themes", List.of());
+                    CatalogSearchDocument doc = new CatalogSearchDocument(
+                        (String) dist.get("id"), tenantId, "DISTRIBUTION",
+                        (String) dist.get("title"),
+                        (String) dist.get("description"),
+                        keywords != null ? keywords : List.of(),
+                        themes != null ? themes : List.of(),
+                        (String) dist.get("domainId"), null, null, null, null, null,
+                        (String) dist.get("license"),
+                        (String) dist.get("format"),
+                        (String) dist.get("mediaType"),
+                        null, null, null, null, false, false, false, 0,
+                        List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                        List.of(), List.of(), datasetId
+                    );
+                    indexService.index(doc);
+                    count++;
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Failed to index distributions for dataset {}: {}", datasetId, e.getMessage());
+        }
+        return count;
     }
 
     @SuppressWarnings("unchecked")
@@ -228,7 +267,7 @@ public class AdminController {
                     null, null, null, null, null, null,
                     Boolean.TRUE.equals(deleted), false, false, 0,
                     List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
-                    List.of(), List.of()
+                    List.of(), List.of(), null
                 );
                 indexService.index(doc);
                 indexed++;

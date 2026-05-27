@@ -54,6 +54,20 @@ public record LogicalDataElementResponse(
     OffsetDateTime createdAt,
 
     @Schema(description = "Last modification timestamp", accessMode = Schema.AccessMode.READ_ONLY)
-    OffsetDateTime updatedAt
+    OffsetDateTime updatedAt,
+
+    @Schema(description = "Accepted data classification level",
+        allowableValues = {"PUBLIC", "INTERNAL", "CONFIDENTIAL", "HIGH_CONFIDENTIAL"})
+    String classification,
+
+    @Schema(description = "AI-recommended classification pending review",
+        allowableValues = {"PUBLIC", "INTERNAL", "CONFIDENTIAL", "HIGH_CONFIDENTIAL"})
+    String recommendedClassification,
+
+    @Schema(description = "One-sentence reasoning from the AI for the recommendation")
+    String classificationReasoning,
+
+    @Schema(description = "When the AI recommendation was generated", accessMode = Schema.AccessMode.READ_ONLY)
+    OffsetDateTime classificationRecommendedAt
 
 ) {}

@@ -1,0 +1,289 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: odin-catalog-common
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/part-of: odin-catalog
+data:
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: "odin-catalog-kafka:9092"
+  SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: "http://odin-catalog-keycloak:8180/realms/datacatalog"
+  SPRING_JPA_HIBERNATE_DDL_AUTO: "validate"
+  MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,prometheus"
+  MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: "always"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: odin-catalog-kafka-scripts
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/part-of: odin-catalog
+data:
+  create-topics.sh: |
+    #!/bin/bash
+    set -e
+    BOOTSTRAP=odin-catalog-kafka:9092
+
+    create_topic() {
+      local name=$1 partitions=$2 cleanup=$3
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server "$BOOTSTRAP" \
+        --create --if-not-exists \
+        --topic "$name" \
+        --partitions "$partitions" \
+        --replication-factor 1 \
+        --config cleanup.policy="$cleanup"
+      echo "Topic $name ready"
+    }
+
+    create_topic inventory.data-products.changes   12 compact
+    create_topic inventory.datasets.changes        12 compact
+    create_topic inventory.distributions.changes    6 compact
+    create_topic harvest.runs.events                6 delete
+    create_topic harvest.entities.discovered       12 delete
+    create_topic harvest.ddl.discovered             3 delete
+    create_topic lineage.run-events.received       12 delete
+    create_topic lineage.graph.updated              6 delete
+    create_topic ai.embeddings.requested            6 delete
+    create_topic identity.users.changes             3 compact
+
+    echo "All Kafka topics created."
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: odin-catalog-opensearch-init
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/part-of: odin-catalog
+data:
+  init-index.sh: |
+    #!/bin/bash
+    set -e
+    OPENSEARCH_URL="http://odin-catalog-opensearch:9200"
+
+    until curl -sf "$OPENSEARCH_URL/_cluster/health" > /dev/null; do
+      echo "Waiting for OpenSearch..."
+      sleep 5
+    done
+
+    echo "Creating catalog_entities index..."
+    curl -sf -X PUT "$OPENSEARCH_URL/catalog_entities" \
+      -H 'Content-Type: application/json' \
+      -d @/config/catalog_entities.json
+    echo ""
+    echo "OpenSearch index ready."
+  catalog_entities.json: |
+    {
+      "settings": {
+        "number_of_shards": 3,
+        "number_of_replicas": 1,
+        "analysis": {
+          "analyzer": {
+            "english_standard": {
+              "type": "custom",
+              "tokenizer": "standard",
+              "filter": ["lowercase", "english_stop", "english_stemmer"]
+            }
+          },
+          "filter": {
+            "english_stop": { "type": "stop",    "stopwords": "_english_" },
+            "english_stemmer": { "type": "stemmer", "language": "english" }
+          }
+        }
+      },
+      "mappings": {
+        "properties": {
+          "id":                   { "type": "keyword" },
+          "tenantId":             { "type": "keyword" },
+          "entityType":           { "type": "keyword" },
+          "title":                { "type": "text", "analyzer": "english_standard",
+                                    "fields": { "keyword": { "type": "keyword", "ignore_above": 512 } } },
+          "description":          { "type": "text", "analyzer": "english_standard" },
+          "keywords":             { "type": "text", "analyzer": "english_standard",
+                                    "fields": { "keyword": { "type": "keyword" } } },
+          "themes":               { "type": "keyword" },
+          "domainId":             { "type": "keyword" },
+          "domainName":           { "type": "keyword" },
+          "ownerId":              { "type": "keyword" },
+          "ownerName":            { "type": "keyword" },
+          "lifecycleStatus":      { "type": "keyword" },
+          "informationSensitivity": { "type": "keyword" },
+          "license":              { "type": "keyword" },
+          "language":             { "type": "keyword" },
+          "format":               { "type": "keyword" },
+          "mediaType":            { "type": "keyword" },
+          "accrualPeriodicity":   { "type": "keyword" },
+          "sourceUri":            { "type": "keyword" },
+          "issued":               { "type": "date" },
+          "modified":             { "type": "date" },
+          "isDeleted":            { "type": "boolean" },
+          "distributionCount":    { "type": "integer" },
+          "hasLineage":           { "type": "boolean" },
+          "hasLogicalModel":      { "type": "boolean" },
+          "logical_element_names":  { "type": "text", "analyzer": "english_standard" },
+          "logical_element_labels": { "type": "keyword" },
+          "logical_types":          { "type": "keyword" },
+          "vocab_concept_iris":     { "type": "keyword" },
+          "vocab_concept_labels":   { "type": "text", "analyzer": "english_standard",
+                                      "fields": { "keyword": { "type": "keyword" } } },
+          "vocabulary_types":       { "type": "keyword" },
+          "fibo_concepts":          { "type": "keyword" },
+          "column_names":           { "type": "text", "analyzer": "english_standard",
+                                      "fields": { "keyword": { "type": "keyword" } } },
+          "column_descriptions":    { "type": "text", "analyzer": "english_standard" },
+          "catalogId":              { "type": "keyword" },
+          "dataProductId":          { "type": "keyword" },
+          "embedding": {
+            "type": "knn_vector",
+            "dimension": 768,
+            "method": {
+              "name": "hnsw",
+              "space_type": "cosinesimil",
+              "engine": "nmslib",
+              "parameters": { "ef_construction": 128, "m": 24 }
+            }
+          }
+        }
+      }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: odin-catalog-keycloak-realm
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/part-of: odin-catalog
+data:
+  datacatalog-realm.json: |
+    {
+      "realm": "datacatalog",
+      "enabled": true,
+      "displayName": "Data Catalog",
+      "registrationAllowed": false,
+      "loginWithEmailAllowed": true,
+      "duplicateEmailsAllowed": false,
+      "resetPasswordAllowed": true,
+      "editUsernameAllowed": false,
+      "bruteForceProtected": true,
+      "accessTokenLifespan": 3600,
+      "refreshTokenMaxReuse": 0,
+      "clients": [
+        {
+          "clientId": "catalog-frontend",
+          "name": "Data Catalog Frontend",
+          "enabled": true,
+          "publicClient": true,
+          "standardFlowEnabled": true,
+          "implicitFlowEnabled": false,
+          "directAccessGrantsEnabled": false,
+          "redirectUris": [
+            "http://catalog.local/*",
+            "http://manage.catalog.local/*",
+            "http://localhost:3000/*",
+            "http://localhost:3001/*"
+          ],
+          "webOrigins": ["+"],
+          "protocol": "openid-connect",
+          "defaultClientScopes": ["openid", "profile", "email", "catalog-scopes"]
+        },
+        {
+          "clientId": "identity-service",
+          "name": "Identity Service (machine-to-machine)",
+          "enabled": true,
+          "publicClient": false,
+          "clientAuthenticatorType": "client-secret",
+          "secret": "change-me-in-production",
+          "serviceAccountsEnabled": true,
+          "standardFlowEnabled": false,
+          "directAccessGrantsEnabled": false,
+          "protocol": "openid-connect"
+        },
+        {
+          "clientId": "catalog-api",
+          "name": "Catalog API (resource server)",
+          "enabled": true,
+          "publicClient": false,
+          "clientAuthenticatorType": "client-secret",
+          "secret": "catalog-api-secret",
+          "bearerOnly": true,
+          "protocol": "openid-connect",
+          "defaultClientScopes": ["catalog-scopes"]
+        }
+      ],
+      "clientScopes": [
+        {
+          "name": "catalog-scopes",
+          "protocol": "openid-connect",
+          "attributes": { "include.in.token.scope": "true" },
+          "protocolMappers": [
+            {
+              "name": "tenant_id",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-usermodel-attribute-mapper",
+              "config": {
+                "user.attribute": "tenant_id",
+                "claim.name": "tenant_id",
+                "jsonType.label": "String",
+                "access.token.claim": "true",
+                "id.token.claim": "true"
+              }
+            },
+            {
+              "name": "permissions",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-usermodel-attribute-mapper",
+              "config": {
+                "user.attribute": "permissions",
+                "claim.name": "permissions",
+                "jsonType.label": "JSON",
+                "access.token.claim": "true",
+                "multivalued": "true"
+              }
+            }
+          ]
+        }
+      ],
+      "roles": {
+        "realm": [
+          { "name": "catalog-admin",  "description": "Full catalog administration" },
+          { "name": "data-steward",   "description": "Can publish and govern datasets" },
+          { "name": "data-owner",     "description": "Owns data products in their domain" },
+          { "name": "data-engineer",  "description": "Configures harvest sources and jobs" },
+          { "name": "data-consumer",  "description": "Can discover and read datasets" }
+        ]
+      },
+      "users": [
+        {
+          "username": "admin@datacatalog.local",
+          "email": "admin@datacatalog.local",
+          "firstName": "Catalog",
+          "lastName": "Admin",
+          "enabled": true,
+          "credentials": [{ "type": "password", "value": "admin", "temporary": false }],
+          "realmRoles": ["catalog-admin"],
+          "attributes": { "tenant_id": ["00000000-0000-0000-0000-000000000001"] }
+        }
+      ]
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: odin-catalog-postgres-init
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/part-of: odin-catalog
+data:
+  lineage-init.sql: |
+    -- Load the Apache AGE extension and create the lineage graph
+    CREATE EXTENSION IF NOT EXISTS age;
+    LOAD 'age';
+    SET search_path = ag_catalog, "$user", public;
+    SELECT create_graph('lineage_graph');
+  identity-init.sql: |
+    -- Create a separate database for Keycloak on the same postgres instance
+    SELECT 'CREATE DATABASE keycloak OWNER identity'
+    WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'keycloak')\gexec

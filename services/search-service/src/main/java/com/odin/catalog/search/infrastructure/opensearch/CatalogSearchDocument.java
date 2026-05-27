@@ -40,5 +40,7 @@ public record CatalogSearchDocument(
     List<String> fiboConcepts,
     // Physical schema fields
     List<String> columnNames,
-    List<String> columnDescriptions
+    List<String> columnDescriptions,
+    // Parent reference — set for DISTRIBUTION documents only
+    String datasetId
 ) {}

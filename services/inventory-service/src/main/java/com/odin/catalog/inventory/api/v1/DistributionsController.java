@@ -15,6 +15,9 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +38,21 @@ public class DistributionsController {
     private final CsvwColumnRepository csvwColumnRepository;
     private final JdbcTemplate jdbcTemplate;
     private final LogicalModelService logicalModelService;
+
+    @Operation(summary = "List all distributions",
+        description = "Returns all non-deleted distributions for the current tenant, paginated and sorted by creation date descending.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Paginated list of distributions"),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @GetMapping("/api/v1/distributions")
+    public Page<DistributionEntity> listAll(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        UUID tenantId = UUID.fromString(TenantContextHolder.get());
+        return distributionRepository.findByTenantIdAndIsDeletedFalse(
+            tenantId, PageRequest.of(page, size, Sort.by("createdAt").descending()));
+    }
 
     @Operation(summary = "List distributions for a dataset",
         description = "Returns all non-deleted distributions belonging to the given dataset.")

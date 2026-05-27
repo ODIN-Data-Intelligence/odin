@@ -1,14 +1,22 @@
 package com.odin.catalog.inventory.application.logical;
 
 import com.odin.catalog.inventory.api.v1.dto.*;
+import com.odin.catalog.inventory.infrastructure.ai.AiServiceClient;
+import com.odin.catalog.inventory.infrastructure.ai.AiServiceClient.ElementClassificationInput;
+import com.odin.catalog.inventory.infrastructure.ai.AiServiceClient.ElementClassificationResult;
 import com.odin.catalog.inventory.infrastructure.jpa.entity.*;
 import com.odin.catalog.inventory.infrastructure.jpa.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -18,6 +26,9 @@ public class LogicalModelService {
     private final LogicalDataElementRepository elementRepository;
     private final VocabMappingRepository mappingRepository;
     private final CsvwColumnRepository columnRepository;
+    private final AiServiceClient aiServiceClient;
+    private final PlatformTransactionManager transactionManager;
+    private final BulkRecommendationJobRegistry jobRegistry;
 
     @Transactional(readOnly = true)
     public List<LogicalModelResponse> listForDataset(UUID datasetId) {
@@ -172,6 +183,102 @@ public class LogicalModelService {
         return (double) intersection.size() / union.size();
     }
 
+    // No @Transactional here: the read and write phases use their own short transactions
+    // so the DB connection is released before the (potentially multi-minute) AI call.
+    public LogicalDataElementResponse recommendClassification(UUID elementId) {
+        TransactionTemplate readTx = new TransactionTemplate(transactionManager);
+        readTx.setReadOnly(true);
+        ElementClassificationInput input = readTx.execute(
+            s -> toClassificationInput(findElementOrThrow(elementId)));
+
+        List<ElementClassificationResult> results = aiServiceClient.classify(List.of(input));
+
+        return new TransactionTemplate(transactionManager).execute(s -> {
+            LogicalDataElementEntity entity = findElementOrThrow(elementId);
+            results.stream().filter(r -> elementId.toString().equals(r.elementId())).findFirst()
+                .ifPresent(r -> applyRecommendation(entity, r));
+            return toElementResponse(elementRepository.save(entity));
+        });
+    }
+
+    // No @Transactional here: same split-transaction pattern for bulk recommendation.
+    @Async
+    public void recommendModelClassifications(UUID modelId, UUID jobId) {
+        try {
+            jobRegistry.markRunning(jobId);
+
+            TransactionTemplate readTx = new TransactionTemplate(transactionManager);
+            readTx.setReadOnly(true);
+            List<ElementClassificationInput> inputs = readTx.execute(s -> {
+                findModelOrThrow(modelId);
+                return elementRepository.findByLogicalModelIdOrderByOrdinalAsc(modelId)
+                    .stream().map(this::toClassificationInput).toList();
+            });
+            if (inputs == null || inputs.isEmpty()) {
+                jobRegistry.markCompleted(jobId);
+                return;
+            }
+
+            List<ElementClassificationResult> results = aiServiceClient.classify(inputs);
+            Map<String, ElementClassificationResult> byId = results.stream()
+                .collect(Collectors.toMap(ElementClassificationResult::elementId, r -> r));
+
+            new TransactionTemplate(transactionManager).execute(s -> {
+                List<UUID> ids = inputs.stream().map(i -> UUID.fromString(i.elementId())).toList();
+                List<LogicalDataElementEntity> entities = elementRepository.findAllById(ids);
+                entities.forEach(e -> {
+                    ElementClassificationResult r = byId.get(e.getId().toString());
+                    if (r != null) applyRecommendation(e, r);
+                });
+                elementRepository.saveAll(entities);
+                return null;
+            });
+
+            jobRegistry.markCompleted(jobId);
+        } catch (Exception e) {
+            jobRegistry.markFailed(jobId, e.getMessage());
+        }
+    }
+
+    @Transactional
+    public LogicalDataElementResponse acceptClassification(UUID elementId) {
+        LogicalDataElementEntity entity = findElementOrThrow(elementId);
+        if (entity.getRecommendedClassification() == null) {
+            throw new NoSuchElementException("No pending recommendation for element: " + elementId);
+        }
+        entity.setClassification(entity.getRecommendedClassification());
+        entity.setRecommendedClassification(null);
+        entity.setClassificationReasoning(null);
+        entity.setClassificationRecommendedAt(null);
+        return toElementResponse(elementRepository.save(entity));
+    }
+
+    @Transactional
+    public LogicalDataElementResponse rejectClassification(UUID elementId) {
+        LogicalDataElementEntity entity = findElementOrThrow(elementId);
+        entity.setRecommendedClassification(null);
+        entity.setClassificationReasoning(null);
+        entity.setClassificationRecommendedAt(null);
+        return toElementResponse(elementRepository.save(entity));
+    }
+
+    private ElementClassificationInput toClassificationInput(LogicalDataElementEntity e) {
+        List<String> iris = e.getVocabMappings() == null ? List.of()
+            : e.getVocabMappings().stream().map(VocabMappingEntity::getConceptIri).filter(Objects::nonNull).toList();
+        List<String> labels = e.getVocabMappings() == null ? List.of()
+            : e.getVocabMappings().stream().map(VocabMappingEntity::getConceptLabel).filter(Objects::nonNull).toList();
+        return new ElementClassificationInput(
+            e.getId().toString(), e.getName(), e.getLabel(),
+            e.getLogicalType(), e.getDescription(), iris, labels
+        );
+    }
+
+    private void applyRecommendation(LogicalDataElementEntity entity, ElementClassificationResult result) {
+        entity.setRecommendedClassification(result.classification());
+        entity.setClassificationReasoning(result.reasoning());
+        entity.setClassificationRecommendedAt(OffsetDateTime.now());
+    }
+
     private void applyElementRequest(LogicalDataElementEntity entity, LogicalDataElementRequest req) {
         entity.setName(req.name());
         entity.setLabel(req.label());
@@ -181,6 +288,7 @@ public class LogicalModelService {
         entity.setRequired(req.isRequired());
         entity.setIdentifier(req.isIdentifier());
         entity.setNullable(req.isNullable());
+        if (req.classification() != null) entity.setClassification(req.classification());
     }
 
     private LogicalModelEntity findModelOrThrow(UUID id) {
@@ -211,7 +319,9 @@ public class LogicalModelService {
             e.getId(), e.getLogicalModelId(), e.getName(), e.getLabel(),
             e.getDescription(), e.getLogicalType(), e.getOrdinal(),
             e.isRequired(), e.isIdentifier(), e.isNullable(),
-            physicalColumnIds, mappings, e.getCreatedAt(), e.getUpdatedAt()
+            physicalColumnIds, mappings, e.getCreatedAt(), e.getUpdatedAt(),
+            e.getClassification(), e.getRecommendedClassification(),
+            e.getClassificationReasoning(), e.getClassificationRecommendedAt()
         );
     }
 

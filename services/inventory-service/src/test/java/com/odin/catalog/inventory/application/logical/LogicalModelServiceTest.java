@@ -1,14 +1,17 @@
 package com.odin.catalog.inventory.application.logical;
 
 import com.odin.catalog.inventory.api.v1.dto.*;
+import com.odin.catalog.inventory.infrastructure.ai.AiServiceClient;
 import com.odin.catalog.inventory.infrastructure.jpa.entity.*;
 import com.odin.catalog.inventory.infrastructure.jpa.repository.*;
+import com.odin.catalog.inventory.application.logical.BulkRecommendationJobRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -27,6 +30,9 @@ class LogicalModelServiceTest {
     @Mock LogicalDataElementRepository elementRepository;
     @Mock VocabMappingRepository mappingRepository;
     @Mock CsvwColumnRepository columnRepository;
+    @Mock AiServiceClient aiServiceClient;
+    @Mock PlatformTransactionManager transactionManager;
+    @Mock BulkRecommendationJobRegistry jobRegistry;
 
     @InjectMocks LogicalModelService service;
 
@@ -136,7 +142,7 @@ class LogicalModelServiceTest {
 
         LogicalDataElementRequest req = new LogicalDataElementRequest(
             "trade_amount", "Trade Amount", "Monetary amount",
-            "MonetaryAmount", 0, false, true, true
+            "MonetaryAmount", 0, false, true, true, null
         );
         LogicalDataElementEntity saved = element(m.getId());
         when(elementRepository.save(any())).thenReturn(saved);
@@ -158,7 +164,7 @@ class LogicalModelServiceTest {
         when(modelRepository.findById(modelId)).thenReturn(Optional.empty());
 
         LogicalDataElementRequest req = new LogicalDataElementRequest(
-            "x", null, null, null, 0, false, false, true
+            "x", null, null, null, 0, false, false, true, null
         );
         assertThatThrownBy(() -> service.addElement(modelId, req))
             .isInstanceOf(NoSuchElementException.class);
@@ -192,7 +198,7 @@ class LogicalModelServiceTest {
 
         LogicalDataElementRequest req = new LogicalDataElementRequest(
             "updated_name", "Updated Label", "new desc",
-            "Date", 5, true, false, false
+            "Date", 5, true, false, false, null
         );
         service.updateElement(e.getId(), req);
 
@@ -211,7 +217,7 @@ class LogicalModelServiceTest {
         UUID id = UUID.randomUUID();
         when(elementRepository.findById(id)).thenReturn(Optional.empty());
 
-        LogicalDataElementRequest req = new LogicalDataElementRequest("x", null, null, null, 0, false, false, true);
+        LogicalDataElementRequest req = new LogicalDataElementRequest("x", null, null, null, 0, false, false, true, null);
         assertThatThrownBy(() -> service.updateElement(id, req)).isInstanceOf(NoSuchElementException.class);
     }
 

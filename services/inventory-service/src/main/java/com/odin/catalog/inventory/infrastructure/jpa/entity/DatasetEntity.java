@@ -27,4 +27,6 @@ public class DatasetEntity extends ResourceEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "is_version_of")
     private DatasetEntity isVersionOf;
+
+    private UUID ownerId;
 }

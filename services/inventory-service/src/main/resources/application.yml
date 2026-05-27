@@ -50,6 +50,11 @@ spring:
         jwt:
           issuer-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:http://localhost:8180/realms/datacatalog}
 
+ai:
+  service:
+    url: ${AI_SERVICE_URL:http://ai-service:8005}
+    api-key: ${AI_SERVICE_API_KEY:dev-local}
+
 server:
   port: 8001
 

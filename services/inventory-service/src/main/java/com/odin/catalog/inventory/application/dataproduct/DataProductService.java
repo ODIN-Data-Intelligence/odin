@@ -139,7 +139,8 @@ public class DataProductService {
             ds.getCatalogId(), ds.getDomainId(), ds.getTenantId(),
             ds.getAccrualPeriodicity(), ds.getKeywords(), ds.getThemes(),
             ds.getLanguage(), ds.getLicense(), ds.getVersion(),
-            ds.getSourceUri(), ds.isDeleted(), ds.getCreatedAt(), ds.getUpdatedAt()
+            ds.getSourceUri(), ds.isDeleted(), ds.getCreatedAt(), ds.getUpdatedAt(),
+            ds.getOwnerId()
         );
     }
 

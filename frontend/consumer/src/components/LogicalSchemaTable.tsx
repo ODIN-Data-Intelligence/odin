@@ -2,7 +2,30 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { logicalModelApi, logicalElementApi } from '@datacatalog/shared';
+import type { LogicalDataElement } from '@datacatalog/shared';
 import VocabConceptBadge from './VocabConceptBadge';
+
+type ClassificationLevel = NonNullable<LogicalDataElement['classification']>;
+
+const CLASSIFICATION_STYLES: Record<ClassificationLevel, { badge: string; label: string }> = {
+  PUBLIC:           { badge: 'bg-green-100 text-green-700 border-green-200',  label: 'Public' },
+  INTERNAL:         { badge: 'bg-blue-100 text-blue-700 border-blue-200',     label: 'Internal' },
+  CONFIDENTIAL:     { badge: 'bg-amber-100 text-amber-700 border-amber-200',  label: 'Confidential' },
+  HIGH_CONFIDENTIAL:{ badge: 'bg-red-100 text-red-700 border-red-200',        label: 'High Confidential' },
+};
+
+function ClassificationBadge({ level, reasoning }: { level?: ClassificationLevel; reasoning?: string }) {
+  if (!level) return <span className="text-gray-400 text-xs">—</span>;
+  const { badge, label } = CLASSIFICATION_STYLES[level];
+  return (
+    <span
+      title={reasoning ?? undefined}
+      className={`inline-flex items-center px-1.5 py-0.5 rounded border text-xs font-medium cursor-default ${badge} ${reasoning ? 'cursor-help' : ''}`}
+    >
+      {label}
+    </span>
+  );
+}
 
 interface LogicalSchemaTableProps {
   datasetId: string;
@@ -36,6 +59,8 @@ export default function LogicalSchemaTable({ datasetId }: LogicalSchemaTableProp
     return <p className="text-sm text-gray-400 text-center py-6">No logical model available.</p>;
   }
 
+  const classifiedCount = elements.filter(el => el.classification).length;
+
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
@@ -43,7 +68,12 @@ export default function LogicalSchemaTable({ datasetId }: LogicalSchemaTableProp
           {publishedModel.name} v{publishedModel.version}
           <span className="ml-2 px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-xs">published</span>
         </p>
-        <p className="text-xs text-gray-400">{elements.length} elements</p>
+        <div className="flex items-center gap-3 text-xs text-gray-400">
+          {classifiedCount > 0 && (
+            <span>{classifiedCount}/{elements.length} classified</span>
+          )}
+          <span>{elements.length} elements</span>
+        </div>
       </div>
 
       <div className="rounded-lg border border-gray-200 overflow-hidden">
@@ -52,6 +82,7 @@ export default function LogicalSchemaTable({ datasetId }: LogicalSchemaTableProp
             <tr>
               <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Business Name</th>
               <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Logical Type</th>
+              <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Classification</th>
               <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Vocabulary Concept</th>
               <th className="px-3 py-2.5" />
             </tr>
@@ -76,6 +107,9 @@ export default function LogicalSchemaTable({ datasetId }: LogicalSchemaTableProp
                     ) : <span className="text-gray-400 text-xs">—</span>}
                   </td>
                   <td className="px-3 py-2.5">
+                    <ClassificationBadge level={el.classification} reasoning={el.classificationReasoning} />
+                  </td>
+                  <td className="px-3 py-2.5">
                     <div className="flex flex-wrap gap-1">
                       {el.vocabMappings?.slice(0, 2).map(m => (
                         <VocabConceptBadge key={m.id} iri={m.conceptIri} label={m.conceptLabel} matchType={m.matchType} />
@@ -98,7 +132,7 @@ export default function LogicalSchemaTable({ datasetId }: LogicalSchemaTableProp
                 </tr>
                 {expandedIds.has(el.id) && (
                   <tr key={`${el.id}-physical`} className="bg-blue-50">
-                    <td colSpan={4} className="px-4 py-2">
+                    <td colSpan={5} className="px-4 py-2">
                       <div className="flex items-center gap-4 text-xs text-gray-600">
                         <span className="font-mono font-medium">
                           {el.physicalColumn?.name ?? el.physicalColumnRef?.column ?? '—'}
@@ -119,7 +153,7 @@ export default function LogicalSchemaTable({ datasetId }: LogicalSchemaTableProp
               </>
             ))}
             {elements.length === 0 && (
-              <tr><td colSpan={4} className="px-3 py-6 text-center text-gray-400 text-xs">No elements defined</td></tr>
+              <tr><td colSpan={5} className="px-3 py-6 text-center text-gray-400 text-xs">No elements defined</td></tr>
             )}
           </tbody>
         </table>

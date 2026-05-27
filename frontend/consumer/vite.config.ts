@@ -7,10 +7,13 @@ const DEV_HEADERS = {
   'X-Tenant-Id': '00000000-0000-0000-0000-000000000001',
 };
 
-function proxyEntry(target: string) {
+const AI_PROXY_TIMEOUT_MS = 360_000; // 6 minutes — matches AiServiceClient read timeout
+
+function proxyEntry(target: string, timeoutMs?: number) {
   return {
     target,
     changeOrigin: true,
+    ...(timeoutMs ? { proxyTimeout: timeoutMs, timeout: timeoutMs } : {}),
     configure: (proxy: import('http-proxy').Server) => {
       proxy.on('proxyReq', (proxyReq) => {
         Object.entries(DEV_HEADERS).forEach(([k, v]) => proxyReq.setHeader(k, v));

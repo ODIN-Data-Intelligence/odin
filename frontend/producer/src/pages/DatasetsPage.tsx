@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { datasetApi } from '@datacatalog/shared';
 import PageHeader from '../components/ui/PageHeader';
+import Button from '../components/ui/Button';
 import { formatDate } from '../lib/utils';
 
 export default function DatasetsPage() {
@@ -33,6 +34,11 @@ export default function DatasetsPage() {
       <PageHeader
         title="Datasets"
         description={`${totalElements} datasets in the catalog`}
+        actions={
+          <Link to={`/${tenant}/datasets/new`}>
+            <Button size="sm">+ New Dataset</Button>
+          </Link>
+        }
       />
 
       <div className="p-6">

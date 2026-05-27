@@ -584,6 +584,46 @@ add_vocab_mapping_if_missing "${EL_MIF_VENUE}"    "${VOCAB_FBC}" "https://spec.e
 add_vocab_mapping_if_missing "${EL_MIF_TS}"       "${VOCAB_SCHEMA}" "https://schema.org/startDate" "startDate" "closeMatch"
 success "Logical model (published): MiFID II — 9 elements, fully mapped"
 
+info "Building logical model: Counterparty Credit Exposure..."
+LM_COUNTERPARTY=$(get_or_create_logical_model "${DS_COUNTERPARTY}" "Counterparty Credit Exposure Model" \
+  '{"name":"Counterparty Credit Exposure Model","description":"Business-oriented view of counterparty credit risk exposure. Covers current exposure, PFE, CVA/DVA, netting sets, and ISDA agreement references. FIBO-annotated for regulatory and semantic interoperability.","version":"1.0","status":"draft"}')
+
+EL_CE_EXPOSURE_ID=$(  get_or_create_element "${LM_COUNTERPARTY}" "exposureId"               "Exposure Record ID"              "Identifier"     1 true  true)
+EL_CE_CP_ID=$(        get_or_create_element "${LM_COUNTERPARTY}" "counterpartyId"            "Counterparty Internal ID"        "Identifier"     2 true  false)
+EL_CE_CP_LEI=$(       get_or_create_element "${LM_COUNTERPARTY}" "counterpartyLei"           "Counterparty LEI"                "Identifier"     3 true  false)
+EL_CE_CP_NAME=$(      get_or_create_element "${LM_COUNTERPARTY}" "counterpartyName"          "Counterparty Legal Name"         "Text"           4 true  false)
+EL_CE_NETTING=$(      get_or_create_element "${LM_COUNTERPARTY}" "nettingSetId"              "Netting Set Identifier"          "Identifier"     5 true  false)
+EL_CE_AS_OF=$(        get_or_create_element "${LM_COUNTERPARTY}" "asOfDate"                  "As-Of Date"                      "Date"           6 true  false)
+EL_CE_CCY=$(          get_or_create_element "${LM_COUNTERPARTY}" "baseCurrency"              "Base Currency"                   "Currency"       7 true  false)
+EL_CE_CURRENT=$(      get_or_create_element "${LM_COUNTERPARTY}" "currentExposure"           "Current Exposure (CE)"           "MonetaryAmount" 8 true  false)
+EL_CE_PFE=$(          get_or_create_element "${LM_COUNTERPARTY}" "potentialFutureExposure"   "Potential Future Exposure (PFE)" "MonetaryAmount" 9 true  false)
+EL_CE_EE=$(           get_or_create_element "${LM_COUNTERPARTY}" "expectedExposure"          "Expected Exposure (EE)"          "MonetaryAmount" 10 true  false)
+EL_CE_PEAK=$(         get_or_create_element "${LM_COUNTERPARTY}" "peakExposure"              "Peak Exposure (EPE)"             "MonetaryAmount" 11 false false)
+EL_CE_CVA=$(          get_or_create_element "${LM_COUNTERPARTY}" "creditValuationAdjustment" "Credit Valuation Adjustment"     "MonetaryAmount" 12 true  false)
+EL_CE_DVA=$(          get_or_create_element "${LM_COUNTERPARTY}" "debitValuationAdjustment"  "Debit Valuation Adjustment"      "MonetaryAmount" 13 false false)
+EL_CE_COL_POST=$(     get_or_create_element "${LM_COUNTERPARTY}" "collateralPostedAmount"    "Collateral Posted"               "MonetaryAmount" 14 false false)
+EL_CE_COL_RECV=$(     get_or_create_element "${LM_COUNTERPARTY}" "collateralReceivedAmount"  "Collateral Received"             "MonetaryAmount" 15 false false)
+EL_CE_NET=$(          get_or_create_element "${LM_COUNTERPARTY}" "netExposure"               "Net Exposure"                    "MonetaryAmount" 16 true  false)
+EL_CE_WWR_FLAG=$(     get_or_create_element "${LM_COUNTERPARTY}" "wrongWayRiskFlag"          "Wrong-Way Risk Flag"             "Boolean"        17 true  false)
+EL_CE_WWR_SCORE=$(    get_or_create_element "${LM_COUNTERPARTY}" "wrongWayRiskScore"         "Wrong-Way Risk Score"            "Decimal"        18 false false)
+EL_CE_ISDA=$(         get_or_create_element "${LM_COUNTERPARTY}" "isdaAgreementId"           "ISDA Master Agreement ID"        "Identifier"     19 false false)
+EL_CE_RATING=$(       get_or_create_element "${LM_COUNTERPARTY}" "creditRating"              "Credit Rating"                   "Code"           20 false false)
+EL_CE_THRESHOLD=$(    get_or_create_element "${LM_COUNTERPARTY}" "thresholdAmount"           "Threshold Amount"                "MonetaryAmount" 21 false false)
+EL_CE_MTA=$(          get_or_create_element "${LM_COUNTERPARTY}" "minimumTransferAmount"     "Minimum Transfer Amount"         "MonetaryAmount" 22 false false)
+EL_CE_CALC_METHOD=$(  get_or_create_element "${LM_COUNTERPARTY}" "calculationMethod"         "Calculation Method"              "Code"           23 true  false)
+EL_CE_CONF_LVL=$(     get_or_create_element "${LM_COUNTERPARTY}" "confidenceLevel"           "Confidence Level"                "Decimal"        24 true  false)
+EL_CE_HORIZON=$(      get_or_create_element "${LM_COUNTERPARTY}" "timeHorizonDays"           "Time Horizon (days)"             "Integer"        25 true  false)
+
+add_vocab_mapping_if_missing "${EL_CE_CP_LEI}"   "${VOCAB_FBC}"    "https://spec.edmcouncil.org/fibo/ontology/FBC/FunctionalEntities/RegistrationAuthorities/LegalEntityIdentifier" "LegalEntityIdentifier"
+add_vocab_mapping_if_missing "${EL_CE_AS_OF}"    "${VOCAB_SCHEMA}" "https://schema.org/startDate" "startDate"
+add_vocab_mapping_if_missing "${EL_CE_CCY}"      "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/ISO4217-CurrencyCodes/Currency" "Currency"
+add_vocab_mapping_if_missing "${EL_CE_CURRENT}"  "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/MonetaryAmount" "MonetaryAmount"
+add_vocab_mapping_if_missing "${EL_CE_PFE}"      "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/MonetaryAmount" "MonetaryAmount" "closeMatch"
+add_vocab_mapping_if_missing "${EL_CE_EE}"       "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/MonetaryAmount" "MonetaryAmount" "closeMatch"
+add_vocab_mapping_if_missing "${EL_CE_CVA}"      "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/MonetaryAmount" "MonetaryAmount" "closeMatch"
+add_vocab_mapping_if_missing "${EL_CE_NET}"      "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/MonetaryAmount" "MonetaryAmount" "closeMatch"
+success "Logical model (draft): Counterparty Credit Exposure — 25 elements, FIBO-mapped"
+
 # ─────────────────────────────────────────────────────────────────────────────
 section "Phase 7 — Data Products"
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1211,7 +1251,7 @@ echo "                securities, counterparties, FX rates, MiFID, FinRep, EMIR)
 echo "  Distrib.   : 14 (Snowflake, Parquet, REST, Kafka, XML)"
 echo "  Phys.schema: 11 (one per distribution — Snowflake abbreviated, lake/REST/Kafka camelCase, XML ISO 20022)"
 echo "  Vocab      : FIBO (FND/FBC/SEC/MD) + schema.org profiles on all datasets"
-echo "  Log.models :  5 (Trades, Positions, Securities, VaR, MiFID) — 40 elements"
+echo "  Log.models :  6 (Trades, Positions, Securities, VaR, MiFID, CCR) — 65 elements"
 echo "  Phys.binds : 88 (each element bound to its column in every distribution format)"
 echo "  FIBO maps  : 25+ concept mappings (ISIN, LEI, MonetaryAmount, Currency, ...)"
 echo "  Data Prods :  5 (Consume×2, Deploy, Build, Design lifecycle stages)"
