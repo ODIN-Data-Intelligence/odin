@@ -68,6 +68,9 @@ public class SearchController {
             @Parameter(description = "Vocabulary name filter (e.g. 'FIBO FND', 'schema.org')", example = "FIBO FND")
             @RequestParam(required = false) String vocab,
 
+            @Parameter(description = "Semantic type filter — IRI terminal fragment (e.g. 'Customer', 'Loan')", example = "Customer")
+            @RequestParam(required = false) String semanticType,
+
             @Parameter(description = "Zero-based page number", example = "0")
             @RequestParam(defaultValue = "0") int page,
 
@@ -76,7 +79,7 @@ public class SearchController {
 
         String tenantId = TenantContextHolder.get();
         var result = indexService.search(q, type, domainId, lifecycleStatus, format, hasLineage,
-                tenantId, page, size, keyword, theme, vocabConcept, vocab);
+                tenantId, page, size, keyword, theme, vocabConcept, vocab, semanticType);
 
         return new SearchResponse(
             result.documents(),

@@ -63,7 +63,10 @@ public record SearchResponse(
         List<FacetBucket> themes,
 
         @Schema(description = "Vocabulary concept label breakdown (all vocabularies combined)")
-        List<FacetBucket> vocabConcepts
+        List<FacetBucket> vocabConcepts,
+
+        @Schema(description = "Semantic type breakdown derived from vocabulary concept IRI fragments (e.g. Customer, Loan)")
+        List<FacetBucket> semanticTypes
 
     ) {}
 }

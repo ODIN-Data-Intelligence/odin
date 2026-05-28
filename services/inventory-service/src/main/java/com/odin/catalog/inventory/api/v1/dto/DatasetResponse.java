@@ -63,6 +63,11 @@ public record DatasetResponse(
     OffsetDateTime updatedAt,
 
     @Schema(description = "UUID of the data owner", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
-    UUID ownerId
+    UUID ownerId,
+
+    @Schema(description = "Semantic type labels derived from controlled vocabulary mappings on published logical models " +
+        "(e.g. 'Customer', 'DebitCardAccount'). Populated only on single-dataset GET responses.",
+        example = "[\"Customer\", \"DebitCardAccount\"]")
+    List<String> semanticTypes
 
 ) {}

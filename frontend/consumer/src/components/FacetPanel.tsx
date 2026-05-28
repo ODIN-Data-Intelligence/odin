@@ -75,6 +75,16 @@ export default function FacetPanel({ facets }: FacetPanelProps) {
         onSelect={v => setFilter('vocab', v === filters.vocab ? undefined : v)}
       />
 
+      {(facets.semanticTypes ?? []).length > 0 && (
+        <FacetGroup
+          title="Semantic Types"
+          items={facets.semanticTypes ?? []}
+          selected={filters.semanticType}
+          getLabel={k => k}
+          onSelect={v => setFilter('semanticType', v === filters.semanticType ? undefined : v)}
+        />
+      )}
+
       {(facets.fiboConcepts ?? []).length > 0 && (
         <FacetGroup
           title="FIBO Concepts"

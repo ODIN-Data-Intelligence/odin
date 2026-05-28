@@ -76,6 +76,18 @@ public class EmbeddingService {
             chunks.add(new Document(chunkId(payload.datasetId(), 1), kwThemes, meta));
         }
 
+        // Chunk 2: semantic graph context from vocabulary mappings
+        List<String> types  = payload.semanticTypes()    != null ? payload.semanticTypes()    : List.of();
+        List<String> labels = payload.vocabConceptLabels() != null ? payload.vocabConceptLabels() : List.of();
+        List<String> names  = payload.logicalElementNames() != null ? payload.logicalElementNames() : List.of();
+        if (!types.isEmpty() || !labels.isEmpty()) {
+            String typeChunk =
+                "Semantic types: "      + String.join(", ", types)  + "\n" +
+                "Vocabulary concepts: " + String.join(", ", labels) + "\n" +
+                "Business elements: "   + String.join(", ", names);
+            chunks.add(new Document(chunkId(payload.datasetId(), 2), typeChunk, meta));
+        }
+
         return chunks;
     }
 

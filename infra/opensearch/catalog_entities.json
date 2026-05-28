@@ -65,6 +65,7 @@
                                   "fields": { "keyword": { "type": "keyword" } } },
       "vocabulary_types":       { "type": "keyword" },
       "fibo_concepts":          { "type": "keyword" },
+      "semanticTypes":          { "type": "keyword" },
 
       "column_names": {
         "type": "text",

@@ -35,6 +35,13 @@ export default function DatasetDetailDrawer() {
     enabled: !!openDatasetId,
   });
 
+  const { data: semanticContext } = useQuery({
+    queryKey: ['dataset-semantic-context', openDatasetId],
+    queryFn: () => datasetApi.getSemanticContext(openDatasetId!),
+    enabled: !!openDatasetId && activeTab === 'overview',
+    staleTime: 60_000,
+  });
+
   if (!openDatasetId) return null;
 
   function copyShareLink() {
@@ -102,6 +109,33 @@ export default function DatasetDetailDrawer() {
                       {dataset.keywords.map(kw => (
                         <span key={kw} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">{kw}</span>
                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {semanticContext && semanticContext.semanticTypes.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 mb-2">Semantic Types</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {semanticContext.semanticTypes.map(type => {
+                        const isFibo = (semanticContext.vocabConceptIris ?? []).some(
+                          iri => iri.includes('edmcouncil.org/fibo') && iri.endsWith(type)
+                        );
+                        const isSchema = (semanticContext.vocabConceptIris ?? []).some(
+                          iri => iri.includes('schema.org') && iri.endsWith(type)
+                        );
+                        const badgeClass = isFibo
+                          ? 'bg-blue-100 text-blue-700'
+                          : isSchema
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-gray-100 text-gray-600';
+                        const prefix = isFibo ? 'FIBO' : isSchema ? 'schema' : null;
+                        return (
+                          <span key={type} className={`px-2 py-0.5 text-xs rounded-full font-medium ${badgeClass}`}>
+                            {prefix ? `${prefix}: ${type}` : type}
+                          </span>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
