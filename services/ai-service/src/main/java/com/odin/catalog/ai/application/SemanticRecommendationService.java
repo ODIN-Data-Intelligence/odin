@@ -32,6 +32,9 @@ public class SemanticRecommendationService {
     private final ObjectMapper objectMapper;
 
     public SemanticRecommendationResponse recommend(SemanticRecommendationRequest request) {
+        log.info("action=SEMANTIC_RECOMMEND_START datasetId={} elementCount={}", request.datasetId(),
+            request.elementNames() != null ? request.elementNames().size() : 0);
+        long t = System.currentTimeMillis();
         String prompt = buildPrompt(request);
         String raw;
         try {
@@ -44,13 +47,18 @@ public class SemanticRecommendationService {
                 .orTimeout(TIMEOUT_MINUTES, TimeUnit.MINUTES)
                 .join();
         } catch (CompletionException e) {
-            log.warn("Semantic recommendation timed out: {}", e.getCause().getMessage());
+            log.warn("action=SEMANTIC_RECOMMEND_TIMEOUT datasetId={} elapsed={}ms error={}",
+                request.datasetId(), System.currentTimeMillis() - t, e.getCause().getMessage());
             return new SemanticRecommendationResponse(List.of(), "Service unavailable");
         } catch (Exception e) {
-            log.warn("Semantic recommendation failed: {}", e.getMessage());
+            log.warn("action=SEMANTIC_RECOMMEND_FAILED datasetId={} elapsed={}ms error={}",
+                request.datasetId(), System.currentTimeMillis() - t, e.getMessage());
             return new SemanticRecommendationResponse(List.of(), "Service unavailable");
         }
-        return parse(raw);
+        SemanticRecommendationResponse result = parse(raw);
+        log.info("action=SEMANTIC_RECOMMEND_COMPLETE datasetId={} typeCount={} elapsed={}ms",
+            request.datasetId(), result.types().size(), System.currentTimeMillis() - t);
+        return result;
     }
 
     private String buildPrompt(SemanticRecommendationRequest req) {

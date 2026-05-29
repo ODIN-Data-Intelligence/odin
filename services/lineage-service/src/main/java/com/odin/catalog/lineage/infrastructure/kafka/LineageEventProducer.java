@@ -6,6 +6,8 @@ import com.odin.catalog.shared.kafka.topics.CatalogTopics;
 import com.odin.catalog.shared.models.events.LineageGraphUpdatedPayload;
 import com.odin.catalog.shared.models.openlineage.RunEvent;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.time.OffsetDateTime;
@@ -15,6 +17,8 @@ import java.util.stream.Stream;
 @Component
 @RequiredArgsConstructor
 public class LineageEventProducer {
+
+    private static final Logger log = LoggerFactory.getLogger(LineageEventProducer.class);
 
     private final KafkaEventPublisher publisher;
 
@@ -26,6 +30,8 @@ public class LineageEventProducer {
             null,
             event
         );
+        log.info("action=EVENT_PUBLISHED topic={} eventType=LineageRunEventReceived runId={} jobEventType={}",
+            CatalogTopics.LINEAGE_RUN_EVENTS, run.getRunId(), event.eventType());
     }
 
     public void publishGraphUpdated(RunEvent event) {
@@ -55,5 +61,8 @@ public class LineageEventProducer {
             null,
             payload
         );
+        log.info("action=EVENT_PUBLISHED topic={} eventType=LineageGraphUpdated runId={} inputs={} outputs={}",
+            CatalogTopics.LINEAGE_GRAPH_UPDATED, event.run().runId(),
+            inputs.size(), outputs.size());
     }
 }

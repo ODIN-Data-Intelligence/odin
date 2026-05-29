@@ -10,11 +10,15 @@ import com.odin.catalog.shared.models.dcat.DcatResource;
 import com.odin.catalog.shared.models.events.DataProductChangedPayload;
 import com.odin.catalog.shared.models.events.DatasetChangedPayload;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
 public class CatalogEventProducer {
+
+    private static final Logger log = LoggerFactory.getLogger(CatalogEventProducer.class);
 
     private final KafkaEventPublisher publisher;
 
@@ -52,6 +56,8 @@ public class CatalogEventProducer {
             entity.getTenantId().toString(),
             payload
         );
+        log.info("action=EVENT_PUBLISHED topic={} eventType=DatasetChanged entityId={} changeType={}",
+            CatalogTopics.DATASETS_CHANGES, entity.getId(), changeType);
     }
 
     public void publishDataProductChanged(String changeType, DataProductEntity entity) {
@@ -74,6 +80,8 @@ public class CatalogEventProducer {
             entity.getTenantId().toString(),
             payload
         );
+        log.info("action=EVENT_PUBLISHED topic={} eventType=DataProductChanged entityId={} changeType={}",
+            CatalogTopics.DATA_PRODUCTS_CHANGES, entity.getId(), changeType);
     }
 
     private DcatDataset buildDcatDataset(DatasetEntity entity) {

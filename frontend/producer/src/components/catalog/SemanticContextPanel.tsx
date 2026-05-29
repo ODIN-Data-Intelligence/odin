@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { datasetApi } from '@datacatalog/shared';
+import { datasetApi, preferredLabel, useIriTranslations } from '@datacatalog/shared';
 import type { AcceptedSemanticTag, RecommendedSemanticType } from '@datacatalog/shared';
 import Button from '../ui/Button';
 
@@ -40,6 +40,13 @@ export default function SemanticContextPanel({ datasetId }: Props) {
   const visibleRecs = recommendation?.types.filter(
     r => !dismissed.has(r.type) && !acceptedTypes.has(r.type)
   ) ?? [];
+
+  // Translate all vocabulary hint IRIs from recommendations and accepted tags
+  const hintIris = [
+    ...(recommendation?.types ?? []).map(r => r.vocabularyHint).filter(Boolean) as string[],
+    ...(ctx?.acceptedTags ?? []).map(t => t.vocabularyIri).filter(Boolean) as string[],
+  ];
+  const hintTranslations = useIriTranslations(hintIris);
 
   return (
     <div className="space-y-5">
@@ -135,6 +142,7 @@ export default function SemanticContextPanel({ datasetId }: Props) {
               <RecommendationCard
                 key={rec.type}
                 rec={rec}
+                hintLabel={rec.vocabularyHint ? (hintTranslations[rec.vocabularyHint] ?? preferredLabel(rec.vocabularyHint)) : undefined}
                 accepting={acceptMutation.isPending}
                 onAccept={() => acceptMutation.mutate(rec)}
                 onDismiss={() => dismiss(rec.type)}
@@ -183,9 +191,10 @@ function AcceptedTagBadge({
 }
 
 function RecommendationCard({
-  rec, accepting, onAccept, onDismiss,
+  rec, hintLabel, accepting, onAccept, onDismiss,
 }: {
   rec: RecommendedSemanticType;
+  hintLabel?: string;
   accepting: boolean;
   onAccept: () => void;
   onDismiss: () => void;
@@ -203,9 +212,9 @@ function RecommendationCard({
           {rec.type}
         </span>
         <p className="text-xs text-gray-600">{rec.rationale}</p>
-        {rec.vocabularyHint && (
-          <p className={`text-xs font-mono truncate ${hintColor}`} title={rec.vocabularyHint}>
-            {rec.vocabularyHint}
+        {hintLabel && (
+          <p className={`text-xs truncate ${hintColor}`} title={rec.vocabularyHint}>
+            {hintLabel}
           </p>
         )}
       </div>

@@ -1,7 +1,15 @@
 const BASE_HEADERS = { 'Content-Type': 'application/json' };
 
+// Token provider — replaced at app startup by the producer's auth integration.
+// Falls back to localStorage for backward compatibility with dev/test environments.
+let _getToken: () => string | null = () => localStorage.getItem('access_token');
+
+export function setTokenProvider(fn: () => string | null): void {
+  _getToken = fn;
+}
+
 function getAuthHeader(): Record<string, string> {
-  const token = localStorage.getItem('access_token');
+  const token = _getToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 

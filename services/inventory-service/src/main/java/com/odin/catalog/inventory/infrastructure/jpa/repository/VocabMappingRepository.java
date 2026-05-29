@@ -6,11 +6,26 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface VocabMappingRepository extends JpaRepository<VocabMappingEntity, UUID> {
 
     List<VocabMappingEntity> findByLogicalElementId(UUID logicalElementId);
+
+    /**
+     * Returns the first non-null conceptLabel stored for a given concept IRI across all mappings.
+     * Used by the IRI-translation endpoint to resolve a stored preferred label.
+     */
+    @Query(nativeQuery = true, value = """
+        SELECT concept_label
+        FROM logical_element_vocab_mappings
+        WHERE concept_iri = :iri
+          AND concept_label IS NOT NULL
+          AND concept_label <> ''
+        LIMIT 1
+        """)
+    Optional<String> findLabelByConceptIri(@Param("iri") String iri);
 
     void deleteByLogicalElementIdAndConceptIri(UUID logicalElementId, String conceptIri);
 

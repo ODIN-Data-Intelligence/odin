@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { datasetApi, logicalModelApi, lineageApi } from '@datacatalog/shared';
+import { datasetApi, logicalModelApi, lineageApi, useIriTranslations, iriFragment } from '@datacatalog/shared';
 import type { Dataset, Distribution } from '@datacatalog/shared';
 import PageHeader from '../components/ui/PageHeader';
 import Button from '../components/ui/Button';
@@ -154,15 +154,23 @@ export default function DatasetDetailPage() {
 }
 
 function OverviewTab({ dataset }: { dataset: Dataset }) {
+  const iriList = [
+    ...(dataset.themes ?? []),
+    ...(dataset.license ? [dataset.license] : []),
+    ...(dataset.accrualPeriodicity ? [dataset.accrualPeriodicity] : []),
+  ];
+  const translations = useIriTranslations(iriList);
+  const t = (iri: string) => translations[iri] ?? iriFragment(iri);
+
   return (
     <div className="max-w-2xl space-y-4">
       <dl className="grid grid-cols-2 gap-3 text-sm">
         <DlItem label="Updated" value={formatDate(dataset.updatedAt)} />
         {dataset.version && <DlItem label="Version" value={dataset.version} />}
         {dataset.accrualPeriodicity && (
-          <DlItem label="Accrual Periodicity" value={dataset.accrualPeriodicity} />
+          <DlItem label="Accrual Periodicity" value={t(dataset.accrualPeriodicity)} />
         )}
-        {dataset.license && <DlItem label="License" value={dataset.license} />}
+        {dataset.license && <DlItem label="License" value={t(dataset.license)} />}
       </dl>
       {dataset.keywords && dataset.keywords.length > 0 && (
         <div>
@@ -180,9 +188,9 @@ function OverviewTab({ dataset }: { dataset: Dataset }) {
         <div>
           <p className="text-xs font-medium text-gray-500 mb-1">Themes</p>
           <div className="flex flex-wrap gap-1">
-            {dataset.themes.map(t => (
-              <span key={t} className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded">
-                {t}
+            {dataset.themes.map(theme => (
+              <span key={theme} title={theme} className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded">
+                {t(theme)}
               </span>
             ))}
           </div>

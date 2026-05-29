@@ -28,11 +28,11 @@ Six Spring Boot 3.3 / Java 21 microservices, each with its own database:
 
 | Service | Port | Database | Responsibility |
 |---------|------|----------|---------------|
-| `inventory-service` | 8001 | PostgreSQL | Catalogs, Datasets, Distributions, Data Products, Logical Models, Vocabularies |
+| `inventory-service` | 8001 | PostgreSQL | Catalogs, Datasets, Distributions, Data Products, Logical Models, Vocabularies, Semantic Tags, Ownership Governance |
 | `harvest-service` | 8002 | PostgreSQL + MinIO | Connector pipeline — DCAT HTTP, AWS Glue, Snowflake, Teradata |
 | `lineage-service` | 8003 | PostgreSQL + Apache AGE | OpenLineage ingestion, DDL lineage, Cypher graph traversal |
-| `search-service` | 8004 | OpenSearch | Full-text search, faceted filtering, semantic facets (FIBO concepts) |
-| `ai-service` | 8005 | PostgreSQL + pgvector | RAG chat, semantic search, embedding pipeline (Ollama / OpenAI) |
+| `search-service` | 8004 | OpenSearch | Full-text search, semantic type facets, FIBO concept facets |
+| `ai-service` | 8005 | PostgreSQL + pgvector | RAG chat, semantic recommendations, element classification, embedding pipeline (Ollama / OpenAI) |
 | `identity-service` | 8006 | PostgreSQL | Organisations, domains, users, roles, ABAC policies, API keys |
 
 Two React 18 + TypeScript + Vite frontends:

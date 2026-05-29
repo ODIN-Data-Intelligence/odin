@@ -9,11 +9,15 @@ import com.odin.catalog.shared.models.events.HarvestDdlDiscoveredPayload;
 import com.odin.catalog.shared.models.events.HarvestEntityDiscoveredPayload;
 import com.odin.catalog.shared.models.events.HarvestRunStatusPayload;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
 public class HarvestEventProducer {
+
+    private static final Logger log = LoggerFactory.getLogger(HarvestEventProducer.class);
 
     private final KafkaEventPublisher publisher;
 
@@ -25,6 +29,7 @@ public class HarvestEventProducer {
             tenantId,
             payload
         );
+        log.info("action=EVENT_PUBLISHED topic={} eventType=HarvestEntityDiscovered entityKey={}", CatalogTopics.HARVEST_ENTITIES, key);
     }
 
     public void publishDdlDiscovered(HarvestEntity entity, HarvestSource source, HarvestRun run) {
@@ -45,6 +50,8 @@ public class HarvestEventProducer {
             source.tenantId().toString(),
             payload
         );
+        log.info("action=EVENT_PUBLISHED topic={} eventType=HarvestDdlDiscovered runId={} object={}.{}",
+            CatalogTopics.HARVEST_DDL, run.id(), payload.objectNamespace(), payload.objectName());
     }
 
     public void publishRunStatus(HarvestRun run, String status, String errorMessage) {
@@ -65,5 +72,7 @@ public class HarvestEventProducer {
             null,
             payload
         );
+        log.info("action=EVENT_PUBLISHED topic={} eventType=HarvestRunStatus runId={} status={}",
+            CatalogTopics.HARVEST_RUNS_EVENTS, run.id(), status);
     }
 }

@@ -56,14 +56,19 @@ public class LogicalModelService {
         entity.setName(request.name());
         entity.setDescription(request.description());
         if (request.version() != null) entity.setVersion(request.version());
-        return toResponse(modelRepository.save(entity));
+        LogicalModelResponse result = toResponse(modelRepository.save(entity));
+        log.info("action=LOGICAL_MODEL_CREATED modelId={} datasetId={} name={}", result.id(), datasetId, request.name());
+        return result;
     }
 
     @Transactional
     public LogicalModelResponse updateStatus(UUID id, String newStatus) {
         LogicalModelEntity entity = findModelOrThrow(id);
+        String previousStatus = entity.getStatus();
         entity.setStatus(newStatus);
         LogicalModelResponse result = toResponse(modelRepository.save(entity));
+        log.info("action=LOGICAL_MODEL_STATUS_CHANGED modelId={} datasetId={} from={} to={}",
+            id, entity.getDatasetId(), previousStatus, newStatus);
         if ("published".equals(newStatus)) {
             publishSemanticUpdate(entity.getDatasetId());
         }
@@ -73,6 +78,7 @@ public class LogicalModelService {
     @Transactional
     public void delete(UUID id) {
         modelRepository.deleteById(id);
+        log.info("action=LOGICAL_MODEL_DELETED modelId={}", id);
     }
 
     @Transactional
@@ -81,7 +87,9 @@ public class LogicalModelService {
         LogicalDataElementEntity entity = new LogicalDataElementEntity();
         entity.setLogicalModelId(modelId);
         applyElementRequest(entity, request);
-        return toElementResponse(elementRepository.save(entity));
+        LogicalDataElementResponse result = toElementResponse(elementRepository.save(entity));
+        log.info("action=ELEMENT_CREATED elementId={} modelId={} name={}", result.id(), modelId, request.name());
+        return result;
     }
 
     @Transactional(readOnly = true)
@@ -94,7 +102,9 @@ public class LogicalModelService {
     public LogicalDataElementResponse updateElement(UUID elementId, LogicalDataElementRequest request) {
         LogicalDataElementEntity entity = findElementOrThrow(elementId);
         applyElementRequest(entity, request);
-        return toElementResponse(elementRepository.save(entity));
+        LogicalDataElementResponse result = toElementResponse(elementRepository.save(entity));
+        log.info("action=ELEMENT_UPDATED elementId={} name={}", elementId, request.name());
+        return result;
     }
 
     @Transactional
@@ -103,6 +113,7 @@ public class LogicalModelService {
         columnRepository.findById(physicalColumnId)
             .orElseThrow(() -> new NoSuchElementException("CsvwColumn not found: " + physicalColumnId));
         columnRepository.bindLogicalElement(physicalColumnId, elementId);
+        log.info("action=COLUMN_BOUND elementId={} physicalColumnId={}", elementId, physicalColumnId);
         return toElementResponse(findElementOrThrow(elementId));
     }
 
@@ -110,12 +121,14 @@ public class LogicalModelService {
     public LogicalDataElementResponse unbindPhysicalColumn(UUID elementId) {
         findElementOrThrow(elementId);
         columnRepository.unbindLogicalElement(elementId);
+        log.info("action=COLUMN_UNBOUND elementId={}", elementId);
         return toElementResponse(findElementOrThrow(elementId));
     }
 
     @Transactional
     public void deleteElement(UUID elementId) {
         elementRepository.deleteById(elementId);
+        log.info("action=ELEMENT_DELETED elementId={}", elementId);
     }
 
     @Transactional
@@ -132,6 +145,8 @@ public class LogicalModelService {
         modelRepository.findById(element.getLogicalModelId())
             .map(LogicalModelEntity::getDatasetId)
             .ifPresent(this::publishSemanticUpdate);
+        log.info("action=VOCAB_MAPPING_ADDED mappingId={} elementId={} conceptIri={} matchType={}",
+            response.id(), elementId, request.conceptIri(), entity.getMatchType());
         return response;
     }
 
@@ -150,6 +165,7 @@ public class LogicalModelService {
             .orElse(null);
         mappingRepository.deleteById(mappingId);
         if (datasetId != null) publishSemanticUpdate(datasetId);
+        log.info("action=VOCAB_MAPPING_DELETED mappingId={}", mappingId);
     }
 
     @Transactional(readOnly = true)
@@ -208,6 +224,7 @@ public class LogicalModelService {
     // No @Transactional here: the read and write phases use their own short transactions
     // so the DB connection is released before the (potentially multi-minute) AI call.
     public LogicalDataElementResponse recommendClassification(UUID elementId) {
+        log.info("action=CLASSIFICATION_RECOMMEND_START elementId={}", elementId);
         TransactionTemplate readTx = new TransactionTemplate(transactionManager);
         readTx.setReadOnly(true);
         ElementClassificationInput input = readTx.execute(
@@ -218,7 +235,10 @@ public class LogicalModelService {
         return new TransactionTemplate(transactionManager).execute(s -> {
             LogicalDataElementEntity entity = findElementOrThrow(elementId);
             results.stream().filter(r -> elementId.toString().equals(r.elementId())).findFirst()
-                .ifPresent(r -> applyRecommendation(entity, r));
+                .ifPresent(r -> {
+                    applyRecommendation(entity, r);
+                    log.info("action=CLASSIFICATION_RECOMMENDED elementId={} classification={}", elementId, r.classification());
+                });
             return toElementResponse(elementRepository.save(entity));
         });
     }
@@ -226,6 +246,7 @@ public class LogicalModelService {
     // No @Transactional here: same split-transaction pattern for bulk recommendation.
     @Async
     public void recommendModelClassifications(UUID modelId, UUID jobId) {
+        log.info("action=BULK_CLASSIFICATION_START modelId={} jobId={}", modelId, jobId);
         try {
             jobRegistry.markRunning(jobId);
 
@@ -256,8 +277,10 @@ public class LogicalModelService {
                 return null;
             });
 
+            log.info("action=BULK_CLASSIFICATION_COMPLETE modelId={} jobId={} resultCount={}", modelId, jobId, results.size());
             jobRegistry.markCompleted(jobId);
         } catch (Exception e) {
+            log.error("action=BULK_CLASSIFICATION_FAILED modelId={} jobId={} error={}", modelId, jobId, e.getMessage(), e);
             jobRegistry.markFailed(jobId, e.getMessage());
         }
     }
@@ -268,10 +291,12 @@ public class LogicalModelService {
         if (entity.getRecommendedClassification() == null) {
             throw new NoSuchElementException("No pending recommendation for element: " + elementId);
         }
-        entity.setClassification(entity.getRecommendedClassification());
+        String classification = entity.getRecommendedClassification();
+        entity.setClassification(classification);
         entity.setRecommendedClassification(null);
         entity.setClassificationReasoning(null);
         entity.setClassificationRecommendedAt(null);
+        log.info("action=CLASSIFICATION_ACCEPTED elementId={} classification={}", elementId, classification);
         return toElementResponse(elementRepository.save(entity));
     }
 
@@ -281,6 +306,7 @@ public class LogicalModelService {
         entity.setRecommendedClassification(null);
         entity.setClassificationReasoning(null);
         entity.setClassificationRecommendedAt(null);
+        log.info("action=CLASSIFICATION_REJECTED elementId={}", elementId);
         return toElementResponse(elementRepository.save(entity));
     }
 
@@ -337,6 +363,7 @@ public class LogicalModelService {
         tag.setVocabularyIri(request.vocabularyIri());
         tag = semanticTagRepository.save(tag);
         publishSemanticUpdate(datasetId);
+        log.info("action=SEMANTIC_TAG_ACCEPTED tagId={} datasetId={} type={}", tag.getId(), datasetId, request.type());
         return toTagResponse(tag);
     }
 
@@ -346,10 +373,12 @@ public class LogicalModelService {
             .orElseThrow(() -> new NoSuchElementException("Semantic tag not found: " + tagId));
         semanticTagRepository.deleteById(tagId);
         publishSemanticUpdate(datasetId);
+        log.info("action=SEMANTIC_TAG_DELETED tagId={} datasetId={}", tagId, datasetId);
     }
 
     @Transactional(readOnly = true)
     public AiServiceClient.SemanticRecommendationResponse recommendSemanticContext(UUID datasetId) {
+        log.info("action=SEMANTIC_RECOMMEND_START datasetId={}", datasetId);
         DatasetSemanticContext ctx = getSemanticContext(datasetId);
         var dataset = datasetRepository.findById(datasetId)
             .orElseThrow(() -> new NoSuchElementException("Dataset not found: " + datasetId));

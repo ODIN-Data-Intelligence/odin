@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { logicalModelApi, logicalElementApi } from '@datacatalog/shared';
+import { logicalModelApi, logicalElementApi, useIriTranslations, resolveLabel } from '@datacatalog/shared';
 import type { LogicalDataElement } from '@datacatalog/shared';
 import VocabConceptBadge from './VocabConceptBadge';
 
@@ -46,6 +46,13 @@ export default function LogicalSchemaTable({ datasetId }: LogicalSchemaTableProp
   });
 
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  // Collect IRIs that have no stored label/description — translate those via API
+  const unmappedIris = elements
+    .flatMap(el => el.vocabMappings ?? [])
+    .filter(m => !m.conceptLabel && !m.conceptDefinition)
+    .map(m => m.conceptIri);
+  const translations = useIriTranslations(unmappedIris);
 
   function toggleExpand(id: string) {
     setExpandedIds(prev => {
@@ -112,7 +119,12 @@ export default function LogicalSchemaTable({ datasetId }: LogicalSchemaTableProp
                   <td className="px-3 py-2.5">
                     <div className="flex flex-wrap gap-1">
                       {el.vocabMappings?.slice(0, 2).map(m => (
-                        <VocabConceptBadge key={m.id} iri={m.conceptIri} label={m.conceptLabel} matchType={m.matchType} />
+                        <VocabConceptBadge
+                          key={m.id}
+                          iri={m.conceptIri}
+                          label={resolveLabel(translations, m.conceptIri, m.conceptLabel, m.conceptDefinition)}
+                          matchType={m.matchType}
+                        />
                       ))}
                       {(el.vocabMappings?.length ?? 0) > 2 && (
                         <span className="text-xs text-gray-400">+{(el.vocabMappings?.length ?? 0) - 2} more</span>

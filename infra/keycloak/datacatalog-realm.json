@@ -81,8 +81,20 @@
           "config": {
             "user.attribute": "permissions",
             "claim.name": "permissions",
-            "jsonType.label": "JSON",
+            "jsonType.label": "String",
             "access.token.claim": "true",
+            "multivalued": "true"
+          }
+        },
+        {
+          "name": "realm_roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": {
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
             "multivalued": "true"
           }
         }
@@ -92,11 +104,10 @@
 
   "roles": {
     "realm": [
-      { "name": "catalog-admin",    "description": "Full catalog administration" },
-      { "name": "data-steward",     "description": "Can publish and govern datasets" },
-      { "name": "data-owner",       "description": "Owns data products in their domain" },
-      { "name": "data-engineer",    "description": "Configures harvest sources and jobs" },
-      { "name": "data-consumer",    "description": "Can discover and read datasets" }
+      { "name": "administrator",   "description": "Full platform administration — manages users, all data assets, harvest sources, and settings" },
+      { "name": "data-governance", "description": "Data Governance officer — governs data quality and compliance across domains" },
+      { "name": "data-owner",      "description": "Data Owner — owns and manages data products and datasets within their domain" },
+      { "name": "data-steward",    "description": "Data Steward — curates metadata, semantic annotations, and logical models" }
     ]
   },
 
@@ -108,8 +119,92 @@
       "lastName": "Admin",
       "enabled": true,
       "credentials": [{ "type": "password", "value": "admin", "temporary": false }],
-      "realmRoles": ["catalog-admin"],
-      "attributes": { "tenant_id": ["00000000-0000-0000-0000-000000000001"] }
+      "realmRoles": ["administrator"],
+      "attributes": {
+        "tenant_id":   ["00000000-0000-0000-0000-000000000001"],
+        "permissions": ["catalog:read", "catalog:write", "catalog:admin"]
+      }
+    },
+    {
+      "username": "governance@datacatalog.local",
+      "email": "governance@datacatalog.local",
+      "firstName": "Grace",
+      "lastName": "Governance",
+      "enabled": true,
+      "credentials": [{ "type": "password", "value": "password", "temporary": false }],
+      "realmRoles": ["data-governance"],
+      "attributes": {
+        "tenant_id":   ["00000000-0000-0000-0000-000000000001"],
+        "permissions": ["catalog:read", "catalog:write"]
+      }
+    },
+    {
+      "username": "owner@datacatalog.local",
+      "email": "owner@datacatalog.local",
+      "firstName": "Owen",
+      "lastName": "Owner",
+      "enabled": true,
+      "credentials": [{ "type": "password", "value": "password", "temporary": false }],
+      "realmRoles": ["data-owner"],
+      "attributes": {
+        "tenant_id":   ["00000000-0000-0000-0000-000000000001"],
+        "permissions": ["catalog:read", "catalog:write"]
+      }
+    },
+    {
+      "username": "steward@datacatalog.local",
+      "email": "steward@datacatalog.local",
+      "firstName": "Sam",
+      "lastName": "Steward",
+      "enabled": true,
+      "credentials": [{ "type": "password", "value": "password", "temporary": false }],
+      "realmRoles": ["data-steward"],
+      "attributes": {
+        "tenant_id":   ["00000000-0000-0000-0000-000000000001"],
+        "permissions": ["catalog:read", "catalog:write"]
+      }
     }
-  ]
+  ],
+
+  "userProfile": {
+    "attributes": [
+      {
+        "name": "username",
+        "displayName": "${username}",
+        "validations": { "length": { "min": 3, "max": 255 }, "username-prohibited-characters": {}, "up-username-not-idn-homograph": {} },
+        "permissions": { "view": ["admin", "user"], "edit": ["admin", "user"] }
+      },
+      {
+        "name": "email",
+        "displayName": "${email}",
+        "validations": { "email": {}, "length": { "max": 255 } },
+        "required": { "roles": ["user"] },
+        "permissions": { "view": ["admin", "user"], "edit": ["admin", "user"] }
+      },
+      {
+        "name": "firstName",
+        "displayName": "${firstName}",
+        "validations": { "length": { "max": 255 }, "person-name-prohibited-characters": {} },
+        "permissions": { "view": ["admin", "user"], "edit": ["admin", "user"] }
+      },
+      {
+        "name": "lastName",
+        "displayName": "${lastName}",
+        "validations": { "length": { "max": 255 }, "person-name-prohibited-characters": {} },
+        "permissions": { "view": ["admin", "user"], "edit": ["admin", "user"] }
+      },
+      {
+        "name": "tenant_id",
+        "displayName": "Tenant ID",
+        "multivalued": false,
+        "permissions": { "view": ["admin"], "edit": ["admin"] }
+      },
+      {
+        "name": "permissions",
+        "displayName": "Permissions",
+        "multivalued": true,
+        "permissions": { "view": ["admin"], "edit": ["admin"] }
+      }
+    ]
+  }
 }

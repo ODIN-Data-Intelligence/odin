@@ -1,8 +1,12 @@
 import { Link } from 'react-router-dom';
+import { preferredLabel, iriFragment } from '@datacatalog/shared';
+
+export { iriFragment as humanize };
 
 interface VocabConceptBadgeProps {
   iri: string;
   label?: string;
+  description?: string;
   matchType?: string;
 }
 
@@ -14,24 +18,19 @@ const MATCH_TYPE_COLORS: Record<string, string> = {
   narrowMatch: 'bg-yellow-100 text-yellow-700 border-yellow-200 hover:bg-yellow-200',
 };
 
-export function humanize(iri: string): string {
-  const fragment = iri.split(/[/#]/).pop() ?? iri;
-  return fragment.replace(/([A-Z])/g, ' $1').trim();
-}
-
-export default function VocabConceptBadge({ iri, label, matchType }: VocabConceptBadgeProps) {
+export default function VocabConceptBadge({ iri, label, description, matchType }: VocabConceptBadgeProps) {
   const colorClass = matchType
     ? (MATCH_TYPE_COLORS[matchType] ?? 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200')
     : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200';
-  const displayLabel = label || humanize(iri);
+  const display = preferredLabel(iri, label, description);
 
   return (
     <Link
-      to={`/search?q=${encodeURIComponent(displayLabel)}`}
+      to={`/search?q=${encodeURIComponent(display)}`}
       title={iri}
       className={`inline-flex items-center px-2 py-0.5 rounded border text-xs font-medium transition-colors ${colorClass}`}
     >
-      {displayLabel}
+      {display}
     </Link>
   );
 }

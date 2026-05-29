@@ -38,14 +38,20 @@ public class AiServiceClient {
     }
 
     public SemanticRecommendationResponse recommendSemanticContext(SemanticRecommendationRequest request) {
+        log.info("action=AI_REQUEST_START operation=recommendSemanticContext datasetId={}", request.datasetId());
+        long t = System.currentTimeMillis();
         try {
-            return restClient.post()
+            SemanticRecommendationResponse response = restClient.post()
                 .uri("/api/v1/recommend-semantic-context")
                 .body(request)
                 .retrieve()
                 .body(SemanticRecommendationResponse.class);
+            log.info("action=AI_REQUEST_COMPLETE operation=recommendSemanticContext datasetId={} typeCount={} elapsed={}ms",
+                request.datasetId(), response != null && response.types() != null ? response.types().size() : 0, System.currentTimeMillis() - t);
+            return response;
         } catch (Exception e) {
-            log.warn("AI semantic recommendation service unavailable: {}", e.getMessage());
+            log.warn("action=AI_REQUEST_FAILED operation=recommendSemanticContext datasetId={} elapsed={}ms error={}",
+                request.datasetId(), System.currentTimeMillis() - t, e.getMessage());
             throw new AiServiceUnavailableException("Semantic recommendation service is unavailable", e);
         }
     }
@@ -76,15 +82,21 @@ public class AiServiceClient {
     }
 
     public List<ElementClassificationResult> classify(List<ElementClassificationInput> elements) {
+        log.info("action=AI_REQUEST_START operation=classify elementCount={}", elements.size());
+        long t = System.currentTimeMillis();
         try {
             ClassifyResponse response = restClient.post()
                 .uri("/api/v1/classify/elements")
                 .body(new ClassifyRequest(elements))
                 .retrieve()
                 .body(ClassifyResponse.class);
-            return response != null ? response.results() : List.of();
+            List<ElementClassificationResult> results = response != null ? response.results() : List.of();
+            log.info("action=AI_REQUEST_COMPLETE operation=classify elementCount={} resultCount={} elapsed={}ms",
+                elements.size(), results.size(), System.currentTimeMillis() - t);
+            return results;
         } catch (Exception e) {
-            log.warn("AI classification service unavailable: {}", e.getMessage());
+            log.warn("action=AI_REQUEST_FAILED operation=classify elementCount={} elapsed={}ms error={}",
+                elements.size(), System.currentTimeMillis() - t, e.getMessage());
             throw new AiServiceUnavailableException("Classification service is unavailable", e);
         }
     }

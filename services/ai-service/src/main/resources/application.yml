@@ -37,11 +37,11 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:http://localhost:8180/realms/datacatalog}
+          jwk-set-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:http://keycloak:8180/realms/datacatalog/protocol/openid-connect/certs}
 
   ai:
     ollama:
-      base-url: ${SPRING_AI_OLLAMA_BASE_URL:http://localhost:11434}
+      base-url: ${SPRING_AI_OLLAMA_BASE_URL:http://10.0.0.29:11434}
       chat:
         model: qwen3:latest  # llama3.2
       embedding:

@@ -43,6 +43,8 @@ public class CatalogChangeConsumer {
         concurrency = "3"
     )
     public void onDatasetChanged(ConsumerRecord<String, Object> record) {
+        log.debug("action=EVENT_RECEIVED topic={} offset={} key={}", record.topic(), record.offset(), record.key());
+        long t = System.currentTimeMillis();
         try {
             var envelope = kafkaEventConsumer.unwrap(record, DatasetChangedPayload.class);
             DatasetChangedPayload payload = envelope.payload();
@@ -50,14 +52,19 @@ public class CatalogChangeConsumer {
             if ("DELETED".equals(payload.changeType())) {
                 indexService.delete(payload.datasetId());
                 deleteDistributionsForDataset(payload.datasetId(), payload.tenantId());
+                log.info("action=EVENT_PROCESSED topic={} changeType=DELETED entityId={} elapsed={}ms",
+                    record.topic(), payload.datasetId(), System.currentTimeMillis() - t);
                 return;
             }
 
             CatalogSearchDocument doc = buildDatasetDocument(payload);
             indexService.index(doc);
             syncDistributionsForDataset(payload.datasetId(), payload.tenantId());
+            log.info("action=EVENT_PROCESSED topic={} changeType={} entityId={} elapsed={}ms",
+                record.topic(), payload.changeType(), payload.datasetId(), System.currentTimeMillis() - t);
         } catch (Exception e) {
-            log.error("Failed to index dataset change from offset {}: {}", record.offset(), e.getMessage(), e);
+            log.error("action=EVENT_PROCESSING_FAILED topic={} offset={} error={}",
+                record.topic(), record.offset(), e.getMessage(), e);
         }
     }
 
@@ -67,19 +74,26 @@ public class CatalogChangeConsumer {
         concurrency = "2"
     )
     public void onDataProductChanged(ConsumerRecord<String, Object> record) {
+        log.debug("action=EVENT_RECEIVED topic={} offset={} key={}", record.topic(), record.offset(), record.key());
+        long t = System.currentTimeMillis();
         try {
             var envelope = kafkaEventConsumer.unwrap(record, DataProductChangedPayload.class);
             DataProductChangedPayload payload = envelope.payload();
 
             if ("DELETED".equals(payload.changeType())) {
                 indexService.delete(payload.dataProductId());
+                log.info("action=EVENT_PROCESSED topic={} changeType=DELETED entityId={} elapsed={}ms",
+                    record.topic(), payload.dataProductId(), System.currentTimeMillis() - t);
                 return;
             }
 
             CatalogSearchDocument doc = buildDataProductDocument(payload);
             indexService.index(doc);
+            log.info("action=EVENT_PROCESSED topic={} changeType={} entityId={} elapsed={}ms",
+                record.topic(), payload.changeType(), payload.dataProductId(), System.currentTimeMillis() - t);
         } catch (Exception e) {
-            log.error("Failed to index data product change from offset {}: {}", record.offset(), e.getMessage(), e);
+            log.error("action=EVENT_PROCESSING_FAILED topic={} offset={} error={}",
+                record.topic(), record.offset(), e.getMessage(), e);
         }
     }
 

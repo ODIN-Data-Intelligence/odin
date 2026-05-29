@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@datacatalog/shared": "file:../shared",
+    "keycloak-js": "24.0.5",
     "@reactflow/core": "^11.11.4",
     "reactflow": "^11.11.4",
     "react": "^18.3.1",

@@ -278,6 +278,27 @@ services:
       retries: 15
       start_period: 60s
 
+  # Registers APP_URL/* in the catalog-frontend Keycloak client's redirectUris.
+  # Re-runs on every `docker compose up` — idempotent (skips if already present).
+  keycloak-config:
+    image: python:3-alpine
+    container_name: keycloak-config
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    environment:
+      KEYCLOAK_URL: http://keycloak:8180
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      # Override APP_URL to match the IP/hostname users use to reach the producer UI.
+      # Default covers the standard local Docker Compose deployment.
+      APP_URL: ${APP_URL:-http://localhost:3000}
+    volumes:
+      - ./infra/keycloak/configure-redirect.sh:/configure-redirect.sh:ro
+    command: sh /configure-redirect.sh
+    restart: "no"
+    networks: [catalog-net]
+
   # ── Traefik ──────────────────────────────────────────────────────────────────
 
   traefik:
@@ -305,7 +326,6 @@ services:
       SPRING_DATASOURCE_USERNAME: inventory
       SPRING_DATASOURCE_PASSWORD: inventory
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8180/realms/datacatalog
     ports:
       - "8001:8001"
     depends_on:
@@ -332,7 +352,6 @@ services:
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8180/realms/datacatalog
     ports:
       - "8002:8002"
     depends_on:
@@ -358,7 +377,6 @@ services:
       SPRING_DATASOURCE_USERNAME: lineage
       SPRING_DATASOURCE_PASSWORD: lineage
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8180/realms/datacatalog
     ports:
       - "8003:8003"
     depends_on:
@@ -380,7 +398,6 @@ services:
     environment:
       OPENSEARCH_URIS: http://opensearch:9200
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8180/realms/datacatalog
     ports:
       - "8004:8004"
     depends_on:
@@ -408,7 +425,6 @@ services:
       KEYCLOAK_REALM: datacatalog
       KEYCLOAK_CLIENT_ID: identity-service
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8180/realms/datacatalog
     ports:
       - "8006:8006"
     depends_on:
@@ -431,6 +447,10 @@ services:
     container_name: frontend-producer
     ports:
       - "3000:80"
+    environment:
+      # Both vars must match the IP/hostname reachable by the user's browser.
+      KEYCLOAK_URL: ${KEYCLOAK_URL:-http://localhost:8180}
+      APP_URL: ${APP_URL:-http://localhost:3000}
     networks: [catalog-net]
     labels:
       - "traefik.enable=true"
