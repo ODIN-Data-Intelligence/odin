@@ -29,8 +29,9 @@ public class OpenLineageHandler {
 
     @Transactional
     public void handle(RunEvent event) {
-        log.debug("Processing RunEvent type={} job={}/{} run={}",
+        log.debug("action=LINEAGE_EVENT_RECEIVED type={} job={}/{} run={}",
             event.eventType(), event.job().namespace(), event.job().name(), event.run().runId());
+        long t = System.currentTimeMillis();
 
         // Upsert job
         LineageJobEntity job = upsertJob(event.job());
@@ -83,6 +84,11 @@ public class OpenLineageHandler {
         // Notify downstream services
         eventProducer.publishRunEventReceived(event, run);
         eventProducer.publishGraphUpdated(event);
+        log.info("action=LINEAGE_EVENT_PROCESSED type={} job={}/{} runId={} inputs={} outputs={} elapsed={}ms",
+            event.eventType(), event.job().namespace(), event.job().name(), event.run().runId(),
+            event.inputs() != null ? event.inputs().size() : 0,
+            event.outputs() != null ? event.outputs().size() : 0,
+            System.currentTimeMillis() - t);
     }
 
     private LineageJobEntity upsertJob(Job job) {

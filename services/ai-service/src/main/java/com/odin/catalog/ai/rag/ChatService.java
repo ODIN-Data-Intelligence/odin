@@ -22,6 +22,7 @@ import reactor.core.publisher.Flux;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 @Service
@@ -94,13 +95,13 @@ public class ChatService {
         // ── Step 6: stream LLM response ──────────────────────────────────────
         long streamStart = System.currentTimeMillis();
         StringBuilder fullResponse = new StringBuilder();
-        return chatClient.prompt()
+        Flux<String> raw = chatClient.prompt()
             .system(systemPrompt)
             .messages(history)
             .user(request.content())
             .stream()
-            .content()
-            .doOnNext(fullResponse::append)
+            .content();
+        return stripThinkBlocks(raw, fullResponse)
             .doOnComplete(() -> {
                 log.info("[conv={}] step=LLM_STREAM_COMPLETE response.length={} streamElapsed={}ms totalElapsed={}ms",
                     conversationId, fullResponse.length(),
@@ -111,6 +112,54 @@ public class ChatService {
             .doOnError(ex ->
                 log.error("[conv={}] step=LLM_STREAM_ERROR error={}", conversationId, ex.getMessage())
             );
+    }
+
+    /**
+     * Strips {@code <think>...</think>} blocks emitted by reasoning models (e.g. qwen3)
+     * before tokens reach the SSE client. Buffers tokens until the end of the think block
+     * is confirmed, then emits the remainder normally. If no think block is detected
+     * within the first {@code <think>} tag length of output, all buffered tokens are
+     * flushed immediately.
+     */
+    private static Flux<String> stripThinkBlocks(Flux<String> raw, StringBuilder visible) {
+        final String OPEN  = "<think>";
+        final String CLOSE = "</think>";
+        AtomicBoolean past = new AtomicBoolean(false);
+        StringBuilder buf  = new StringBuilder();
+
+        return raw.concatMap(token -> {
+            if (past.get()) {
+                visible.append(token);
+                return Flux.just(token);
+            }
+            buf.append(token);
+            String s = buf.toString();
+
+            // No think block: buffer is longer than the open tag and doesn't start with it
+            if (s.length() >= OPEN.length() && !s.startsWith(OPEN)) {
+                past.set(true);
+                buf.setLength(0);
+                visible.append(s);
+                return Flux.just(s);
+            }
+
+            // Think block closed — emit only what follows </think>
+            int closeIdx = s.indexOf(CLOSE);
+            if (closeIdx >= 0) {
+                past.set(true);
+                buf.setLength(0);
+                // Strip leading whitespace/newlines that the model emits between </think> and its answer
+                String after = s.substring(closeIdx + CLOSE.length()).replaceAll("^\\s+", "");
+                if (!after.isEmpty()) {
+                    visible.append(after);
+                    return Flux.just(after);
+                }
+                return Flux.empty();
+            }
+
+            // Still buffering — either inside <think> or accumulating the opening tag
+            return Flux.empty();
+        });
     }
 
     private String buildSystemPrompt(String focusedContext, String ragContext) {

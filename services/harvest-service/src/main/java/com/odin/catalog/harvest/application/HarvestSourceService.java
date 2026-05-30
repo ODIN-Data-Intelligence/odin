@@ -9,6 +9,8 @@ import com.odin.catalog.harvest.infrastructure.jpa.entity.HarvestSourceEntity;
 import com.odin.catalog.harvest.infrastructure.jpa.repository.HarvestSourceRepository;
 import com.odin.catalog.shared.auth.filter.TenantContextHolder;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +24,8 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class HarvestSourceService {
+
+    private static final Logger log = LoggerFactory.getLogger(HarvestSourceService.class);
 
     private final HarvestSourceRepository sourceRepository;
     private final List<HarvestConnector> connectors;
@@ -52,27 +56,38 @@ public class HarvestSourceService {
         HarvestSourceEntity entity = new HarvestSourceEntity();
         entity.setTenantId(tenantId);
         applyRequest(entity, request);
-        return toResponse(sourceRepository.save(entity));
+        HarvestSourceResponse result = toResponse(sourceRepository.save(entity));
+        log.info("action=HARVEST_SOURCE_CREATED sourceId={} tenantId={} name={} type={}",
+            result.id(), tenantId, request.name(), request.sourceType());
+        return result;
     }
 
     @Transactional
     public HarvestSourceResponse update(UUID id, HarvestSourceRequest request) {
         HarvestSourceEntity entity = findOrThrow(id);
         applyRequest(entity, request);
-        return toResponse(sourceRepository.save(entity));
+        HarvestSourceResponse result = toResponse(sourceRepository.save(entity));
+        log.info("action=HARVEST_SOURCE_UPDATED sourceId={} name={}", id, request.name());
+        return result;
     }
 
     @Transactional
     public void delete(UUID id) {
         sourceRepository.deleteById(id);
+        log.info("action=HARVEST_SOURCE_DELETED sourceId={}", id);
     }
 
     public boolean testConnection(UUID id) {
         HarvestSourceEntity entity = findOrThrow(id);
         HarvestConnector connector = connectorMap().get(entity.getSourceType());
-        if (connector == null) return false;
+        if (connector == null) {
+            log.warn("action=HARVEST_CONNECTION_TEST_FAILED sourceId={} reason=no_connector_for_type type={}", id, entity.getSourceType());
+            return false;
+        }
         HarvestSource source = toSource(entity);
-        return connector.testConnection(source);
+        boolean ok = connector.testConnection(source);
+        log.info("action=HARVEST_CONNECTION_TEST sourceId={} type={} result={}", id, entity.getSourceType(), ok ? "SUCCESS" : "FAILED");
+        return ok;
     }
 
     private void applyRequest(HarvestSourceEntity entity, HarvestSourceRequest req) {

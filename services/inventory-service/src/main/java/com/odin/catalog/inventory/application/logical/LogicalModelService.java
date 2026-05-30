@@ -6,7 +6,10 @@ import com.odin.catalog.inventory.infrastructure.ai.AiServiceClient.ElementClass
 import com.odin.catalog.inventory.infrastructure.ai.AiServiceClient.ElementClassificationResult;
 import com.odin.catalog.inventory.infrastructure.jpa.entity.*;
 import com.odin.catalog.inventory.infrastructure.jpa.repository.*;
+import com.odin.catalog.inventory.infrastructure.kafka.CatalogEventProducer;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -22,10 +25,15 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class LogicalModelService {
 
+    private static final Logger log = LoggerFactory.getLogger(LogicalModelService.class);
+
     private final LogicalModelRepository modelRepository;
     private final LogicalDataElementRepository elementRepository;
     private final VocabMappingRepository mappingRepository;
     private final CsvwColumnRepository columnRepository;
+    private final DatasetRepository datasetRepository;
+    private final DatasetSemanticTagRepository semanticTagRepository;
+    private final CatalogEventProducer eventProducer;
     private final AiServiceClient aiServiceClient;
     private final PlatformTransactionManager transactionManager;
     private final BulkRecommendationJobRegistry jobRegistry;
@@ -48,19 +56,29 @@ public class LogicalModelService {
         entity.setName(request.name());
         entity.setDescription(request.description());
         if (request.version() != null) entity.setVersion(request.version());
-        return toResponse(modelRepository.save(entity));
+        LogicalModelResponse result = toResponse(modelRepository.save(entity));
+        log.info("action=LOGICAL_MODEL_CREATED modelId={} datasetId={} name={}", result.id(), datasetId, request.name());
+        return result;
     }
 
     @Transactional
     public LogicalModelResponse updateStatus(UUID id, String newStatus) {
         LogicalModelEntity entity = findModelOrThrow(id);
+        String previousStatus = entity.getStatus();
         entity.setStatus(newStatus);
-        return toResponse(modelRepository.save(entity));
+        LogicalModelResponse result = toResponse(modelRepository.save(entity));
+        log.info("action=LOGICAL_MODEL_STATUS_CHANGED modelId={} datasetId={} from={} to={}",
+            id, entity.getDatasetId(), previousStatus, newStatus);
+        if ("published".equals(newStatus)) {
+            publishSemanticUpdate(entity.getDatasetId());
+        }
+        return result;
     }
 
     @Transactional
     public void delete(UUID id) {
         modelRepository.deleteById(id);
+        log.info("action=LOGICAL_MODEL_DELETED modelId={}", id);
     }
 
     @Transactional
@@ -69,7 +87,9 @@ public class LogicalModelService {
         LogicalDataElementEntity entity = new LogicalDataElementEntity();
         entity.setLogicalModelId(modelId);
         applyElementRequest(entity, request);
-        return toElementResponse(elementRepository.save(entity));
+        LogicalDataElementResponse result = toElementResponse(elementRepository.save(entity));
+        log.info("action=ELEMENT_CREATED elementId={} modelId={} name={}", result.id(), modelId, request.name());
+        return result;
     }
 
     @Transactional(readOnly = true)
@@ -82,7 +102,9 @@ public class LogicalModelService {
     public LogicalDataElementResponse updateElement(UUID elementId, LogicalDataElementRequest request) {
         LogicalDataElementEntity entity = findElementOrThrow(elementId);
         applyElementRequest(entity, request);
-        return toElementResponse(elementRepository.save(entity));
+        LogicalDataElementResponse result = toElementResponse(elementRepository.save(entity));
+        log.info("action=ELEMENT_UPDATED elementId={} name={}", elementId, request.name());
+        return result;
     }
 
     @Transactional
@@ -91,6 +113,7 @@ public class LogicalModelService {
         columnRepository.findById(physicalColumnId)
             .orElseThrow(() -> new NoSuchElementException("CsvwColumn not found: " + physicalColumnId));
         columnRepository.bindLogicalElement(physicalColumnId, elementId);
+        log.info("action=COLUMN_BOUND elementId={} physicalColumnId={}", elementId, physicalColumnId);
         return toElementResponse(findElementOrThrow(elementId));
     }
 
@@ -98,17 +121,19 @@ public class LogicalModelService {
     public LogicalDataElementResponse unbindPhysicalColumn(UUID elementId) {
         findElementOrThrow(elementId);
         columnRepository.unbindLogicalElement(elementId);
+        log.info("action=COLUMN_UNBOUND elementId={}", elementId);
         return toElementResponse(findElementOrThrow(elementId));
     }
 
     @Transactional
     public void deleteElement(UUID elementId) {
         elementRepository.deleteById(elementId);
+        log.info("action=ELEMENT_DELETED elementId={}", elementId);
     }
 
     @Transactional
     public VocabMappingResponse addVocabMapping(UUID elementId, VocabMappingRequest request) {
-        findElementOrThrow(elementId);
+        LogicalDataElementEntity element = findElementOrThrow(elementId);
         VocabMappingEntity entity = new VocabMappingEntity();
         entity.setLogicalElementId(elementId);
         entity.setVocabularyId(request.vocabularyId());
@@ -116,7 +141,13 @@ public class LogicalModelService {
         entity.setConceptLabel(request.conceptLabel());
         entity.setConceptDefinition(request.conceptDefinition());
         entity.setMatchType(request.matchType() != null ? request.matchType() : "exactMatch");
-        return toMappingResponse(mappingRepository.save(entity));
+        VocabMappingResponse response = toMappingResponse(mappingRepository.save(entity));
+        modelRepository.findById(element.getLogicalModelId())
+            .map(LogicalModelEntity::getDatasetId)
+            .ifPresent(this::publishSemanticUpdate);
+        log.info("action=VOCAB_MAPPING_ADDED mappingId={} elementId={} conceptIri={} matchType={}",
+            response.id(), elementId, request.conceptIri(), entity.getMatchType());
+        return response;
     }
 
     @Transactional(readOnly = true)
@@ -127,7 +158,14 @@ public class LogicalModelService {
 
     @Transactional
     public void deleteVocabMapping(UUID mappingId) {
+        UUID datasetId = mappingRepository.findById(mappingId)
+            .flatMap(m -> elementRepository.findById(m.getLogicalElementId()))
+            .flatMap(e -> modelRepository.findById(e.getLogicalModelId()))
+            .map(LogicalModelEntity::getDatasetId)
+            .orElse(null);
         mappingRepository.deleteById(mappingId);
+        if (datasetId != null) publishSemanticUpdate(datasetId);
+        log.info("action=VOCAB_MAPPING_DELETED mappingId={}", mappingId);
     }
 
     @Transactional(readOnly = true)
@@ -186,6 +224,7 @@ public class LogicalModelService {
     // No @Transactional here: the read and write phases use their own short transactions
     // so the DB connection is released before the (potentially multi-minute) AI call.
     public LogicalDataElementResponse recommendClassification(UUID elementId) {
+        log.info("action=CLASSIFICATION_RECOMMEND_START elementId={}", elementId);
         TransactionTemplate readTx = new TransactionTemplate(transactionManager);
         readTx.setReadOnly(true);
         ElementClassificationInput input = readTx.execute(
@@ -196,7 +235,10 @@ public class LogicalModelService {
         return new TransactionTemplate(transactionManager).execute(s -> {
             LogicalDataElementEntity entity = findElementOrThrow(elementId);
             results.stream().filter(r -> elementId.toString().equals(r.elementId())).findFirst()
-                .ifPresent(r -> applyRecommendation(entity, r));
+                .ifPresent(r -> {
+                    applyRecommendation(entity, r);
+                    log.info("action=CLASSIFICATION_RECOMMENDED elementId={} classification={}", elementId, r.classification());
+                });
             return toElementResponse(elementRepository.save(entity));
         });
     }
@@ -204,6 +246,7 @@ public class LogicalModelService {
     // No @Transactional here: same split-transaction pattern for bulk recommendation.
     @Async
     public void recommendModelClassifications(UUID modelId, UUID jobId) {
+        log.info("action=BULK_CLASSIFICATION_START modelId={} jobId={}", modelId, jobId);
         try {
             jobRegistry.markRunning(jobId);
 
@@ -234,8 +277,10 @@ public class LogicalModelService {
                 return null;
             });
 
+            log.info("action=BULK_CLASSIFICATION_COMPLETE modelId={} jobId={} resultCount={}", modelId, jobId, results.size());
             jobRegistry.markCompleted(jobId);
         } catch (Exception e) {
+            log.error("action=BULK_CLASSIFICATION_FAILED modelId={} jobId={} error={}", modelId, jobId, e.getMessage(), e);
             jobRegistry.markFailed(jobId, e.getMessage());
         }
     }
@@ -246,10 +291,12 @@ public class LogicalModelService {
         if (entity.getRecommendedClassification() == null) {
             throw new NoSuchElementException("No pending recommendation for element: " + elementId);
         }
-        entity.setClassification(entity.getRecommendedClassification());
+        String classification = entity.getRecommendedClassification();
+        entity.setClassification(classification);
         entity.setRecommendedClassification(null);
         entity.setClassificationReasoning(null);
         entity.setClassificationRecommendedAt(null);
+        log.info("action=CLASSIFICATION_ACCEPTED elementId={} classification={}", elementId, classification);
         return toElementResponse(elementRepository.save(entity));
     }
 
@@ -259,7 +306,122 @@ public class LogicalModelService {
         entity.setRecommendedClassification(null);
         entity.setClassificationReasoning(null);
         entity.setClassificationRecommendedAt(null);
+        log.info("action=CLASSIFICATION_REJECTED elementId={}", elementId);
         return toElementResponse(elementRepository.save(entity));
+    }
+
+    @Transactional(readOnly = true)
+    public DatasetSemanticContext getSemanticContext(UUID datasetId) {
+        List<LogicalModelEntity> models = modelRepository.findByDatasetIdOrderByCreatedAtDesc(datasetId);
+        List<String> semanticTypes = mappingRepository.findSemanticTypesByDatasetId(datasetId);
+        List<String> vocabConceptLabels = new ArrayList<>();
+        List<String> vocabConceptIris = new ArrayList<>();
+        List<String> fiboConcepts = new ArrayList<>();
+        List<String> logicalElementNames = new ArrayList<>();
+        List<String> logicalTypes = new ArrayList<>();
+
+        for (LogicalModelEntity model : models) {
+            if (model.getElements() == null) continue;
+            for (LogicalDataElementEntity el : model.getElements()) {
+                if (el.getName() != null) logicalElementNames.add(el.getName());
+                if (el.getLogicalType() != null) logicalTypes.add(el.getLogicalType());
+                if (el.getVocabMappings() == null) continue;
+                for (VocabMappingEntity m : el.getVocabMappings()) {
+                    if (m.getConceptLabel() != null) vocabConceptLabels.add(m.getConceptLabel());
+                    if (m.getConceptIri() != null) {
+                        vocabConceptIris.add(m.getConceptIri());
+                        if (m.getConceptIri().contains("edmcouncil.org/fibo")) {
+                            fiboConcepts.add(m.getConceptIri());
+                        }
+                    }
+                }
+            }
+        }
+
+        List<DatasetSemanticContext.AcceptedTag> acceptedTags =
+            semanticTagRepository.findByDatasetIdOrderByCreatedAtDesc(datasetId)
+                .stream()
+                .map(t -> new DatasetSemanticContext.AcceptedTag(t.getId(), t.getSemanticType(), t.getVocabularyIri()))
+                .toList();
+
+        return new DatasetSemanticContext(
+            semanticTypes,
+            vocabConceptLabels.stream().distinct().toList(),
+            vocabConceptIris.stream().distinct().toList(),
+            fiboConcepts.stream().distinct().toList(),
+            logicalElementNames.stream().distinct().toList(),
+            logicalTypes.stream().distinct().toList(),
+            acceptedTags
+        );
+    }
+
+    @Transactional
+    public DatasetSemanticTagResponse acceptSemanticTag(UUID datasetId, DatasetSemanticTagRequest request) {
+        DatasetSemanticTagEntity tag = new DatasetSemanticTagEntity();
+        tag.setDatasetId(datasetId);
+        tag.setSemanticType(request.type());
+        tag.setVocabularyIri(request.vocabularyIri());
+        tag = semanticTagRepository.save(tag);
+        publishSemanticUpdate(datasetId);
+        log.info("action=SEMANTIC_TAG_ACCEPTED tagId={} datasetId={} type={}", tag.getId(), datasetId, request.type());
+        return toTagResponse(tag);
+    }
+
+    @Transactional
+    public void deleteSemanticTag(UUID datasetId, UUID tagId) {
+        semanticTagRepository.findByIdAndDatasetId(tagId, datasetId)
+            .orElseThrow(() -> new NoSuchElementException("Semantic tag not found: " + tagId));
+        semanticTagRepository.deleteById(tagId);
+        publishSemanticUpdate(datasetId);
+        log.info("action=SEMANTIC_TAG_DELETED tagId={} datasetId={}", tagId, datasetId);
+    }
+
+    @Transactional(readOnly = true)
+    public AiServiceClient.SemanticRecommendationResponse recommendSemanticContext(UUID datasetId) {
+        log.info("action=SEMANTIC_RECOMMEND_START datasetId={}", datasetId);
+        DatasetSemanticContext ctx = getSemanticContext(datasetId);
+        var dataset = datasetRepository.findById(datasetId)
+            .orElseThrow(() -> new NoSuchElementException("Dataset not found: " + datasetId));
+
+        var request = new AiServiceClient.SemanticRecommendationRequest(
+            datasetId.toString(),
+            dataset.getTitle(),
+            dataset.getDescription(),
+            dataset.getKeywords(),
+            dataset.getThemes(),
+            ctx.logicalElementNames(),
+            ctx.logicalTypes(),
+            ctx.vocabConceptLabels(),
+            ctx.vocabConceptIris()
+        );
+        return aiServiceClient.recommendSemanticContext(request);
+    }
+
+    private void publishSemanticUpdate(UUID datasetId) {
+        try {
+            datasetRepository.findById(datasetId).ifPresent(dataset -> {
+                DatasetSemanticContext ctx = getSemanticContext(datasetId);
+                // Merge accepted tags into semanticTypes for downstream consumers
+                List<String> mergedTypes = new ArrayList<>(ctx.semanticTypes());
+                ctx.acceptedTags().stream().map(DatasetSemanticContext.AcceptedTag::type)
+                    .filter(t -> !mergedTypes.contains(t))
+                    .forEach(mergedTypes::add);
+                DatasetSemanticContext enriched = new DatasetSemanticContext(
+                    mergedTypes,
+                    ctx.vocabConceptLabels(), ctx.vocabConceptIris(), ctx.fiboConcepts(),
+                    ctx.logicalElementNames(), ctx.logicalTypes(), ctx.acceptedTags()
+                );
+                eventProducer.publishDatasetChanged("UPDATED", dataset, enriched);
+            });
+        } catch (Exception e) {
+            log.warn("Failed to publish semantic update for dataset {}: {}", datasetId, e.getMessage());
+        }
+    }
+
+    private DatasetSemanticTagResponse toTagResponse(DatasetSemanticTagEntity t) {
+        return new DatasetSemanticTagResponse(
+            t.getId(), t.getDatasetId(), t.getSemanticType(), t.getVocabularyIri(), t.getCreatedAt()
+        );
     }
 
     private ElementClassificationInput toClassificationInput(LogicalDataElementEntity e) {

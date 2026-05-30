@@ -34,7 +34,7 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:http://localhost:8180/realms/datacatalog}
+          jwk-set-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:http://keycloak:8180/realms/datacatalog/protocol/openid-connect/certs}
 
 keycloak:
   server-url: ${KEYCLOAK_SERVER_URL:http://localhost:8180}
@@ -59,3 +59,6 @@ springdoc:
     operationsSorter: method
     tagsSorter: alpha
     tryItOutEnabled: true
+
+app:
+  dev-auth-enabled: ${APP_DEV_AUTH_ENABLED:false}

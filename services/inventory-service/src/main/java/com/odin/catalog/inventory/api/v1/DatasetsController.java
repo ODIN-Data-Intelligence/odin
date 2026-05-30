@@ -4,10 +4,15 @@ import com.odin.catalog.inventory.api.v1.dto.AssignOwnerRequest;
 import com.odin.catalog.inventory.api.v1.dto.DatasetAuditResponse;
 import com.odin.catalog.inventory.api.v1.dto.DatasetRequest;
 import com.odin.catalog.inventory.api.v1.dto.DatasetResponse;
+import com.odin.catalog.inventory.api.v1.dto.DatasetSemanticContext;
+import com.odin.catalog.inventory.api.v1.dto.DatasetSemanticTagRequest;
+import com.odin.catalog.inventory.api.v1.dto.DatasetSemanticTagResponse;
 import com.odin.catalog.inventory.api.v1.dto.OwnershipProposalResponse;
+import com.odin.catalog.inventory.api.v1.dto.SemanticRecommendationResponse;
 import com.odin.catalog.inventory.api.v1.dto.PageResponse;
 import com.odin.catalog.inventory.api.v1.dto.ProposeTransferRequest;
 import com.odin.catalog.inventory.application.dataset.DatasetService;
+import com.odin.catalog.inventory.application.logical.LogicalModelService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -31,6 +36,7 @@ import java.util.UUID;
 public class DatasetsController {
 
     private final DatasetService datasetService;
+    private final LogicalModelService logicalModelService;
 
     @Operation(summary = "List datasets",
         description = "Returns a paginated list of datasets. Filter by catalog or source URI.")
@@ -60,6 +66,74 @@ public class DatasetsController {
             @Parameter(description = "Dataset UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
             @PathVariable UUID id) {
         return datasetService.get(id);
+    }
+
+    @Operation(summary = "Get semantic context",
+        description = "Returns aggregated semantic types and vocabulary concept data derived from " +
+            "controlled vocabulary mappings across all logical data elements of this dataset.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Semantic context"),
+        @ApiResponse(responseCode = "404", description = "Dataset not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @GetMapping("/{id}/semantic-context")
+    public DatasetSemanticContext getSemanticContext(
+            @Parameter(description = "Dataset UUID") @PathVariable UUID id) {
+        datasetService.get(id); // validates dataset exists
+        return logicalModelService.getSemanticContext(id);
+    }
+
+    @Operation(summary = "Accept a semantic tag",
+        description = "Saves an accepted AI-recommended (or manually entered) semantic type tag " +
+            "directly on the dataset. Tags complement vocabulary-mapping-derived semantic types.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "201", description = "Tag saved"),
+        @ApiResponse(responseCode = "404", description = "Dataset not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @PostMapping("/{id}/semantic-tags")
+    @ResponseStatus(HttpStatus.CREATED)
+    public DatasetSemanticTagResponse acceptSemanticTag(
+            @Parameter(description = "Dataset UUID") @PathVariable UUID id,
+            @Valid @RequestBody DatasetSemanticTagRequest request) {
+        datasetService.get(id);
+        return logicalModelService.acceptSemanticTag(id, request);
+    }
+
+    @Operation(summary = "Delete a semantic tag",
+        description = "Removes a previously accepted semantic tag from the dataset.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "204", description = "Deleted"),
+        @ApiResponse(responseCode = "404", description = "Tag or dataset not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @DeleteMapping("/{id}/semantic-tags/{tagId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteSemanticTag(
+            @Parameter(description = "Dataset UUID") @PathVariable UUID id,
+            @Parameter(description = "Tag UUID") @PathVariable UUID tagId) {
+        logicalModelService.deleteSemanticTag(id, tagId);
+    }
+
+    @Operation(summary = "Get AI semantic type recommendations",
+        description = "Uses the AI service to analyse this dataset's metadata and current vocabulary " +
+            "mappings, then recommends additional business domain types and vocabulary concepts to " +
+            "improve semantic coverage.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Semantic type recommendations"),
+        @ApiResponse(responseCode = "404", description = "Dataset not found", content = @Content),
+        @ApiResponse(responseCode = "503", description = "AI service unavailable", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @PostMapping("/{id}/recommend-semantic-context")
+    public SemanticRecommendationResponse recommendSemanticContext(
+            @Parameter(description = "Dataset UUID") @PathVariable UUID id) {
+        datasetService.get(id); // validates dataset exists
+        var aiResult = logicalModelService.recommendSemanticContext(id);
+        var types = aiResult.types().stream()
+            .map(t -> new SemanticRecommendationResponse.RecommendedType(t.type(), t.rationale(), t.vocabularyHint()))
+            .toList();
+        return new SemanticRecommendationResponse(types, aiResult.rationale());
     }
 
     @Operation(summary = "Create dataset", description = "Creates a new DCAT dataset.")

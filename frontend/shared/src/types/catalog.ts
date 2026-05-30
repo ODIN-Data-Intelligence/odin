@@ -28,6 +28,36 @@ export interface Dataset extends Resource {
   ownerId?: string;
   distributions?: Distribution[];
   logicalModels?: LogicalModel[];
+  semanticTypes?: string[];
+}
+
+export interface AcceptedSemanticTag {
+  id: string;
+  datasetId: string;
+  type: string;
+  vocabularyIri?: string;
+  createdAt: string;
+}
+
+export interface DatasetSemanticContext {
+  semanticTypes: string[];
+  vocabConceptLabels: string[];
+  vocabConceptIris: string[];
+  fiboConcepts: string[];
+  logicalElementNames: string[];
+  logicalTypes: string[];
+  acceptedTags: AcceptedSemanticTag[];
+}
+
+export interface RecommendedSemanticType {
+  type: string;
+  rationale: string;
+  vocabularyHint?: string;
+}
+
+export interface SemanticContextRecommendation {
+  types: RecommendedSemanticType[];
+  rationale: string;
 }
 
 export interface DatasetAuditEntry {

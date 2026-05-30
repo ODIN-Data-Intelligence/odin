@@ -44,6 +44,7 @@ public class EmbeddingService {
                     .mapToObj(i -> chunkId(payload.datasetId(), i))
                     .collect(Collectors.toList());
                 vectorStore.delete(ids);
+                log.info("action=EMBEDDINGS_DELETED datasetId={}", payload.datasetId());
                 return;
             }
 
@@ -51,7 +52,8 @@ public class EmbeddingService {
 
             List<Document> chunks = buildChunks(payload);
             vectorStore.add(chunks);
-            log.debug("Embedded {} chunks for dataset {}", chunks.size(), payload.datasetId());
+            log.info("action=EMBEDDINGS_UPSERTED datasetId={} chunkCount={} changeType={}",
+                payload.datasetId(), chunks.size(), payload.changeType());
         } catch (Exception e) {
             log.error("Failed to embed dataset from offset {}: {}", record.offset(), e.getMessage(), e);
         }
@@ -74,6 +76,18 @@ public class EmbeddingService {
             String kwThemes = "Keywords: " + (resource.keywords() != null ? String.join(", ", resource.keywords()) : "") +
                 "\nThemes: " + (resource.themes() != null ? String.join(", ", resource.themes()) : "");
             chunks.add(new Document(chunkId(payload.datasetId(), 1), kwThemes, meta));
+        }
+
+        // Chunk 2: semantic graph context from vocabulary mappings
+        List<String> types  = payload.semanticTypes()    != null ? payload.semanticTypes()    : List.of();
+        List<String> labels = payload.vocabConceptLabels() != null ? payload.vocabConceptLabels() : List.of();
+        List<String> names  = payload.logicalElementNames() != null ? payload.logicalElementNames() : List.of();
+        if (!types.isEmpty() || !labels.isEmpty()) {
+            String typeChunk =
+                "Semantic types: "      + String.join(", ", types)  + "\n" +
+                "Vocabulary concepts: " + String.join(", ", labels) + "\n" +
+                "Business elements: "   + String.join(", ", names);
+            chunks.add(new Document(chunkId(payload.datasetId(), 2), typeChunk, meta));
         }
 
         return chunks;

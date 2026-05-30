@@ -104,6 +104,7 @@ public class AdminController {
         List<String> vocabLabels = new ArrayList<>();
         List<String> vocabTypes = new ArrayList<>();
         List<String> fiboConcepts = new ArrayList<>();
+        Set<String> semanticTypes = new LinkedHashSet<>();
         boolean hasLogicalModel = false;
 
         try {
@@ -151,6 +152,13 @@ public class AdminController {
                                                 } else {
                                                     vocabTypes.add("general");
                                                 }
+                                                String matchType = (String) vm.getOrDefault("matchType", "");
+                                                if ("exactMatch".equals(matchType) || "closeMatch".equals(matchType)) {
+                                                    String fragment = iri.contains("#")
+                                                        ? iri.substring(iri.lastIndexOf('#') + 1)
+                                                        : iri.substring(iri.lastIndexOf('/') + 1);
+                                                    if (!fragment.isBlank()) semanticTypes.add(fragment);
+                                                }
                                             }
                                             if (label != null) vocabLabels.add(label);
                                         }
@@ -196,6 +204,7 @@ public class AdminController {
             (String) ds.get("sourceUri"), null, null,
             Boolean.TRUE.equals(deleted), false, hasLogicalModel, distCount,
             elemNames, List.of(), logicalTypes, vocabIris, vocabLabels, vocabTypes, fiboConcepts,
+            new ArrayList<>(semanticTypes),
             List.of(), List.of(), null
         );
     }
@@ -224,7 +233,7 @@ public class AdminController {
                         (String) dist.get("format"),
                         (String) dist.get("mediaType"),
                         null, null, null, null, false, false, false, 0,
-                        List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                        List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
                         List.of(), List.of(), datasetId
                     );
                     indexService.index(doc);
@@ -266,7 +275,7 @@ public class AdminController {
                     (String) dp.get("lifecycleStatus"), null, null,
                     null, null, null, null, null, null,
                     Boolean.TRUE.equals(deleted), false, false, 0,
-                    List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                    List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
                     List.of(), List.of(), null
                 );
                 indexService.index(doc);

@@ -1,6 +1,8 @@
 package com.odin.catalog.inventory.api.v1;
 
+import com.odin.catalog.inventory.application.vocabulary.IriUtils;
 import com.odin.catalog.inventory.infrastructure.jpa.entity.VocabularyEntity;
+import com.odin.catalog.inventory.infrastructure.jpa.repository.VocabMappingRepository;
 import com.odin.catalog.inventory.infrastructure.jpa.repository.VocabularyRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -14,7 +16,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Tag(name = "Vocabularies", description = "Controlled vocabulary registry — schema.org, FIBO, SKOS, GeoSPARQL, and custom vocabularies")
@@ -24,6 +28,7 @@ import java.util.UUID;
 public class VocabularyController {
 
     private final VocabularyRepository vocabularyRepository;
+    private final VocabMappingRepository vocabMappingRepository;
 
     @Operation(summary = "List vocabularies",
         description = "Returns all registered vocabularies. Filter by type to narrow to financial, general, or other categories. "
@@ -71,5 +76,46 @@ public class VocabularyController {
         vocab.setId(null);
         vocab.setSystem(false);
         return vocabularyRepository.save(vocab);
+    }
+
+    @Operation(
+        summary = "Translate an IRI to a human-readable label",
+        description = "Returns the preferred label (skos:prefLabel) stored for the given concept IRI. "
+            + "If no stored label exists the IRI local-name is extracted and formatted as a readable phrase. "
+            + "Resolution order: (1) conceptLabel stored in any vocab mapping for this IRI, "
+            + "(2) humanized IRI fragment (terminal segment after last / or #, camelCase split into words).")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Translation result"),
+        @ApiResponse(responseCode = "400", description = "Missing iri parameter", content = @Content)
+    })
+    @GetMapping("/translate")
+    public Map<String, String> translate(
+            @Parameter(description = "Fully-qualified concept IRI to translate",
+                example = "https://spec.edmcouncil.org/fibo/ontology/FBC/ProductsAndServices/ClientsAndAccounts/Customer")
+            @RequestParam String iri) {
+        String label = vocabMappingRepository.findLabelByConceptIri(iri)
+            .orElseGet(() -> IriUtils.humanize(iri));
+        return Map.of("iri", iri, "label", label);
+    }
+
+    @Operation(
+        summary = "Batch-translate IRIs to human-readable labels",
+        description = "Translates up to 200 IRIs in a single request. Each IRI is resolved using the same "
+            + "priority as the single-IRI endpoint. Returns a map of IRI → label.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Map of IRI to label"),
+        @ApiResponse(responseCode = "400", description = "Request body missing or too large", content = @Content)
+    })
+    @PostMapping("/translate")
+    public Map<String, String> translateBatch(@RequestBody List<String> iris) {
+        if (iris == null || iris.isEmpty()) return Map.of();
+        List<String> limited = iris.size() > 200 ? iris.subList(0, 200) : iris;
+        Map<String, String> result = new LinkedHashMap<>();
+        for (String iri : limited) {
+            String label = vocabMappingRepository.findLabelByConceptIri(iri)
+                .orElseGet(() -> IriUtils.humanize(iri));
+            result.put(iri, label);
+        }
+        return result;
     }
 }

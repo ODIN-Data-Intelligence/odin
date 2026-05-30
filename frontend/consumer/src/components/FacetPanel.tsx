@@ -1,11 +1,9 @@
 import { useState } from 'react';
 import type { SearchFacets } from '@datacatalog/shared';
+import { iriFragment, useIriTranslations } from '@datacatalog/shared';
 import { useSearchStore } from '../store/searchStore';
 
-export function humanizeConcept(k: string): string {
-  const fragment = k.split(/[/#:]/).pop() ?? k;
-  return fragment.replace(/([A-Z])/g, ' $1').trim();
-}
+export const humanizeConcept = iriFragment;
 
 interface FacetPanelProps {
   facets: SearchFacets;
@@ -20,6 +18,15 @@ const ENTITY_TYPE_LABELS: Record<string, string> = {
 export default function FacetPanel({ facets }: FacetPanelProps) {
   const { filters, setFilter, clearFilters } = useSearchStore();
   const [collapsed, setCollapsed] = useState(false);
+
+  // Collect all IRI-valued facet keys for batch translation
+  const iriKeys = [
+    ...(facets.fiboConcepts ?? []).map(f => f.key),
+    ...(facets.vocabConcepts ?? []).map(f => f.key),
+    ...(facets.themes ?? []).map(f => f.key),
+  ];
+  const translations = useIriTranslations(iriKeys);
+  const label = (k: string) => translations[k] ?? iriFragment(k);
 
   const hasFilters = Object.values(filters).some(v => v !== undefined && v !== '');
 
@@ -75,12 +82,22 @@ export default function FacetPanel({ facets }: FacetPanelProps) {
         onSelect={v => setFilter('vocab', v === filters.vocab ? undefined : v)}
       />
 
+      {(facets.semanticTypes ?? []).length > 0 && (
+        <FacetGroup
+          title="Semantic Types"
+          items={facets.semanticTypes ?? []}
+          selected={filters.semanticType}
+          getLabel={k => k}
+          onSelect={v => setFilter('semanticType', v === filters.semanticType ? undefined : v)}
+        />
+      )}
+
       {(facets.fiboConcepts ?? []).length > 0 && (
         <FacetGroup
           title="FIBO Concepts"
           items={facets.fiboConcepts ?? []}
           selected={filters.fiboConcept}
-          getLabel={humanizeConcept}
+          getLabel={label}
           onSelect={v => setFilter('fiboConcept', v === filters.fiboConcept ? undefined : v)}
         />
       )}
@@ -97,7 +114,7 @@ export default function FacetPanel({ facets }: FacetPanelProps) {
         title="Themes"
         items={facets.themes ?? []}
         selected={filters.theme}
-        getLabel={k => k}
+        getLabel={label}
         onSelect={v => setFilter('theme', v === filters.theme ? undefined : v)}
       />
 
@@ -105,7 +122,7 @@ export default function FacetPanel({ facets }: FacetPanelProps) {
         title="Vocabulary Concepts"
         items={facets.vocabConcepts ?? []}
         selected={filters.vocabConcept}
-        getLabel={humanizeConcept}
+        getLabel={label}
         onSelect={v => setFilter('vocabConcept', v === filters.vocabConcept ? undefined : v)}
       />
 

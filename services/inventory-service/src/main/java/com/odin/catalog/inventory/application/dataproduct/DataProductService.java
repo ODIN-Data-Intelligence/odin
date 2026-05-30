@@ -12,6 +12,8 @@ import com.odin.catalog.inventory.infrastructure.jpa.repository.DatasetRepositor
 import com.odin.catalog.inventory.infrastructure.kafka.CatalogEventProducer;
 import com.odin.catalog.shared.auth.filter.TenantContextHolder;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +25,8 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class DataProductService {
+
+    private static final Logger log = LoggerFactory.getLogger(DataProductService.class);
 
     private final DataProductRepository dataProductRepository;
     private final DataProductPortRepository portRepository;
@@ -52,6 +56,7 @@ public class DataProductService {
         applyRequest(entity, request, tenantId);
         entity = dataProductRepository.save(entity);
         eventProducer.publishDataProductChanged("CREATED", entity);
+        log.info("action=DATA_PRODUCT_CREATED dataProductId={} tenantId={} title={}", entity.getId(), tenantId, entity.getTitle());
         return toResponse(entity);
     }
 
@@ -61,6 +66,7 @@ public class DataProductService {
         applyRequest(entity, request, entity.getTenantId());
         entity = dataProductRepository.save(entity);
         eventProducer.publishDataProductChanged("UPDATED", entity);
+        log.info("action=DATA_PRODUCT_UPDATED dataProductId={} title={}", id, entity.getTitle());
         return toResponse(entity);
     }
 
@@ -71,6 +77,7 @@ public class DataProductService {
         entity.setLifecycleStatus(newStatus);
         entity = dataProductRepository.save(entity);
         eventProducer.publishDataProductChanged("LIFECYCLE_CHANGED", entity, previous);
+        log.info("action=DATA_PRODUCT_LIFECYCLE_CHANGED dataProductId={} from={} to={}", id, previous, newStatus);
         return toResponse(entity);
     }
 
@@ -80,6 +87,7 @@ public class DataProductService {
         entity.setDeleted(true);
         dataProductRepository.save(entity);
         eventProducer.publishDataProductChanged("DELETED", entity);
+        log.info("action=DATA_PRODUCT_DELETED dataProductId={}", id);
     }
 
     @Transactional(readOnly = true)
@@ -105,12 +113,14 @@ public class DataProductService {
             port.setPortType("output");
             port.setDatasetId(datasetId);
             portRepository.save(port);
+            log.info("action=DATASET_LINKED dataProductId={} datasetId={}", dataProductId, datasetId);
         }
     }
 
     @Transactional
     public void unlinkDataset(UUID dataProductId, UUID datasetId) {
         portRepository.deleteByDataProductIdAndDatasetId(dataProductId, datasetId);
+        log.info("action=DATASET_UNLINKED dataProductId={} datasetId={}", dataProductId, datasetId);
     }
 
     private void applyRequest(DataProductEntity entity, DataProductRequest req, UUID tenantId) {
@@ -140,7 +150,7 @@ public class DataProductService {
             ds.getAccrualPeriodicity(), ds.getKeywords(), ds.getThemes(),
             ds.getLanguage(), ds.getLicense(), ds.getVersion(),
             ds.getSourceUri(), ds.isDeleted(), ds.getCreatedAt(), ds.getUpdatedAt(),
-            ds.getOwnerId()
+            ds.getOwnerId(), null
         );
     }
 

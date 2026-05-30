@@ -17,6 +17,8 @@ import com.odin.catalog.inventory.infrastructure.kafka.CatalogEventProducer;
 import com.odin.catalog.shared.auth.filter.ApiKeyAuthenticationFilter.ApiKeyPrincipal;
 import com.odin.catalog.shared.auth.filter.TenantContextHolder;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -33,6 +35,8 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class DatasetService {
+
+    private static final Logger log = LoggerFactory.getLogger(DatasetService.class);
 
     private final DatasetRepository datasetRepository;
     private final DatasetAuditLogRepository auditLogRepository;
@@ -70,6 +74,7 @@ public class DatasetService {
         eventProducer.publishDatasetChanged("CREATED", entity);
         UserContext uc = currentUser();
         audit(entity.getId(), "CREATED", uc.id(), uc.email(), null, toResponse(entity), tenantId);
+        log.info("action=DATASET_CREATED datasetId={} tenantId={} title={}", entity.getId(), tenantId, entity.getTitle());
         return toResponse(entity);
     }
 
@@ -83,6 +88,7 @@ public class DatasetService {
         DatasetResponse after = toResponse(entity);
         UserContext uc = currentUser();
         audit(id, "UPDATED", uc.id(), uc.email(), before, after, entity.getTenantId());
+        log.info("action=DATASET_UPDATED datasetId={} title={}", id, entity.getTitle());
         return after;
     }
 
@@ -95,6 +101,7 @@ public class DatasetService {
         eventProducer.publishDatasetChanged("DELETED", entity);
         UserContext uc = currentUser();
         audit(id, "DELETED", uc.id(), uc.email(), before, null, entity.getTenantId());
+        log.info("action=DATASET_DELETED datasetId={}", id);
     }
 
     // ── Ownership ────────────────────────────────────────────────────────────
@@ -110,6 +117,7 @@ public class DatasetService {
         entity = datasetRepository.save(entity);
         UserContext uc = currentUser();
         audit(datasetId, "OWNER_ASSIGNED", uc.id(), uc.email(), null, toResponse(entity), entity.getTenantId());
+        log.info("action=OWNER_ASSIGNED datasetId={} userId={}", datasetId, userId);
         return toResponse(entity);
     }
 
@@ -134,6 +142,7 @@ public class DatasetService {
         proposal = proposalRepository.save(proposal);
 
         audit(datasetId, "OWNER_TRANSFER_PROPOSED", uc.id(), uc.email(), null, null, entity.getTenantId());
+        log.info("action=OWNER_TRANSFER_PROPOSED datasetId={} proposalId={} proposedOwnerId={}", datasetId, proposal.getId(), proposedOwnerId);
         return toProposalResponse(proposal);
     }
 
@@ -165,6 +174,7 @@ public class DatasetService {
         entity = datasetRepository.save(entity);
 
         audit(datasetId, "OWNER_TRANSFER_APPROVED", uc.id(), uc.email(), null, toResponse(entity), entity.getTenantId());
+        log.info("action=OWNER_TRANSFER_APPROVED datasetId={} proposalId={} newOwnerId={}", datasetId, proposalId, proposal.getProposedOwnerId());
         return toResponse(entity);
     }
 
@@ -192,6 +202,7 @@ public class DatasetService {
         proposalRepository.save(proposal);
 
         audit(datasetId, "OWNER_TRANSFER_REJECTED", uc.id(), uc.email(), null, null, entity.getTenantId());
+        log.info("action=OWNER_TRANSFER_REJECTED datasetId={} proposalId={}", datasetId, proposalId);
         return toProposalResponse(proposal);
     }
 
@@ -283,7 +294,7 @@ public class DatasetService {
             e.getLanguage(), e.getLicense(), e.getVersion(),
             e.getSourceUri(), e.isDeleted(),
             e.getCreatedAt(), e.getUpdatedAt(),
-            e.getOwnerId()
+            e.getOwnerId(), null
         );
     }
 

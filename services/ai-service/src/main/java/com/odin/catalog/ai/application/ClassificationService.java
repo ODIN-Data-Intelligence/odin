@@ -35,21 +35,32 @@ public class ClassificationService {
         if (request.elements() == null || request.elements().isEmpty()) {
             return new ClassifyElementsResponse(List.of());
         }
+        log.info("action=CLASSIFICATION_START elementCount={}", request.elements().size());
+        long t = System.currentTimeMillis();
         String prompt = buildPrompt(request.elements());
         String raw;
         try {
             raw = CompletableFuture
-                .supplyAsync(() -> chatClient.prompt().user(prompt).call().content(), VIRTUAL_EXECUTOR)
+                .supplyAsync(() -> chatClient.prompt()
+                    .system("/no_think")
+                    .user(prompt)
+                    .call()
+                    .content(), VIRTUAL_EXECUTOR)
                 .orTimeout(CLASSIFICATION_TIMEOUT_MINUTES, TimeUnit.MINUTES)
                 .join();
         } catch (CompletionException e) {
-            log.warn("LLM classification timed out or failed: {}", e.getCause().getMessage());
+            log.warn("action=CLASSIFICATION_TIMEOUT elementCount={} elapsed={}ms error={}",
+                request.elements().size(), System.currentTimeMillis() - t, e.getCause().getMessage());
             return new ClassifyElementsResponse(List.of());
         } catch (Exception e) {
-            log.warn("LLM classification call failed: {}", e.getMessage());
+            log.warn("action=CLASSIFICATION_FAILED elementCount={} elapsed={}ms error={}",
+                request.elements().size(), System.currentTimeMillis() - t, e.getMessage());
             return new ClassifyElementsResponse(List.of());
         }
-        return parse(raw);
+        ClassifyElementsResponse result = parse(raw);
+        log.info("action=CLASSIFICATION_COMPLETE elementCount={} resultCount={} elapsed={}ms",
+            request.elements().size(), result.results().size(), System.currentTimeMillis() - t);
+        return result;
     }
 
     private String buildPrompt(List<ClassifyElementsRequest.ElementInput> elements) {
@@ -74,8 +85,8 @@ public class ClassificationService {
               CONFIDENTIAL     – Personal or financial data that must be protected (name, email, trade positions)
               HIGH_CONFIDENTIAL – Highly sensitive: identifiers, credentials, health, payment card data, SSNs
 
-	    Apply Schema.org and FIBO ontologies to inform your classifications, but use only the provided
-            metadata (name, description, logical type, vocab concepts) for your reasoning. Do not make assumptions
+            Apply Schema.org and FIBO ontologies to inform your classifications, but use only the provided 
+            metadata (name, description, logical type, vocab concepts) for your reasoning. Do not make assumptions 
             beyond the given information.
 
             Classification signals:
@@ -90,9 +101,10 @@ public class ClassificationService {
             - Respond with a JSON array only. No markdown fences. No explanation outside the JSON.
             - Each array element must be a JSON object (not a string).
             - The "classification" field must contain exactly one word: PUBLIC, INTERNAL, CONFIDENTIAL, or HIGH_CONFIDENTIAL.
+            - The "reasoning" field is REQUIRED and must be a non-empty sentence explaining why you chose that classification level.
 
             Example output:
-            [{"elementId":"abc-123","classification":"CONFIDENTIAL","reasoning":"Contains personal financial position data"}]
+            [{"elementId":"abc-123","classification":"CONFIDENTIAL","reasoning":"Contains personal financial position data linked to a trading party"}]
 
             Elements to classify:
             %s
