@@ -56,5 +56,3 @@ test-results/
 # Docker volumes (local dev)
 data/
 
-# Claude Code (session-local tooling)
-.claude/.continue.sh
