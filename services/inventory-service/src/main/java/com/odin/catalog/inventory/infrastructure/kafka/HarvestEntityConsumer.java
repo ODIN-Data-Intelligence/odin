@@ -26,12 +26,16 @@ public class HarvestEntityConsumer {
         concurrency = "4"
     )
     public void onHarvestEntity(ConsumerRecord<String, Object> record) {
+        log.debug("action=EVENT_RECEIVED topic={} offset={} key={}", record.topic(), record.offset(), record.key());
+        long t = System.currentTimeMillis();
         try {
             var envelope = kafkaEventConsumer.unwrap(record, HarvestEntityDiscoveredPayload.class);
             processor.process(envelope.payload());
+            log.info("action=EVENT_PROCESSED topic={} offset={} entityKey={} elapsed={}ms",
+                record.topic(), record.offset(), record.key(), System.currentTimeMillis() - t);
         } catch (Exception e) {
-            log.error("Failed to process harvest entity from offset {}: {}",
-                record.offset(), e.getMessage(), e);
+            log.error("action=EVENT_PROCESSING_FAILED topic={} offset={} error={}",
+                record.topic(), record.offset(), e.getMessage(), e);
         }
     }
 }

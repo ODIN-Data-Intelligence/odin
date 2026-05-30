@@ -22,17 +22,27 @@ Lineage is tracked using the OpenLineage standard via an Apache AGE graph databa
 
 ---
 
+## Key Capabilities
+
+- **Role-based access** — the producer UI is protected by Keycloak OIDC login with four defined roles (Administrator, Data Governance, Data Owner, Data Steward) that gate both UI navigation and backend permissions.
+- **Ownership governance** — datasets carry an owner, an ownership-transfer proposal workflow (propose → approve/reject), and an immutable audit history of every change.
+- **AI-assisted semantics** — RAG chat over your metadata, AI element classification (suggests vocabulary concepts for logical elements), and dataset-level semantic-context recommendations.
+- **Dataset semantic types** — domain types (e.g. `Customer`, `DebitCardAccount`) are derived from FIBO/schema.org vocabulary mappings, exposed as search facets and surfaced as badges in the consumer UI.
+- **Human-readable metadata** — an IRI→label translation API renders controlled-vocabulary IRIs as friendly labels throughout the UI.
+
+---
+
 ## Architecture
 
 Six Spring Boot 3.3 / Java 21 microservices, each with its own database:
 
 | Service | Port | Database | Responsibility |
 |---------|------|----------|---------------|
-| `inventory-service` | 8001 | PostgreSQL | Catalogs, Datasets, Distributions, Data Products, Logical Models, Vocabularies |
+| `inventory-service` | 8001 | PostgreSQL | Catalogs, Datasets, Distributions, Data Products, Logical Models, Vocabularies, Semantic Tags, Ownership Governance |
 | `harvest-service` | 8002 | PostgreSQL + MinIO | Connector pipeline — DCAT HTTP, AWS Glue, Snowflake, Teradata |
 | `lineage-service` | 8003 | PostgreSQL + Apache AGE | OpenLineage ingestion, DDL lineage, Cypher graph traversal |
-| `search-service` | 8004 | OpenSearch | Full-text search, faceted filtering, semantic facets (FIBO concepts) |
-| `ai-service` | 8005 | PostgreSQL + pgvector | RAG chat, semantic search, embedding pipeline (Ollama / OpenAI) |
+| `search-service` | 8004 | OpenSearch | Full-text search, semantic type facets, FIBO concept facets |
+| `ai-service` | 8005 | PostgreSQL + pgvector | RAG chat, semantic recommendations, element classification, embedding pipeline (Ollama / OpenAI) |
 | `identity-service` | 8006 | PostgreSQL | Organisations, domains, users, roles, ABAC policies, API keys |
 
 Two React 18 + TypeScript + Vite frontends:
@@ -283,14 +293,56 @@ data-catalog/
 
 ---
 
-## API Authentication
+## Authentication & Access Control
+
+### Producer UI login
+
+The producer (management) UI is protected by **Keycloak OIDC login** — opening it redirects to
+the Keycloak login page (`login-required`). It authenticates against the `catalog-frontend`
+public PKCE client in the `datacatalog` realm. The issued Bearer token carries `tenant_id` and
+`permissions` claims, which drive multi-tenancy and authorization on every backend call. The
+consumer (discovery) UI is read-only and unauthenticated.
+
+### Backend authentication
 
 All backend endpoints accept either:
 
 - `Authorization: Bearer <JWT>` — Keycloak-issued OIDC token
 - `X-API-Key: <key>` — long-lived API key (managed by identity-service)
 
-For local development, use `X-API-Key: dev-inventory` (or `dev-harvest`, `dev-search`, etc.) to bypass JWT validation.
+JWTs are validated against Keycloak's JWKS (`jwk-set-uri`), so a token works regardless of the
+issuer hostname (e.g. `localhost` in the browser vs. `keycloak` inside the Docker network).
+Authorization is enforced from the token's `permissions` claim: `GET` requests need
+`catalog:read`; mutations need `catalog:write`; `catalog:admin` grants both.
+
+### Roles
+
+| Role (Keycloak) | `permissions` claim | Producer UI access |
+|-----------------|---------------------|--------------------|
+| Administrator (`administrator`) | `catalog:read`, `catalog:write`, `catalog:admin` | Everything, incl. Admin › Harvest, Domains, Users, Settings |
+| Data Governance (`data-governance`) | `catalog:read`, `catalog:write` | All content + Admin › Domains |
+| Data Owner (`data-owner`) | `catalog:read`, `catalog:write` | All content; no Admin section |
+| Data Steward (`data-steward`) | `catalog:read`, `catalog:write` | All content; no Admin section |
+
+### Default users
+
+The realm seeds one account per role (change these before any non-local deployment):
+
+| Username | Role | Password |
+|----------|------|----------|
+| `admin@datacatalog.local` | Administrator | `admin` |
+| `governance@datacatalog.local` | Data Governance | `password` |
+| `owner@datacatalog.local` | Data Owner | `password` |
+| `steward@datacatalog.local` | Data Steward | `password` |
+
+Manage users via the producer **Admin › Users** page (administrator only) or the identity-service
+endpoints (backed by the Keycloak Admin API) — invite, list, and deactivate.
+
+### Local development
+
+For local development you can bypass JWT validation with a dev API key — any key starting with
+`dev-` (e.g. `X-API-Key: dev-local`) is accepted and granted read/write/admin on the default
+tenant. **Never enable this path outside local development.**
 
 ---
 

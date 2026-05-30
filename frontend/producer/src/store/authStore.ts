@@ -1,33 +1,52 @@
 import { create } from 'zustand';
+import type Keycloak from 'keycloak-js';
 
 interface AuthState {
   token: string | null;
   tenantId: string | null;
   userId: string | null;
+  email: string | null;
+  displayName: string | null;
   roles: string[];
-  hydrate: () => void;
+  setFromKeycloak: (kc: Keycloak) => void;
   setToken: (token: string, claims: { tenantId: string; userId: string; roles: string[] }) => void;
-  logout: () => void;
+  logout: (kc?: Keycloak) => void;
+  hasRole: (role: string) => boolean;
+  hasAnyRole: (roles: string[]) => boolean;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   token: null,
   tenantId: null,
   userId: null,
+  email: null,
+  displayName: null,
   roles: [],
-  // Call once at app startup (main.tsx) to restore persisted session
-  hydrate: () => set({
-    token: localStorage.getItem('access_token'),
-    tenantId: localStorage.getItem('tenant_id'),
-  }),
+
+  setFromKeycloak: (kc) => {
+    const parsed = kc.tokenParsed as Record<string, unknown> | undefined;
+    const realmAccess = parsed?.realm_access as { roles?: string[] } | undefined;
+    set({
+      token:       kc.token ?? null,
+      tenantId:    (parsed?.tenant_id as string) ?? null,
+      userId:      (parsed?.sub as string) ?? null,
+      email:       (parsed?.email as string) ?? null,
+      displayName: (parsed?.name as string) ?? (parsed?.preferred_username as string) ?? null,
+      roles:       realmAccess?.roles ?? [],
+    });
+  },
+
   setToken: (token, { tenantId, userId, roles }) => {
-    localStorage.setItem('access_token', token);
-    localStorage.setItem('tenant_id', tenantId);
     set({ token, tenantId, userId, roles });
   },
-  logout: () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('tenant_id');
-    set({ token: null, tenantId: null, userId: null, roles: [] });
+
+  logout: (kc) => {
+    set({ token: null, tenantId: null, userId: null, email: null, displayName: null, roles: [] });
+    if (kc) {
+      kc.logout({ redirectUri: window.location.origin });
+    }
   },
+
+  hasRole:    (role)  => get().roles.includes(role),
+  hasAnyRole: (roles) => roles.some(r => get().roles.includes(r)),
 }));

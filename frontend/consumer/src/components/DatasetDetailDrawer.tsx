@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { datasetApi, lineageApi } from '@datacatalog/shared';
+import { datasetApi, lineageApi, iriFragment, useIriTranslations } from '@datacatalog/shared';
 import { useDrawerStore } from '../store/drawerStore';
 import DistributionsTab from './DistributionsTab';
 import LogicalSchemaTable from './LogicalSchemaTable';
@@ -41,6 +41,15 @@ export default function DatasetDetailDrawer() {
     enabled: !!openDatasetId && activeTab === 'overview',
     staleTime: 60_000,
   });
+
+  // Collect all IRI-valued fields for batch translation
+  const iriList = [
+    ...(dataset?.themes ?? []),
+    ...(dataset?.conformsTo ?? []),
+    ...(dataset?.license ? [dataset.license] : []),
+  ];
+  const translations = useIriTranslations(iriList);
+  const t = (iri: string) => translations[iri] ?? iriFragment(iri);
 
   if (!openDatasetId) return null;
 
@@ -143,13 +152,13 @@ export default function DatasetDetailDrawer() {
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
                   {dataset.version && <DlItem label="Version" value={dataset.version} />}
                   {dataset.accrualPeriodicity && <DlItem label="Frequency" value={friendlyPeriodicity(dataset.accrualPeriodicity)} />}
-                  {dataset.license && <DlItem label="License" value={dataset.license} />}
+                  {dataset.license && <DlItem label="License" value={t(dataset.license)} />}
                   {dataset.themes && dataset.themes.length > 0 && (
                     <div className="col-span-2">
                       <dt className="text-xs font-medium text-gray-500">Themes</dt>
                       <dd className="mt-0.5 flex flex-wrap gap-1">
-                        {dataset.themes.map(t => (
-                          <span key={t} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-xs">{t.split('/').pop()}</span>
+                        {dataset.themes.map(theme => (
+                          <span key={theme} title={theme} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-xs">{t(theme)}</span>
                         ))}
                       </dd>
                     </div>
@@ -182,13 +191,13 @@ export default function DatasetDetailDrawer() {
             {activeTab === 'access' && (
               <div className="space-y-4">
                 <dl className="grid grid-cols-1 gap-3 text-sm">
-                  {dataset.license && <DlItem label="License" value={dataset.license} />}
+                  {dataset.license && <DlItem label="License" value={t(dataset.license)} />}
                   {dataset.conformsTo && dataset.conformsTo.length > 0 && (
                     <div>
                       <dt className="text-xs font-medium text-gray-500">Conforms To</dt>
                       <dd className="mt-0.5 space-y-0.5">
                         {dataset.conformsTo.map(c => (
-                          <a key={c} href={c} target="_blank" rel="noreferrer" className="block text-xs text-blue-600 hover:underline">{c}</a>
+                          <a key={c} href={c} target="_blank" rel="noreferrer" title={c} className="block text-xs text-blue-600 hover:underline">{t(c)}</a>
                         ))}
                       </dd>
                     </div>

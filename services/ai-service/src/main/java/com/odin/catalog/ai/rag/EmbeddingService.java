@@ -44,6 +44,7 @@ public class EmbeddingService {
                     .mapToObj(i -> chunkId(payload.datasetId(), i))
                     .collect(Collectors.toList());
                 vectorStore.delete(ids);
+                log.info("action=EMBEDDINGS_DELETED datasetId={}", payload.datasetId());
                 return;
             }
 
@@ -51,7 +52,8 @@ public class EmbeddingService {
 
             List<Document> chunks = buildChunks(payload);
             vectorStore.add(chunks);
-            log.debug("Embedded {} chunks for dataset {}", chunks.size(), payload.datasetId());
+            log.info("action=EMBEDDINGS_UPSERTED datasetId={} chunkCount={} changeType={}",
+                payload.datasetId(), chunks.size(), payload.changeType());
         } catch (Exception e) {
             log.error("Failed to embed dataset from offset {}: {}", record.offset(), e.getMessage(), e);
         }

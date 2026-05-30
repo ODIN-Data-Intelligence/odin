@@ -35,6 +35,8 @@ public class ClassificationService {
         if (request.elements() == null || request.elements().isEmpty()) {
             return new ClassifyElementsResponse(List.of());
         }
+        log.info("action=CLASSIFICATION_START elementCount={}", request.elements().size());
+        long t = System.currentTimeMillis();
         String prompt = buildPrompt(request.elements());
         String raw;
         try {
@@ -47,13 +49,18 @@ public class ClassificationService {
                 .orTimeout(CLASSIFICATION_TIMEOUT_MINUTES, TimeUnit.MINUTES)
                 .join();
         } catch (CompletionException e) {
-            log.warn("LLM classification timed out or failed: {}", e.getCause().getMessage());
+            log.warn("action=CLASSIFICATION_TIMEOUT elementCount={} elapsed={}ms error={}",
+                request.elements().size(), System.currentTimeMillis() - t, e.getCause().getMessage());
             return new ClassifyElementsResponse(List.of());
         } catch (Exception e) {
-            log.warn("LLM classification call failed: {}", e.getMessage());
+            log.warn("action=CLASSIFICATION_FAILED elementCount={} elapsed={}ms error={}",
+                request.elements().size(), System.currentTimeMillis() - t, e.getMessage());
             return new ClassifyElementsResponse(List.of());
         }
-        return parse(raw);
+        ClassifyElementsResponse result = parse(raw);
+        log.info("action=CLASSIFICATION_COMPLETE elementCount={} resultCount={} elapsed={}ms",
+            request.elements().size(), result.results().size(), System.currentTimeMillis() - t);
+        return result;
     }
 
     private String buildPrompt(List<ClassifyElementsRequest.ElementInput> elements) {

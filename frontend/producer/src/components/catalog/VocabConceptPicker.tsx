@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { vocabularyApi } from '@datacatalog/shared';
+import { vocabularyApi, iriFragment } from '@datacatalog/shared';
 import type { VocabularyConcept } from '@datacatalog/shared';
 
 interface VocabConceptPickerProps {
@@ -53,7 +53,7 @@ export default function VocabConceptPicker({ vocabularyId, vocabularyName, onSel
               className="w-full text-left px-3 py-2.5 rounded hover:bg-blue-50 transition-colors"
             >
               <p className="text-sm font-medium text-gray-900">{c.label}</p>
-              <p className="text-xs text-gray-400 font-mono mt-0.5 truncate">{c.iri}</p>
+              <p className="text-xs text-gray-400 mt-0.5 truncate" title={c.iri}>{iriFragment(c.iri)}</p>
               {c.definition && <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{c.definition}</p>}
             </button>
           ))}

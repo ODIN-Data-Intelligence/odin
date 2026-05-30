@@ -2,7 +2,7 @@ package com.odin.catalog.ai.config;
 
 import com.odin.catalog.shared.auth.filter.ApiKeyAuthenticationFilter;
 import com.odin.catalog.shared.auth.filter.TenantExtractionFilter;
-import jakarta.servlet.DispatcherType;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -10,7 +10,9 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
+import jakarta.servlet.DispatcherType;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 import java.util.List;
@@ -27,8 +29,11 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .addFilterBefore(apiKeyFilter, UsernamePasswordAuthenticationFilter.class)
-            .addFilterAfter(tenantFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterAfter(tenantFilter, BearerTokenAuthenticationFilter.class)
             .authorizeHttpRequests(auth -> auth
+                // ASYNC dispatcher type must be permitted: SSE streaming uses internal async
+                // dispatches to continue the response after the initial request thread returns.
+                // These dispatches are JVM-internal — no external client can trigger them directly.
                 .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                 .requestMatchers("/actuator/**", "/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/error").permitAll()
                 .anyRequest().hasAnyAuthority("SCOPE_catalog:read", "SCOPE_catalog:write", "SCOPE_catalog:admin")
@@ -48,9 +53,10 @@ public class SecurityConfig {
     }
 
     @Bean
-    public ApiKeyAuthenticationFilter apiKeyAuthenticationFilter() {
+    public ApiKeyAuthenticationFilter apiKeyAuthenticationFilter(
+            @Value("${app.dev-auth-enabled:false}") boolean devAuthEnabled) {
         return new ApiKeyAuthenticationFilter(key -> {
-            if (key != null && key.startsWith("dev-")) {
+            if (devAuthEnabled && key != null && key.startsWith("dev-")) {
                 return new ApiKeyAuthenticationFilter.ApiKeyPrincipal(
                     key, "00000000-0000-0000-0000-000000000001",
                     "system", List.of("catalog:read", "catalog:write", "catalog:admin"), true

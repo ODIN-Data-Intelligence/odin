@@ -18,6 +18,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(NoSuchElementException.class)
     public ProblemDetail handleNotFound(NoSuchElementException ex) {
+        log.warn("action=REQUEST_NOT_FOUND error={}", ex.getMessage());
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
     }
 
@@ -27,21 +28,25 @@ public class GlobalExceptionHandler {
             .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
             .reduce((a, b) -> a + "; " + b)
             .orElse("Validation failed");
+        log.warn("action=REQUEST_VALIDATION_FAILED detail={}", detail);
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, detail);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ProblemDetail handleIllegalArg(IllegalArgumentException ex) {
+        log.warn("action=REQUEST_BAD_ARGUMENT error={}", ex.getMessage());
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 
     @ExceptionHandler(IllegalStateException.class)
     public ProblemDetail handleConflict(IllegalStateException ex) {
+        log.warn("action=REQUEST_CONFLICT error={}", ex.getMessage());
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
     }
 
     @ExceptionHandler(AiServiceUnavailableException.class)
     public ProblemDetail handleAiUnavailable(AiServiceUnavailableException ex) {
+        log.warn("action=AI_SERVICE_UNAVAILABLE error={}", ex.getMessage());
         return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
     }
 

@@ -6,6 +6,8 @@ import com.odin.catalog.identity.infrastructure.jpa.entity.UserEntity;
 import com.odin.catalog.identity.infrastructure.jpa.repository.UserRepository;
 import com.odin.catalog.shared.auth.filter.TenantContextHolder;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +19,8 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class UserService {
+
+    private static final Logger log = LoggerFactory.getLogger(UserService.class);
 
     private final UserRepository userRepository;
 
@@ -42,7 +46,9 @@ public class UserService {
         entity.setFirstName(request.firstName());
         entity.setLastName(request.lastName());
         entity.setRoles(request.roles());
-        return toResponse(userRepository.save(entity));
+        UserResponse result = toResponse(userRepository.save(entity));
+        log.info("action=USER_INVITED userId={} tenantId={} email={}", result.id(), tenantId, request.email());
+        return result;
     }
 
     @Transactional
@@ -50,6 +56,7 @@ public class UserService {
         UserEntity entity = findOrThrow(id);
         entity.setActive(false);
         userRepository.save(entity);
+        log.info("action=USER_DEACTIVATED userId={} tenantId={}", id, entity.getTenantId());
     }
 
     private UserEntity findOrThrow(UUID id) {

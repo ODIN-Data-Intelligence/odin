@@ -94,6 +94,12 @@ export const vocabularyApi = {
   create: (body: Partial<Vocabulary>) => post<Vocabulary>(`${BASE}/vocabularies`, body),
   searchConcepts: (id: string, q: string, limit = 20) =>
     get<VocabularyConcept[]>(`${BASE}/vocabularies/${id}/concepts/search?q=${encodeURIComponent(q)}&limit=${limit}`),
+  /** Resolve a single IRI to its preferred label. Falls back to humanized fragment. */
+  translate: (iri: string) =>
+    get<{ iri: string; label: string }>(`${BASE}/vocabularies/translate?iri=${encodeURIComponent(iri)}`),
+  /** Resolve up to 200 IRIs to their preferred labels in one request. Returns iri→label map. */
+  translateBatch: (iris: string[]) =>
+    post<Record<string, string>>(`${BASE}/vocabularies/translate`, iris),
 };
 
 // Dataset vocabulary profiles

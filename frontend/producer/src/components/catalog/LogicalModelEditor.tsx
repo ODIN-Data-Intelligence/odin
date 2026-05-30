@@ -1,16 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { logicalModelApi, logicalElementApi } from '@datacatalog/shared';
+import { logicalModelApi, logicalElementApi, preferredLabel, useIriTranslations, resolveLabel } from '@datacatalog/shared';
 import type { LogicalModel } from '@datacatalog/shared';
 import Button from '../ui/Button';
 import Badge from '../ui/Badge';
 import ClassificationBadge from './ClassificationBadge';
 import ClassificationRecommendationRow from './ClassificationRecommendationRow';
-
-function humanizeIri(iri: string): string {
-  const fragment = iri.split(/[/#]/).pop() ?? iri;
-  return fragment.replace(/([A-Z])/g, ' $1').trim();
-}
 
 const MATCH_TYPE_COLORS: Record<string, string> = {
   exactMatch: 'bg-green-100 text-green-700',
@@ -50,6 +45,13 @@ export default function LogicalModelEditor({ datasetId, models }: Props) {
     queryFn: () => logicalElementApi.list(selectedModelId!),
     enabled: !!selectedModelId,
   });
+
+  // Translate IRIs that have no stored conceptLabel or conceptDefinition
+  const unmappedIris = elements
+    .flatMap(el => el.vocabMappings ?? [])
+    .filter(m => !m.conceptLabel && !m.conceptDefinition)
+    .map(m => m.conceptIri);
+  const vocabTranslations = useIriTranslations(unmappedIris);
 
   // Poll the job status endpoint while a bulk job is in flight.
   const { data: bulkJob } = useQuery({
@@ -255,7 +257,7 @@ export default function LogicalModelEditor({ datasetId, models }: Props) {
                           title={m.conceptIri}
                           className={`px-2 py-0.5 rounded text-xs font-medium cursor-default ${MATCH_TYPE_COLORS[m.matchType]}`}
                         >
-                          {m.conceptLabel || humanizeIri(m.conceptIri)}
+                          {resolveLabel(vocabTranslations, m.conceptIri, m.conceptLabel, m.conceptDefinition)}
                         </span>
                       ))}
                     </div>
