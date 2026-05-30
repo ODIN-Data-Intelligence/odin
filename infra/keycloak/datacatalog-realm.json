@@ -118,7 +118,7 @@
       "firstName": "Catalog",
       "lastName": "Admin",
       "enabled": true,
-      "credentials": [{ "type": "password", "value": "admin", "temporary": false }],
+      "credentials": [{ "type": "password", "value": "admin", "temporary": true }],
       "realmRoles": ["administrator"],
       "attributes": {
         "tenant_id":   ["00000000-0000-0000-0000-000000000001"],
@@ -131,7 +131,7 @@
       "firstName": "Grace",
       "lastName": "Governance",
       "enabled": true,
-      "credentials": [{ "type": "password", "value": "password", "temporary": false }],
+      "credentials": [{ "type": "password", "value": "password", "temporary": true }],
       "realmRoles": ["data-governance"],
       "attributes": {
         "tenant_id":   ["00000000-0000-0000-0000-000000000001"],
@@ -144,7 +144,7 @@
       "firstName": "Owen",
       "lastName": "Owner",
       "enabled": true,
-      "credentials": [{ "type": "password", "value": "password", "temporary": false }],
+      "credentials": [{ "type": "password", "value": "password", "temporary": true }],
       "realmRoles": ["data-owner"],
       "attributes": {
         "tenant_id":   ["00000000-0000-0000-0000-000000000001"],
@@ -157,7 +157,7 @@
       "firstName": "Sam",
       "lastName": "Steward",
       "enabled": true,
-      "credentials": [{ "type": "password", "value": "password", "temporary": false }],
+      "credentials": [{ "type": "password", "value": "password", "temporary": true }],
       "realmRoles": ["data-steward"],
       "attributes": {
         "tenant_id":   ["00000000-0000-0000-0000-000000000001"],
@@ -166,44 +166,16 @@
     }
   ],
 
-  "userProfile": {
-    "attributes": [
+  "components": {
+    "org.keycloak.userprofile.UserProfileProvider": [
       {
-        "name": "username",
-        "displayName": "${username}",
-        "validations": { "length": { "min": 3, "max": 255 }, "username-prohibited-characters": {}, "up-username-not-idn-homograph": {} },
-        "permissions": { "view": ["admin", "user"], "edit": ["admin", "user"] }
-      },
-      {
-        "name": "email",
-        "displayName": "${email}",
-        "validations": { "email": {}, "length": { "max": 255 } },
-        "required": { "roles": ["user"] },
-        "permissions": { "view": ["admin", "user"], "edit": ["admin", "user"] }
-      },
-      {
-        "name": "firstName",
-        "displayName": "${firstName}",
-        "validations": { "length": { "max": 255 }, "person-name-prohibited-characters": {} },
-        "permissions": { "view": ["admin", "user"], "edit": ["admin", "user"] }
-      },
-      {
-        "name": "lastName",
-        "displayName": "${lastName}",
-        "validations": { "length": { "max": 255 }, "person-name-prohibited-characters": {} },
-        "permissions": { "view": ["admin", "user"], "edit": ["admin", "user"] }
-      },
-      {
-        "name": "tenant_id",
-        "displayName": "Tenant ID",
-        "multivalued": false,
-        "permissions": { "view": ["admin"], "edit": ["admin"] }
-      },
-      {
-        "name": "permissions",
-        "displayName": "Permissions",
-        "multivalued": true,
-        "permissions": { "view": ["admin"], "edit": ["admin"] }
+        "providerId": "declarative-user-profile",
+        "subComponents": {},
+        "config": {
+          "kc.user.profile.config": [
+            "{\"attributes\":[{\"name\":\"username\",\"displayName\":\"${username}\",\"validations\":{\"length\":{\"min\":3,\"max\":255},\"username-prohibited-characters\":{},\"up-username-not-idn-homograph\":{}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]}},{\"name\":\"email\",\"displayName\":\"${email}\",\"validations\":{\"email\":{},\"length\":{\"max\":255}},\"required\":{\"roles\":[\"user\"]},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]}},{\"name\":\"firstName\",\"displayName\":\"${firstName}\",\"validations\":{\"length\":{\"max\":255},\"person-name-prohibited-characters\":{}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]}},{\"name\":\"lastName\",\"displayName\":\"${lastName}\",\"validations\":{\"length\":{\"max\":255},\"person-name-prohibited-characters\":{}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]}},{\"name\":\"tenant_id\",\"displayName\":\"Tenant ID\",\"multivalued\":false,\"permissions\":{\"view\":[\"admin\"],\"edit\":[\"admin\"]}},{\"name\":\"permissions\",\"displayName\":\"Permissions\",\"multivalued\":true,\"permissions\":{\"view\":[\"admin\"],\"edit\":[\"admin\"]}}],\"groups\":[]}"
+          ]
+        }
       }
     ]
   }

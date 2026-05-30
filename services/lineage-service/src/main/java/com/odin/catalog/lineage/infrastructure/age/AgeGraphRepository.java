@@ -81,6 +81,9 @@ public class AgeGraphRepository {
     // ── Lineage traversal ─────────────────────────────────────────────────────
 
     public List<Map<String, Object>> getUpstreamLineage(String namespace, String name, int depth) {
+        if (depth < 1 || depth > 20) {
+            throw new IllegalArgumentException("depth must be between 1 and 20, got: " + depth);
+        }
         // Edge: output -[:DERIVED_FROM]-> input. Follow outgoing to get ancestors.
         String cypher = """
             MATCH path=(start:Dataset {namespace: %s, name: %s})-[:DERIVED_FROM*1..%d]->(up:Dataset)
@@ -92,6 +95,9 @@ public class AgeGraphRepository {
     }
 
     public List<Map<String, Object>> getDownstreamLineage(String namespace, String name, int depth) {
+        if (depth < 1 || depth > 20) {
+            throw new IllegalArgumentException("depth must be between 1 and 20, got: " + depth);
+        }
         // Edge: output -[:DERIVED_FROM]-> input. Follow incoming to get dependents.
         String cypher = """
             MATCH path=(start:Dataset {namespace: %s, name: %s})<-[:DERIVED_FROM*1..%d]-(down:Dataset)

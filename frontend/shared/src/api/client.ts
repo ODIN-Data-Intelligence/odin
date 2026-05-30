@@ -1,8 +1,9 @@
 const BASE_HEADERS = { 'Content-Type': 'application/json' };
 
-// Token provider — replaced at app startup by the producer's auth integration.
-// Falls back to localStorage for backward compatibility with dev/test environments.
-let _getToken: () => string | null = () => localStorage.getItem('access_token');
+// Token provider — must be replaced at app startup via setTokenProvider().
+// Defaults to null so uninitialised callers receive no auth header rather than
+// reading a potentially stale token from localStorage.
+let _getToken: () => string | null = () => null;
 
 export function setTokenProvider(fn: () => string | null): void {
   _getToken = fn;

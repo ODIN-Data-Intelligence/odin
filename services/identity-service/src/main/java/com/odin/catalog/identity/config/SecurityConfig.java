@@ -2,6 +2,7 @@ package com.odin.catalog.identity.config;
 
 import com.odin.catalog.shared.auth.filter.ApiKeyAuthenticationFilter;
 import com.odin.catalog.shared.auth.filter.TenantExtractionFilter;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -47,9 +48,10 @@ public class SecurityConfig {
     }
 
     @Bean
-    public ApiKeyAuthenticationFilter apiKeyAuthenticationFilter() {
+    public ApiKeyAuthenticationFilter apiKeyAuthenticationFilter(
+            @Value("${app.dev-auth-enabled:false}") boolean devAuthEnabled) {
         return new ApiKeyAuthenticationFilter(key -> {
-            if (key != null && key.startsWith("dev-")) {
+            if (devAuthEnabled && key != null && key.startsWith("dev-")) {
                 return new ApiKeyAuthenticationFilter.ApiKeyPrincipal(
                     key, "00000000-0000-0000-0000-000000000001",
                     "system", java.util.List.of("catalog:read", "catalog:write", "catalog:admin"), true

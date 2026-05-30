@@ -428,6 +428,15 @@ DIST_SECURITIES_KAFKA=$(get_or_create_distribution "${DS_SECURITIES}" "accessUrl
   '{"title":"Daily Delta Feed — Securities","description":"Kafka topic carrying incremental security updates (new listings, delistings, corporate actions).","accessUrl":"kafka://kafka.meridian.internal:9092/refdata.securities.changes","mediaType":"application/json","format":"Kafka","availability":"available"}')
 success "Distributions: Securities Master (SF=${DIST_SECURITIES_SF:0:8}… REST=${DIST_SECURITIES_REST:0:8}… Kafka=${DIST_SECURITIES_KAFKA:0:8}…)"
 
+DIST_RISK_METRICS_SF=$(get_or_create_distribution "${DS_RISK_METRICS}" "accessUrl" \
+  "snowflake://meridian.snowflakecomputing.com/RISK/MARKET_RISK/AGG_RISK_METRICS" \
+  '{"title":"Snowflake Table — Aggregated Market Risk Metrics","description":"Snowflake table containing aggregated Greeks and sensitivity metrics per desk and asset class, updated intraday.","accessUrl":"snowflake://meridian.snowflakecomputing.com/RISK/MARKET_RISK/AGG_RISK_METRICS","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available"}')
+
+DIST_RISK_METRICS_REST=$(get_or_create_distribution "${DS_RISK_METRICS}" "accessUrl" \
+  "https://api.meridian.internal/v1/risk/metrics" \
+  '{"title":"REST API — Risk Metrics Dashboard Feed","description":"JSON REST endpoint returning aggregated risk metrics by desk and asset class. Consumed by the morning risk dashboard.","accessUrl":"https://api.meridian.internal/v1/risk/metrics","mediaType":"application/json","format":"JSON","availability":"available"}')
+success "Distributions: Aggregated Market Risk Metrics (Snowflake=${DIST_RISK_METRICS_SF:0:8}… REST=${DIST_RISK_METRICS_REST:0:8}…)"
+
 DIST_MIFID_XML=$(get_or_create_distribution "${DS_MIFID}" "downloadUrl" \
   "s3://meridian-compliance/mifid2/" \
   '{"title":"XML Report — MiFID II Submission","description":"ISO 20022 XML file submitted to FCA ARM daily by T+1. Retained for 5 years.","downloadUrl":"s3://meridian-compliance/mifid2/","mediaType":"application/xml","format":"ISO 20022 XML","availability":"available"}')
@@ -623,6 +632,27 @@ add_vocab_mapping_if_missing "${EL_CE_EE}"       "${VOCAB_FND}"    "https://spec
 add_vocab_mapping_if_missing "${EL_CE_CVA}"      "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/MonetaryAmount" "MonetaryAmount" "closeMatch"
 add_vocab_mapping_if_missing "${EL_CE_NET}"      "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/MonetaryAmount" "MonetaryAmount" "closeMatch"
 success "Logical model (draft): Counterparty Credit Exposure — 25 elements, FIBO-mapped"
+
+info "Building logical model: Aggregated Market Risk Metrics..."
+LM_RISK_METRICS=$(get_or_create_logical_model "${DS_RISK_METRICS}" "Market Risk Metrics Logical Model" \
+  '{"name":"Market Risk Metrics Logical Model","description":"Aggregated first- and second-order sensitivity metrics (Greeks) per trading desk and asset class. Inputs are positions and market data; output drives the daily risk dashboard and CRO report.","version":"1.0","status":"published"}')
+
+EL_RM_DESK=$(      get_or_create_element "${LM_RISK_METRICS}" "deskId"         "Trading Desk Identifier"   "Identifier"     1 true  true)
+EL_RM_ASSET=$(     get_or_create_element "${LM_RISK_METRICS}" "assetClass"     "Asset Class"               "Code"           2 true  false)
+EL_RM_DATE=$(      get_or_create_element "${LM_RISK_METRICS}" "reportDate"     "Report Date"               "Date"           3 true  false)
+EL_RM_DV01=$(      get_or_create_element "${LM_RISK_METRICS}" "dv01"           "DV01 (USD per bp)"         "MonetaryAmount" 4 true  false)
+EL_RM_CS01=$(      get_or_create_element "${LM_RISK_METRICS}" "cs01"           "CS01 (USD per bp)"         "MonetaryAmount" 5 true  false)
+EL_RM_VEGA=$(      get_or_create_element "${LM_RISK_METRICS}" "vegaExposure"   "Vega Exposure (USD)"       "MonetaryAmount" 6 true  false)
+EL_RM_DELTA=$(     get_or_create_element "${LM_RISK_METRICS}" "deltaExposure"  "Delta Exposure (USD)"      "MonetaryAmount" 7 true  false)
+EL_RM_GAMMA=$(     get_or_create_element "${LM_RISK_METRICS}" "gammaExposure"  "Gamma Exposure (USD)"      "MonetaryAmount" 8 false false)
+
+add_vocab_mapping_if_missing "${EL_RM_DATE}"  "${VOCAB_SCHEMA}" "https://schema.org/startDate" "startDate"
+add_vocab_mapping_if_missing "${EL_RM_DV01}"  "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/MonetaryAmount" "MonetaryAmount"
+add_vocab_mapping_if_missing "${EL_RM_CS01}"  "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/MonetaryAmount" "MonetaryAmount" "closeMatch"
+add_vocab_mapping_if_missing "${EL_RM_VEGA}"  "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/MonetaryAmount" "MonetaryAmount" "closeMatch"
+add_vocab_mapping_if_missing "${EL_RM_DELTA}" "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/MonetaryAmount" "MonetaryAmount" "closeMatch"
+add_vocab_mapping_if_missing "${EL_RM_GAMMA}" "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/MonetaryAmount" "MonetaryAmount" "closeMatch"
+success "Logical model (published): Aggregated Market Risk Metrics — 8 elements, FIBO-mapped"
 
 # ─────────────────────────────────────────────────────────────────────────────
 section "Phase 7 — Data Products"
@@ -1069,6 +1099,30 @@ load_physical_schema "${DIST_SECURITIES_KAFKA}" "Securities Master / Kafka" "$(j
   {"name":"maturityDate",        "datatype":"string", "description":"Maturity date ISO 8601 (null for equities)",   "required":false}
 ]')"
 
+# ── Aggregated Market Risk Metrics — Snowflake (8 cols = 8 elements)
+load_physical_schema "${DIST_RISK_METRICS_SF}" "Aggregated Market Risk Metrics / Snowflake" "$(jq -n '[
+  {"name":"DESK_ID",      "datatype":"VARCHAR(32)",  "description":"Trading desk identifier",                                "required":true},
+  {"name":"ASST_CLS",     "datatype":"VARCHAR(32)",  "description":"Asset class (Equity, FI, FX, Rates, Credit)",           "required":true},
+  {"name":"RPT_DT",       "datatype":"DATE",         "description":"Risk report date",                                       "required":true},
+  {"name":"DV01_USD",     "datatype":"NUMBER(18,4)", "description":"Dollar value of 1 basis point — interest rate risk",    "required":true},
+  {"name":"CS01_USD",     "datatype":"NUMBER(18,4)", "description":"Credit spread DV01 — credit risk sensitivity",          "required":true},
+  {"name":"VEGA_USD",     "datatype":"NUMBER(18,4)", "description":"Vega exposure — sensitivity to implied volatility",     "required":true},
+  {"name":"DELTA_USD",    "datatype":"NUMBER(18,4)", "description":"Delta exposure — first-order price sensitivity",         "required":true},
+  {"name":"GAMMA_USD",    "datatype":"NUMBER(18,4)", "description":"Gamma exposure — second-order price sensitivity",        "required":false}
+]')"
+
+# ── Aggregated Market Risk Metrics — REST API (8 cols, camelCase JSON)
+load_physical_schema "${DIST_RISK_METRICS_REST}" "Aggregated Market Risk Metrics / REST API" "$(jq -n '[
+  {"name":"deskId",        "datatype":"string",  "description":"Trading desk identifier",                                   "required":true},
+  {"name":"assetClass",    "datatype":"string",  "description":"Asset class (Equity, FI, FX, Rates, Credit)",              "required":true},
+  {"name":"reportDate",    "datatype":"string",  "description":"Risk report date (ISO 8601)",                               "required":true},
+  {"name":"dv01",          "datatype":"number",  "description":"Dollar value of 1 basis point — interest rate risk (USD)", "required":true},
+  {"name":"cs01",          "datatype":"number",  "description":"Credit spread DV01 — credit risk sensitivity (USD)",       "required":true},
+  {"name":"vegaExposure",  "datatype":"number",  "description":"Vega exposure — sensitivity to implied volatility (USD)",  "required":true},
+  {"name":"deltaExposure", "datatype":"number",  "description":"Delta exposure — first-order price sensitivity (USD)",      "required":true},
+  {"name":"gammaExposure", "datatype":"number",  "description":"Gamma exposure — second-order price sensitivity (USD)",     "required":false}
+]')"
+
 # ── MiFID II — ISO 20022 XML (abbreviated PascalCase element names, 9 cols = 9 elements)
 load_physical_schema "${DIST_MIFID_XML}" "MiFID II / ISO 20022 XML" "$(jq -n '[
   {"name":"TxId",        "datatype":"xs:string",   "description":"Unique Transaction Identifier (RTS 22 Field 1)",     "required":true},
@@ -1236,6 +1290,26 @@ bind_column "${EL_MIF_SELL_LEI}" "${DIST_MIFID_PQ}" "sellerLei"                 
 bind_column "${EL_MIF_VENUE}"    "${DIST_MIFID_PQ}" "tradingVenueMic"             "tradingVenueMic → tradingVenueMic (PQ)"
 bind_column "${EL_MIF_TS}"       "${DIST_MIFID_PQ}" "executionTimestamp"          "executionTimestamp → executionTimestamp (PQ)"
 
+# ── Aggregated Market Risk Metrics — Snowflake (8 bindings)
+bind_column "${EL_RM_DESK}"  "${DIST_RISK_METRICS_SF}" "DESK_ID"   "deskId → DESK_ID (SF)"
+bind_column "${EL_RM_ASSET}" "${DIST_RISK_METRICS_SF}" "ASST_CLS"  "assetClass → ASST_CLS (SF)"
+bind_column "${EL_RM_DATE}"  "${DIST_RISK_METRICS_SF}" "RPT_DT"    "reportDate → RPT_DT (SF)"
+bind_column "${EL_RM_DV01}"  "${DIST_RISK_METRICS_SF}" "DV01_USD"  "dv01 → DV01_USD (SF)"
+bind_column "${EL_RM_CS01}"  "${DIST_RISK_METRICS_SF}" "CS01_USD"  "cs01 → CS01_USD (SF)"
+bind_column "${EL_RM_VEGA}"  "${DIST_RISK_METRICS_SF}" "VEGA_USD"  "vegaExposure → VEGA_USD (SF)"
+bind_column "${EL_RM_DELTA}" "${DIST_RISK_METRICS_SF}" "DELTA_USD" "deltaExposure → DELTA_USD (SF)"
+bind_column "${EL_RM_GAMMA}" "${DIST_RISK_METRICS_SF}" "GAMMA_USD" "gammaExposure → GAMMA_USD (SF)"
+
+# ── Aggregated Market Risk Metrics — REST API (8 bindings)
+bind_column "${EL_RM_DESK}"  "${DIST_RISK_METRICS_REST}" "deskId"        "deskId → deskId (REST)"
+bind_column "${EL_RM_ASSET}" "${DIST_RISK_METRICS_REST}" "assetClass"    "assetClass → assetClass (REST)"
+bind_column "${EL_RM_DATE}"  "${DIST_RISK_METRICS_REST}" "reportDate"    "reportDate → reportDate (REST)"
+bind_column "${EL_RM_DV01}"  "${DIST_RISK_METRICS_REST}" "dv01"          "dv01 → dv01 (REST)"
+bind_column "${EL_RM_CS01}"  "${DIST_RISK_METRICS_REST}" "cs01"          "cs01 → cs01 (REST)"
+bind_column "${EL_RM_VEGA}"  "${DIST_RISK_METRICS_REST}" "vegaExposure"  "vegaExposure → vegaExposure (REST)"
+bind_column "${EL_RM_DELTA}" "${DIST_RISK_METRICS_REST}" "deltaExposure" "deltaExposure → deltaExposure (REST)"
+bind_column "${EL_RM_GAMMA}" "${DIST_RISK_METRICS_REST}" "gammaExposure" "gammaExposure → gammaExposure (REST)"
+
 # ─────────────────────────────────────────────────────────────────────────────
 section "Seed Complete"
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1248,11 +1322,11 @@ echo ""
 echo "  Catalogs   :  4 (Trading, Risk, Reference Data, Compliance)"
 echo "  Datasets   : 12 (trades, positions, orders, VAR, CCR, risk metrics,"
 echo "                securities, counterparties, FX rates, MiFID, FinRep, EMIR)"
-echo "  Distrib.   : 14 (Snowflake, Parquet, REST, Kafka, XML)"
-echo "  Phys.schema: 11 (one per distribution — Snowflake abbreviated, lake/REST/Kafka camelCase, XML ISO 20022)"
+echo "  Distrib.   : 16 (Snowflake, Parquet, REST, Kafka, XML)"
+echo "  Phys.schema: 13 (one per distribution — Snowflake abbreviated, lake/REST/Kafka camelCase, XML ISO 20022)"
 echo "  Vocab      : FIBO (FND/FBC/SEC/MD) + schema.org profiles on all datasets"
-echo "  Log.models :  6 (Trades, Positions, Securities, VaR, MiFID, CCR) — 65 elements"
-echo "  Phys.binds : 88 (each element bound to its column in every distribution format)"
+echo "  Log.models :  7 (Trades, Positions, Securities, VaR, MiFID, CCR, RiskMetrics) — 73 elements"
+echo "  Phys.binds : 104 (each element bound to its column in every distribution format)"
 echo "  FIBO maps  : 25+ concept mappings (ISIN, LEI, MonetaryAmount, Currency, ...)"
 echo "  Data Prods :  5 (Consume×2, Deploy, Build, Design lifecycle stages)"
 echo "  Lineage    :  8 OpenLineage jobs — 4-hop pipeline (securities→finrep)"

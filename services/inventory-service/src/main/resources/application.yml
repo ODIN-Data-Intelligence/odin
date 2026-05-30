@@ -82,6 +82,9 @@ logging:
     org.springframework.kafka: INFO
     org.hibernate.SQL: DEBUG
 
+app:
+  dev-auth-enabled: ${APP_DEV_AUTH_ENABLED:false}
+
 ---
 spring:
   config:

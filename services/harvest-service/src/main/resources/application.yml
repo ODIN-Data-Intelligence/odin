@@ -70,3 +70,6 @@ springdoc:
     operationsSorter: method
     tagsSorter: alpha
     tryItOutEnabled: true
+
+app:
+  dev-auth-enabled: ${APP_DEV_AUTH_ENABLED:false}

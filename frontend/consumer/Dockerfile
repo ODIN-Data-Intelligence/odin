@@ -12,7 +12,16 @@ COPY shared shared
 COPY consumer consumer
 RUN npm run build:consumer
 
-FROM nginx:alpine
+FROM nginxinc/nginx-unprivileged:alpine
+USER root
+RUN apk add --no-cache gettext
+
 COPY --from=builder /app/consumer/dist /usr/share/nginx/html
-COPY consumer/nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 80
+COPY consumer/nginx.conf.tmpl /etc/nginx/conf.d/default.conf.tmpl
+COPY consumer/docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh \
+ && chown -R nginx:nginx /usr/share/nginx/html
+USER nginx
+
+EXPOSE 8080
+ENTRYPOINT ["/docker-entrypoint.sh"]

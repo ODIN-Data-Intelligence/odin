@@ -19,9 +19,9 @@ server {
     # Uncomment when serving over HTTPS:
     # add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
-    proxy_set_header Host          $host;
-    proxy_set_header X-Real-IP     $remote_addr;
-    proxy_set_header Authorization $http_authorization;
+    proxy_set_header Host       $host;
+    proxy_set_header X-Real-IP  $remote_addr;
+    proxy_set_header X-API-Key  "${CONSUMER_API_KEY}";
 
     location = /index.html {
         add_header Cache-Control "no-cache, no-store, must-revalidate";
@@ -64,24 +64,17 @@ server {
         proxy_pass http://$upstream_lineage;
     }
 
-    # Harvest service
-    location /api/v1/sources {
-        set $upstream_harvest harvest-service:8002;
-        proxy_pass http://$upstream_harvest;
-    }
-    location /api/v1/jobs {
-        set $upstream_harvest harvest-service:8002;
-        proxy_pass http://$upstream_harvest;
-    }
-    location /api/v1/runs {
-        set $upstream_harvest harvest-service:8002;
-        proxy_pass http://$upstream_harvest;
-    }
-
-    # AI service
+    # AI service — extended timeouts and buffering disabled for SSE streaming
     location /api/v1/conversations {
         set $upstream_ai ai-service:8005;
         proxy_pass http://$upstream_ai;
+        proxy_http_version      1.1;
+        proxy_read_timeout      600s;
+        proxy_send_timeout      600s;
+        proxy_connect_timeout   30s;
+        proxy_buffering         off;
+        proxy_cache             off;
+        chunked_transfer_encoding on;
     }
     location /api/v1/semantic-search {
         set $upstream_ai ai-service:8005;

@@ -31,10 +31,10 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-ai:5432/ai
       SPRING_DATASOURCE_USERNAME: ai
-      SPRING_DATASOURCE_PASSWORD: ai
+      SPRING_DATASOURCE_PASSWORD: ${AI_DB_PASSWORD:-ai}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       SPRING_AI_OLLAMA_BASE_URL: http://10.0.0.29:11434
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8180/realms/datacatalog
+      APP_DEV_AUTH_ENABLED: "true"
     ports:
       - "8005:8005"
     depends_on:
