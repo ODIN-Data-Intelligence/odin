@@ -1,7 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { logicalElementApi } from '@datacatalog/shared';
 import type { LogicalDataElement } from '@datacatalog/shared';
-import ClassificationBadge from './ClassificationBadge';
 
 interface Props {
   element: LogicalDataElement;
@@ -9,35 +8,31 @@ interface Props {
   canAction: boolean;
 }
 
-export default function ClassificationRecommendationRow({ element, modelId, canAction }: Props) {
+export default function DescriptionRecommendationRow({ element, modelId, canAction }: Props) {
   const qc = useQueryClient();
-
   const invalidate = () => qc.invalidateQueries({ queryKey: ['logical-elements', modelId] });
 
   const accept = useMutation({
-    mutationFn: () => logicalElementApi.acceptClassification(element.id),
+    mutationFn: () => logicalElementApi.acceptDescription(element.id),
     onSuccess: invalidate,
   });
 
   const reject = useMutation({
-    mutationFn: () => logicalElementApi.rejectClassification(element.id),
+    mutationFn: () => logicalElementApi.rejectDescription(element.id),
     onSuccess: invalidate,
   });
 
   const isPending = accept.isPending || reject.isPending;
 
   return (
-    <tr className="bg-amber-50 border-t border-amber-200">
+    <tr className="bg-blue-50 border-t border-blue-200">
       <td colSpan={6} className="px-4 py-3">
         <div className="flex items-start gap-4">
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-amber-900 mb-1">AI Recommendation</p>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-sm text-amber-800">Suggested level:</span>
-              <ClassificationBadge level={element.recommendedClassification} />
-            </div>
-            {element.classificationReasoning && (
-              <p className="text-xs text-amber-700 italic">{element.classificationReasoning}</p>
+            <p className="text-sm font-medium text-blue-900 mb-1">AI Description Suggestion</p>
+            <p className="text-sm text-blue-800 mb-1">{element.recommendedDescription}</p>
+            {element.descriptionReasoning && (
+              <p className="text-xs text-blue-600 italic">{element.descriptionReasoning}</p>
             )}
           </div>
           {canAction ? (
@@ -58,7 +53,7 @@ export default function ClassificationRecommendationRow({ element, modelId, canA
               </button>
             </div>
           ) : (
-            <p className="text-xs text-amber-600 italic shrink-0">Owner only</p>
+            <p className="text-xs text-blue-600 italic shrink-0">Owner only</p>
           )}
         </div>
       </td>

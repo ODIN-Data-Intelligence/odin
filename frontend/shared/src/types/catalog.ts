@@ -79,6 +79,7 @@ export interface OwnershipProposal {
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
   createdAt: string;
   resolvedAt?: string;
+  note?: string;
 }
 
 export interface Distribution extends Resource {
@@ -208,6 +209,9 @@ export interface LogicalDataElement {
   recommendedClassification?: 'PUBLIC' | 'INTERNAL' | 'CONFIDENTIAL' | 'HIGH_CONFIDENTIAL';
   classificationReasoning?: string;
   classificationRecommendedAt?: string;
+  recommendedDescription?: string;
+  descriptionReasoning?: string;
+  descriptionRecommendedAt?: string;
 }
 
 export interface LogicalElementVocabMapping {
@@ -245,4 +249,36 @@ export interface PageResponse<T> {
   totalPages: number;
   size: number;
   number: number;
+}
+
+export interface DashboardSummary {
+  ownedDatasetCount: number;
+  ownedDataProductCount: number;
+  pendingTransferRequests: OwnershipProposal[];
+}
+
+export interface ActivityProposal {
+  id: string;
+  datasetId: string;
+  datasetTitle: string;
+  proposedOwnerId: string;
+  proposedById: string;
+  role: 'PROPOSER' | 'NOMINEE';
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  createdAt: string;
+  resolvedAt?: string;
+  note?: string;
+}
+
+export interface ActivityChange {
+  id: string;
+  datasetId: string;
+  datasetTitle: string;
+  eventType: string;
+  createdAt: string;
+}
+
+export interface UserActivity {
+  proposals: ActivityProposal[];
+  changes: ActivityChange[];
 }

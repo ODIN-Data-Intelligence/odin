@@ -54,6 +54,10 @@ public class LogicalDataElementEntity {
     private String classificationReasoning;
     private OffsetDateTime classificationRecommendedAt;
 
+    private String recommendedDescription;
+    private String descriptionReasoning;
+    private OffsetDateTime descriptionRecommendedAt;
+
     @PrePersist
     void prePersist() {
         createdAt = OffsetDateTime.now();

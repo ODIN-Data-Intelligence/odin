@@ -39,6 +39,11 @@ public record UserResponse(
     List<String> permissions,
 
     @Schema(description = "Timestamp when the user was invited", accessMode = Schema.AccessMode.READ_ONLY)
-    OffsetDateTime createdAt
+    OffsetDateTime createdAt,
+
+    @Schema(description = "Keycloak subject UUID — use this as the ownerId for ownership assignment",
+        accessMode = Schema.AccessMode.READ_ONLY,
+        example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
+    String keycloakUserId
 
 ) {}

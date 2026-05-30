@@ -35,4 +35,7 @@ public class OwnershipProposalEntity {
     private OffsetDateTime createdAt = OffsetDateTime.now();
 
     private OffsetDateTime resolvedAt;
+
+    @Column(columnDefinition = "TEXT")
+    private String note;
 }

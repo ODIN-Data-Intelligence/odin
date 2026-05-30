@@ -63,10 +63,40 @@ current = client.get('redirectUris', [])
 
 if new_uri in current:
     print(f'keycloak-config: {new_uri} already in redirectUris — nothing to do.')
-    sys.exit(0)
+else:
+    # 4. Patch redirectUris and PUT back
+    client['redirectUris'] = current + [new_uri]
+    api('PUT', f'{base}/admin/realms/{realm}/clients/{uuid}', token, data=client)
+    print(f'keycloak-config: added redirect URI -> {new_uri}')
 
-# 4. Patch redirectUris and PUT back
-client['redirectUris'] = current + [new_uri]
-api('PUT', f'{base}/admin/realms/{realm}/clients/{uuid}', token, data=client)
-print(f'keycloak-config: added redirect URI -> {new_uri}')
+# 5. Grant realm-management roles to identity-service service account
+MGMT_ROLES = ['view-users', 'manage-users', 'query-users', 'query-roles', 'view-realm']
+svc_username = 'service-account-identity-service'
+
+# Find the service account user
+svc_users = api('GET', f'{base}/admin/realms/{realm}/users?username={svc_username}&exact=true', token)
+if not svc_users:
+    print(f'keycloak-config: service account user {svc_username!r} not found — skipping role grant.')
+else:
+    svc_uid = svc_users[0]['id']
+    # Find realm-management client UUID
+    rm_clients = api('GET', f'{base}/admin/realms/{realm}/clients?clientId=realm-management', token)
+    if rm_clients:
+        rm_uuid = rm_clients[0]['id']
+        # Get available client roles
+        available = api('GET', f'{base}/admin/realms/{realm}/clients/{rm_uuid}/roles', token)
+        to_add = [r for r in available if r['name'] in MGMT_ROLES]
+        # Get already-assigned client roles
+        existing = api('GET',
+            f'{base}/admin/realms/{realm}/users/{svc_uid}/role-mappings/clients/{rm_uuid}', token)
+        existing_names = {r['name'] for r in existing}
+        new_roles = [r for r in to_add if r['name'] not in existing_names]
+        if new_roles:
+            api('POST',
+                f'{base}/admin/realms/{realm}/users/{svc_uid}/role-mappings/clients/{rm_uuid}',
+                token, data=new_roles)
+            print(f'keycloak-config: granted realm-management roles to {svc_username}: '
+                  f'{[r["name"] for r in new_roles]}')
+        else:
+            print(f'keycloak-config: {svc_username} already has required realm-management roles.')
 PYEOF
