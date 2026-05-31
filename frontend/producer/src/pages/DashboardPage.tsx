@@ -46,7 +46,7 @@ export default function DashboardPage() {
                     Requested {new Date(req.createdAt).toLocaleDateString()}.
                   </p>
                 </div>
-                <Link to={`/datasets/${req.datasetId}`} className="shrink-0 text-xs font-medium text-indigo-600 hover:text-indigo-800 underline">
+                <Link to={`datasets/${req.datasetId}`} className="shrink-0 text-xs font-medium text-indigo-600 hover:text-indigo-800 underline">
                   Review
                 </Link>
               </li>
@@ -106,7 +106,7 @@ function ProposalRow({ proposal: p }: { proposal: ActivityProposal }) {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <Link
-              to={`/datasets/${p.datasetId}`}
+              to={`datasets/${p.datasetId}`}
               className="text-sm font-medium text-gray-900 hover:text-indigo-600 hover:underline truncate"
             >
               {p.datasetTitle}
@@ -158,7 +158,7 @@ function ChangeRow({ change: c }: { change: ActivityChange }) {
     <li className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-gray-50">
       <div className="min-w-0 flex-1">
         <Link
-          to={`/datasets/${c.datasetId}`}
+          to={`datasets/${c.datasetId}`}
           className="text-sm font-medium text-gray-900 hover:text-indigo-600 hover:underline truncate block"
         >
           {c.datasetTitle}

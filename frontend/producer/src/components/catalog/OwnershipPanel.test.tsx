@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as catalogApi from '@datacatalog/shared';
 import type { Dataset, OwnershipProposal } from '@datacatalog/shared';
 import OwnershipPanel from './OwnershipPanel';
+import { useAuthStore } from '../../store/authStore';
 
 vi.mock('@datacatalog/shared', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@datacatalog/shared')>();
@@ -74,14 +75,14 @@ describe('OwnershipPanel — owned dataset', () => {
   const ownedDataset: Dataset = { ...BASE_DATASET, ownerId: 'user-owner-1' };
 
   beforeEach(() => {
-    mockedUserApi.get.mockResolvedValue({
+    mockedUserApi.list.mockResolvedValue([{
       id: 'user-owner-1',
       email: 'owner@example.com',
       firstName: 'Alice',
       lastName: 'Smith',
       roles: ['DATA_OWNER'],
       active: true,
-    });
+    }]);
   });
 
   it('should show owner email when dataset has an owner', async () => {
@@ -115,10 +116,18 @@ describe('OwnershipPanel — pending proposal', () => {
     mockedDatasetApi.getPendingProposal.mockResolvedValue(pendingProposal);
   });
 
-  it('should show Pending Transfer Proposal section when proposal exists', async () => {
-    render(<OwnershipPanel dataset={BASE_DATASET} onUpdated={vi.fn()} />, { wrapper });
+  it('should show Pending Transfer Proposal section when dataset is owned', async () => {
+    const ownedDataset: Dataset = { ...BASE_DATASET, ownerId: 'user-owner-1' };
+    render(<OwnershipPanel dataset={ownedDataset} onUpdated={vi.fn()} />, { wrapper });
     await waitFor(() => {
       expect(screen.getByText('Pending Transfer Proposal')).toBeInTheDocument();
+    });
+  });
+
+  it('should show Pending Ownership Nomination section when dataset is unowned', async () => {
+    render(<OwnershipPanel dataset={BASE_DATASET} onUpdated={vi.fn()} />, { wrapper });
+    await waitFor(() => {
+      expect(screen.getByText('Pending Ownership Nomination')).toBeInTheDocument();
     });
   });
 
@@ -127,5 +136,49 @@ describe('OwnershipPanel — pending proposal', () => {
     await waitFor(() => {
       expect(screen.getByText('PENDING')).toBeInTheDocument();
     });
+  });
+});
+
+describe('OwnershipPanel — transfer proposal action gating', () => {
+  const PRIOR_OWNER_ID = 'kc-owner-1';
+  const PROPOSED_OWNER_ID = 'kc-proposed-1';
+
+  const ownedDataset: Dataset = { ...BASE_DATASET, ownerId: PRIOR_OWNER_ID };
+
+  const transferProposal: OwnershipProposal = {
+    id: 'proposal-transfer',
+    datasetId: 'ds-1',
+    proposedOwnerId: PROPOSED_OWNER_ID,
+    proposedById: PRIOR_OWNER_ID,
+    status: 'PENDING',
+    createdAt: new Date().toISOString(),
+  };
+
+  beforeEach(() => {
+    mockedDatasetApi.getPendingProposal.mockResolvedValue(transferProposal);
+    useAuthStore.setState({ userId: null, roles: [], token: null, tenantId: null, email: null, displayName: null });
+  });
+
+  it('proposed owner cannot approve or decline a transfer proposal', async () => {
+    useAuthStore.setState({ userId: PROPOSED_OWNER_ID, roles: ['data-owner'] });
+    render(<OwnershipPanel dataset={ownedDataset} onUpdated={vi.fn()} />, { wrapper });
+    await waitFor(() => screen.getByText('PENDING'));
+    expect(screen.queryByRole('button', { name: /approve|decline/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/awaiting approval from the current owner/i)).toBeInTheDocument();
+  });
+
+  it('prior owner can approve or decline a transfer proposal', async () => {
+    useAuthStore.setState({ userId: PRIOR_OWNER_ID, roles: ['data-owner'] });
+    render(<OwnershipPanel dataset={ownedDataset} onUpdated={vi.fn()} />, { wrapper });
+    await waitFor(() => screen.getByText('PENDING'));
+    expect(screen.getByRole('button', { name: /^approve$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^decline$/i })).toBeInTheDocument();
+  });
+
+  it('proposed owner can accept an ownership nomination on an unowned dataset', async () => {
+    useAuthStore.setState({ userId: PROPOSED_OWNER_ID, roles: ['data-owner'] });
+    render(<OwnershipPanel dataset={BASE_DATASET} onUpdated={vi.fn()} />, { wrapper });
+    await waitFor(() => screen.getByText('PENDING'));
+    expect(screen.getByRole('button', { name: /^accept$/i })).toBeInTheDocument();
   });
 });

@@ -106,7 +106,9 @@ export default function OwnershipPanel({ dataset, onUpdated }: OwnershipPanelPro
           <ProposalCard
             proposal={pendingProposal}
             isUnowned={!dataset.ownerId}
-            canAct={isCurrentOwner || isProposedOwner || canDirectAssign}
+            canAct={dataset.ownerId
+              ? (isCurrentOwner || canDirectAssign)
+              : (isCurrentOwner || isProposedOwner || canDirectAssign)}
             onApprove={(note) => approveMutation.mutate({ proposalId: pendingProposal.id, note })}
             onReject={(note) => rejectMutation.mutate({ proposalId: pendingProposal.id, note })}
             isApprovePending={approveMutation.isPending}
