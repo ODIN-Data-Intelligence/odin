@@ -390,7 +390,7 @@ info "Creating distributions (idempotent by access/download URL)..."
 
 DIST_TRADES_SF=$(get_or_create_distribution "${DS_TRADES}" "accessUrl" \
   "snowflake://meridian.snowflakecomputing.com/TRADING/TRADE_CAPTURE/EXECUTED_TRADES" \
-  '{"title":"Snowflake Table — Executed Trades","description":"Live Snowflake table; query via Snowsight or JDBC with TRADING role.","accessUrl":"snowflake://meridian.snowflakecomputing.com/TRADING/TRADE_CAPTURE/EXECUTED_TRADES","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available"}')
+  '{"title":"Snowflake Table — Executed Trades","description":"Live Snowflake table; query via Snowsight or JDBC with TRADING role.","accessUrl":"snowflake://meridian.snowflakecomputing.com/TRADING/TRADE_CAPTURE/EXECUTED_TRADES","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available","databaseName":"TRADING","schemaName":"TRADE_CAPTURE","tableName":"EXECUTED_TRADES"}')
 
 DIST_TRADES_PQ=$(get_or_create_distribution "${DS_TRADES}" "downloadUrl" \
   "s3://meridian-datalake/trading/executed_trades/" \
@@ -399,7 +399,7 @@ success "Distributions: Executed Trades (Snowflake=${DIST_TRADES_SF:0:8}… Parq
 
 DIST_POSITIONS_SF=$(get_or_create_distribution "${DS_POSITIONS}" "accessUrl" \
   "snowflake://meridian.snowflakecomputing.com/TRADING/POSITIONS/DAILY_BLOTTER" \
-  '{"title":"Snowflake Table — Daily Positions","accessUrl":"snowflake://meridian.snowflakecomputing.com/TRADING/POSITIONS/DAILY_BLOTTER","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available"}')
+  '{"title":"Snowflake Table — Daily Positions","accessUrl":"snowflake://meridian.snowflakecomputing.com/TRADING/POSITIONS/DAILY_BLOTTER","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available","databaseName":"TRADING","schemaName":"POSITIONS","tableName":"DAILY_BLOTTER"}')
 
 DIST_POSITIONS_REST=$(get_or_create_distribution "${DS_POSITIONS}" "accessUrl" \
   "https://api.meridian.internal/v2/positions" \
@@ -408,7 +408,7 @@ success "Distributions: Daily Position Blotter (Snowflake=${DIST_POSITIONS_SF:0:
 
 DIST_VAR_SF=$(get_or_create_distribution "${DS_VAR}" "accessUrl" \
   "snowflake://meridian.snowflakecomputing.com/RISK/MARKET_RISK/VAR_DAILY" \
-  '{"title":"Snowflake Table — VaR Daily","accessUrl":"snowflake://meridian.snowflakecomputing.com/RISK/MARKET_RISK/VAR_DAILY","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available"}')
+  '{"title":"Snowflake Table — VaR Daily","accessUrl":"snowflake://meridian.snowflakecomputing.com/RISK/MARKET_RISK/VAR_DAILY","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available","databaseName":"RISK","schemaName":"MARKET_RISK","tableName":"VAR_DAILY"}')
 
 DIST_VAR_CSV=$(get_or_create_distribution "${DS_VAR}" "downloadUrl" \
   "https://datahub.meridian.internal/risk/var/history.csv.gz" \
@@ -417,7 +417,7 @@ success "Distributions: Market Risk VaR (Snowflake=${DIST_VAR_SF:0:8}… CSV=${D
 
 DIST_SECURITIES_SF=$(get_or_create_distribution "${DS_SECURITIES}" "accessUrl" \
   "snowflake://meridian.snowflakecomputing.com/REFDATA/SECURITIES/MASTER" \
-  '{"title":"Snowflake Table — Securities Master","accessUrl":"snowflake://meridian.snowflakecomputing.com/REFDATA/SECURITIES/MASTER","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available"}')
+  '{"title":"Snowflake Table — Securities Master","accessUrl":"snowflake://meridian.snowflakecomputing.com/REFDATA/SECURITIES/MASTER","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available","databaseName":"REFDATA","schemaName":"SECURITIES","tableName":"MASTER"}')
 
 DIST_SECURITIES_REST=$(get_or_create_distribution "${DS_SECURITIES}" "accessUrl" \
   "https://api.meridian.internal/v1/securities" \
@@ -430,7 +430,7 @@ success "Distributions: Securities Master (SF=${DIST_SECURITIES_SF:0:8}… REST=
 
 DIST_RISK_METRICS_SF=$(get_or_create_distribution "${DS_RISK_METRICS}" "accessUrl" \
   "snowflake://meridian.snowflakecomputing.com/RISK/MARKET_RISK/AGG_RISK_METRICS" \
-  '{"title":"Snowflake Table — Aggregated Market Risk Metrics","description":"Snowflake table containing aggregated Greeks and sensitivity metrics per desk and asset class, updated intraday.","accessUrl":"snowflake://meridian.snowflakecomputing.com/RISK/MARKET_RISK/AGG_RISK_METRICS","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available"}')
+  '{"title":"Snowflake Table — Aggregated Market Risk Metrics","description":"Snowflake table containing aggregated Greeks and sensitivity metrics per desk and asset class, updated intraday.","accessUrl":"snowflake://meridian.snowflakecomputing.com/RISK/MARKET_RISK/AGG_RISK_METRICS","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available","databaseName":"RISK","schemaName":"MARKET_RISK","tableName":"AGG_RISK_METRICS"}')
 
 DIST_RISK_METRICS_REST=$(get_or_create_distribution "${DS_RISK_METRICS}" "accessUrl" \
   "https://api.meridian.internal/v1/risk/metrics" \

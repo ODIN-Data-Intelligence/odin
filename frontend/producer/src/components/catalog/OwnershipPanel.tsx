@@ -1,11 +1,34 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { datasetApi, userApi } from '@datacatalog/shared';
-import type { Dataset, OwnershipProposal } from '@datacatalog/shared';
+import type { Dataset, OwnershipProposal, User } from '@datacatalog/shared';
 import { useAuthStore } from '../../store/authStore';
 import Button from '../ui/Button';
 import OwnershipTransferModal from './OwnershipTransferModal';
 import AssignOwnerModal from './AssignOwnerModal';
+
+function resolveUser(users: User[], id: string): User | undefined {
+  return users.find(u => u.keycloakUserId === id || u.id === id);
+}
+
+function userName(u: User | undefined): string | undefined {
+  if (!u) return undefined;
+  const name = `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim();
+  return name || undefined;
+}
+
+function UserChip({ users, id }: { users: User[]; id: string }) {
+  const u = resolveUser(users, id);
+  const name = userName(u);
+  const email = u?.email;
+  if (!name && !email) return <span className="font-mono text-xs text-gray-600">{id}</span>;
+  return (
+    <span className="inline-flex flex-col leading-tight">
+      {name && <span className="font-medium text-gray-800">{name}</span>}
+      {email && <span className="text-xs text-gray-500">{email}</span>}
+    </span>
+  );
+}
 
 interface OwnershipPanelProps {
   dataset: Dataset;
@@ -105,6 +128,7 @@ export default function OwnershipPanel({ dataset, onUpdated }: OwnershipPanelPro
         <Section title={dataset.ownerId ? 'Pending Transfer Proposal' : 'Pending Ownership Nomination'}>
           <ProposalCard
             proposal={pendingProposal}
+            users={users}
             isUnowned={!dataset.ownerId}
             canAct={dataset.ownerId
               ? (isCurrentOwner || canDirectAssign)
@@ -252,6 +276,7 @@ function OwnedState({
 
 function ProposalCard({
   proposal,
+  users,
   isUnowned,
   canAct,
   onApprove,
@@ -260,6 +285,7 @@ function ProposalCard({
   isRejectPending,
 }: {
   proposal: OwnershipProposal;
+  users: User[];
   isUnowned: boolean;
   canAct: boolean;
   onApprove: (note?: string) => void;
@@ -285,12 +311,14 @@ function ProposalCard({
         <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">
           PENDING
         </span>
-        <p className="text-sm text-gray-700 mt-1.5">
-          {isUnowned ? 'Nominated owner: ' : 'Transfer to '}
-          <span className="font-medium font-mono text-xs">{proposal.proposedOwnerId}</span>
+        <p className="text-sm text-gray-700 mt-1.5 flex items-center gap-1.5 flex-wrap">
+          <span>{isUnowned ? 'Nominated owner:' : 'Transfer to'}</span>
+          <UserChip users={users} id={proposal.proposedOwnerId} />
         </p>
-        <p className="text-xs text-gray-500 mt-0.5">
-          Proposed by <span className="font-mono">{proposal.proposedById}</span> on {created}
+        <p className="text-xs text-gray-500 mt-1 flex items-center gap-1.5 flex-wrap">
+          <span>Proposed by</span>
+          <UserChip users={users} id={proposal.proposedById} />
+          <span>on {created}</span>
         </p>
       </div>
 

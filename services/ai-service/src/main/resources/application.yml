@@ -41,11 +41,11 @@ spring:
 
   ai:
     ollama:
-      base-url: ${SPRING_AI_OLLAMA_BASE_URL:http://10.0.0.29:11434}
+      base-url: ${SPRING_AI_OLLAMA_BASE_URL:http://localhost:11434}
       chat:
-        model: qwen3:latest  # llama3.2
+        model: ${OLLAMA_CHAT_MODEL:qwen3:latest}
       embedding:
-        model: nomic-embed-text
+        model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
     openai:
       api-key: ${OPENAI_API_KEY:}
     vectorstore:

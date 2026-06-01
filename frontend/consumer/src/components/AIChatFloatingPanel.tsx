@@ -111,7 +111,7 @@ export default function AIChatFloatingPanel({ onClose }: AIChatFloatingPanelProp
   }
 
   return (
-    <div className="fixed inset-y-0 right-0 w-96 bg-white shadow-2xl border-l border-gray-200 flex flex-col z-50">
+    <div className="fixed inset-y-0 right-0 w-[480px] bg-white shadow-2xl border-l border-gray-200 flex flex-col z-50">
       <div className="px-4 py-3 border-b bg-blue-600 text-white flex items-center justify-between">
         <div>
           <h3 className="font-semibold text-sm">AI Assistant</h3>

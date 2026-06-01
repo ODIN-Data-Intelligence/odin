@@ -75,13 +75,15 @@ export default function DatasetDetailPage() {
   if (isLoading) return <div className="p-6 text-sm text-gray-500">Loading...</div>;
   if (!dataset) return <div className="p-6 text-sm text-red-500">Not found</div>;
 
-  // Administrators and data-governance can edit any dataset.
-  // Data owners can only edit datasets they own.
-  // Data stewards have read-only access to dataset metadata.
-  const isCurrentOwner = !!dataset.ownerId && dataset.ownerId === userId;
-  const canEditAny     = hasAnyRole(['administrator', 'data-governance']);
-  const canEdit        = canEditAny || isCurrentOwner;
-  const canDelete      = canEditAny || isCurrentOwner;
+  // Only the dataset's assigned Data Owner or an Administrator may edit dataset metadata.
+  // AI suggestion actions (classification, description, semantic tags) are owner-only —
+  // the data owner is accountable for accepting or rejecting AI-generated metadata.
+  const isCurrentOwner  = !!dataset.ownerId && dataset.ownerId === userId;
+  const isAdmin         = hasRole('administrator');
+  const canEditAny      = hasAnyRole(['administrator', 'data-governance']);
+  const canEdit         = isAdmin || isCurrentOwner;
+  const canOwnerAction  = isCurrentOwner;
+  const canDelete       = canEditAny || isCurrentOwner;
   const canRequestOwnership = hasRole('data-owner') && !isCurrentOwner && !canEditAny;
 
   const headerActions = editing ? null : (
@@ -178,16 +180,16 @@ export default function DatasetDetailPage() {
             <div className="max-w-2xl space-y-8">
               <OverviewTab dataset={dataset} />
               <div className="border-t pt-6">
-                <SemanticContextPanel datasetId={id!} canAction={canEdit} />
+                <SemanticContextPanel datasetId={id!} canAction={canOwnerAction} />
               </div>
             </div>
           )
         )}
         {activeTab === 'Distributions' && (
-          <DistributionsTab datasetId={id!} tenant={tenant!} />
+          <DistributionsTab datasetId={id!} tenant={tenant!} canOwnerAction={canOwnerAction} />
         )}
         {activeTab === 'Model' && (
-          <LogicalModelEditor datasetId={id!} models={logicalModels} canAction={canEdit} />
+          <LogicalModelEditor datasetId={id!} models={logicalModels} canAction={canOwnerAction} />
         )}
         {activeTab === 'Lineage' && (
           <LineageTab datasetId={id!} tenant={tenant!} />
@@ -410,8 +412,8 @@ function formatBytes(bytes?: number) {
 }
 
 function DistributionRow({
-  d, datasetId, tenant,
-}: { d: Distribution; datasetId: string; tenant: string }) {
+  d, datasetId, tenant, canOwnerAction,
+}: { d: Distribution; datasetId: string; tenant: string; canOwnerAction: boolean }) {
   return (
     <div className="space-y-3">
       <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -454,12 +456,12 @@ function DistributionRow({
           </p>
         )}
       </div>
-      <PhysicalSchemaSection distributionId={d.id} datasetId={datasetId} tenant={tenant} />
+      <PhysicalSchemaSection distributionId={d.id} datasetId={datasetId} tenant={tenant} canAction={canOwnerAction} />
     </div>
   );
 }
 
-function DistributionsTab({ datasetId, tenant }: { datasetId: string; tenant: string }) {
+function DistributionsTab({ datasetId, tenant, canOwnerAction }: { datasetId: string; tenant: string; canOwnerAction: boolean }) {
   const [adding, setAdding] = useState(false);
 
   const { data: distributions = [] } = useQuery({
@@ -470,7 +472,7 @@ function DistributionsTab({ datasetId, tenant }: { datasetId: string; tenant: st
   return (
     <div className="space-y-6 max-w-4xl">
       {distributions.map(d => (
-        <DistributionRow key={d.id} d={d} datasetId={datasetId} tenant={tenant} />
+        <DistributionRow key={d.id} d={d} datasetId={datasetId} tenant={tenant} canOwnerAction={canOwnerAction} />
       ))}
 
       {distributions.length === 0 && !adding && (

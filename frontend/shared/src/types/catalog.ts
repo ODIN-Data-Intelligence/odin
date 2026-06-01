@@ -94,6 +94,9 @@ export interface Distribution extends Resource {
   csvwTableId?: string;
   compressFormat?: string;
   availability?: string;
+  databaseName?: string;
+  schemaName?: string;
+  tableName?: string;
 }
 
 export interface DataProduct extends Resource {
