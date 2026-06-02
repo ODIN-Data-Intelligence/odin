@@ -64,6 +64,42 @@ public class CatalogServiceClient {
         }
     }
 
+    public List<Distribution> getDistributions(String datasetId) {
+        try {
+            return restClient.get()
+                .uri("/api/v1/datasets/{id}/distributions", datasetId)
+                .retrieve()
+                .body(new ParameterizedTypeReference<>() {});
+        } catch (Exception e) {
+            log.warn("Could not fetch distributions for dataset {}: {}", datasetId, e.getMessage());
+            return List.of();
+        }
+    }
+
+    public List<PhysicalColumn> getDistributionPhysicalSchema(String distributionId) {
+        try {
+            return restClient.get()
+                .uri("/api/v1/distributions/{id}/physical-schema", distributionId)
+                .retrieve()
+                .body(new ParameterizedTypeReference<>() {});
+        } catch (Exception e) {
+            log.warn("Could not fetch physical schema for distribution {}: {}", distributionId, e.getMessage());
+            return List.of();
+        }
+    }
+
+    public List<PhysicalColumn> getDatasetPhysicalSchema(String datasetId) {
+        try {
+            return restClient.get()
+                .uri("/api/v1/datasets/{id}/physical-schema", datasetId)
+                .retrieve()
+                .body(new ParameterizedTypeReference<>() {});
+        } catch (Exception e) {
+            log.warn("Could not fetch physical schema for dataset {}: {}", datasetId, e.getMessage());
+            return List.of();
+        }
+    }
+
     // ── Projection records ────────────────────────────────────────────────────
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -84,5 +120,20 @@ public class CatalogServiceClient {
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record VocabMapping(
         String conceptIri, String conceptLabel, String conceptDefinition, String matchType
+    ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Distribution(
+        String id, String title, String description,
+        String format, String mediaType,
+        String accessUrl, String downloadUrl,
+        String databaseName, String schemaName, String tableName
+    ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record PhysicalColumn(
+        String id, String name, String datatype,
+        Boolean required, Integer ordinal,
+        String logicalDataElementId
     ) {}
 }

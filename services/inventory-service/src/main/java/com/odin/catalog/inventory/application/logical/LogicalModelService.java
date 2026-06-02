@@ -285,6 +285,52 @@ public class LogicalModelService {
         }
     }
 
+    // No @Transactional here: same split-transaction pattern as bulk classification.
+    @Async
+    public void recommendModelDescriptions(UUID modelId, UUID jobId) {
+        log.info("action=BULK_DESCRIPTION_START modelId={} jobId={}", modelId, jobId);
+        try {
+            jobRegistry.markRunning(jobId);
+
+            TransactionTemplate readTx = new TransactionTemplate(transactionManager);
+            readTx.setReadOnly(true);
+            List<ElementClassificationInput> inputs = readTx.execute(s -> {
+                findModelOrThrow(modelId);
+                return elementRepository.findByLogicalModelIdOrderByOrdinalAsc(modelId)
+                    .stream().map(this::toClassificationInput).toList();
+            });
+            if (inputs == null || inputs.isEmpty()) {
+                jobRegistry.markCompleted(jobId);
+                return;
+            }
+
+            List<AiServiceClient.ElementDescriptionResult> results = aiServiceClient.describeElements(inputs);
+            Map<String, AiServiceClient.ElementDescriptionResult> byId = results.stream()
+                .collect(Collectors.toMap(AiServiceClient.ElementDescriptionResult::elementId, r -> r));
+
+            new TransactionTemplate(transactionManager).execute(s -> {
+                List<UUID> ids = inputs.stream().map(i -> UUID.fromString(i.elementId())).toList();
+                List<LogicalDataElementEntity> entities = elementRepository.findAllById(ids);
+                entities.forEach(e -> {
+                    AiServiceClient.ElementDescriptionResult r = byId.get(e.getId().toString());
+                    if (r != null) {
+                        e.setRecommendedDescription(r.description());
+                        e.setDescriptionReasoning(r.reasoning());
+                        e.setDescriptionRecommendedAt(OffsetDateTime.now());
+                    }
+                });
+                elementRepository.saveAll(entities);
+                return null;
+            });
+
+            log.info("action=BULK_DESCRIPTION_COMPLETE modelId={} jobId={} resultCount={}", modelId, jobId, results.size());
+            jobRegistry.markCompleted(jobId);
+        } catch (Exception e) {
+            log.error("action=BULK_DESCRIPTION_FAILED modelId={} jobId={} error={}", modelId, jobId, e.getMessage(), e);
+            jobRegistry.markFailed(jobId, e.getMessage());
+        }
+    }
+
     @Transactional
     public LogicalDataElementResponse acceptClassification(UUID elementId) {
         LogicalDataElementEntity entity = findElementOrThrow(elementId);
@@ -307,6 +353,52 @@ public class LogicalModelService {
         entity.setClassificationReasoning(null);
         entity.setClassificationRecommendedAt(null);
         log.info("action=CLASSIFICATION_REJECTED elementId={}", elementId);
+        return toElementResponse(elementRepository.save(entity));
+    }
+
+    public LogicalDataElementResponse recommendDescription(UUID elementId) {
+        log.info("action=DESCRIPTION_RECOMMEND_START elementId={}", elementId);
+        TransactionTemplate readTx = new TransactionTemplate(transactionManager);
+        readTx.setReadOnly(true);
+        AiServiceClient.ElementClassificationInput input = readTx.execute(
+            s -> toClassificationInput(findElementOrThrow(elementId)));
+
+        List<AiServiceClient.ElementDescriptionResult> results = aiServiceClient.describeElements(List.of(input));
+
+        return new TransactionTemplate(transactionManager).execute(s -> {
+            LogicalDataElementEntity entity = findElementOrThrow(elementId);
+            results.stream().filter(r -> elementId.toString().equals(r.elementId())).findFirst()
+                .ifPresent(r -> {
+                    entity.setRecommendedDescription(r.description());
+                    entity.setDescriptionReasoning(r.reasoning());
+                    entity.setDescriptionRecommendedAt(OffsetDateTime.now());
+                    log.info("action=DESCRIPTION_RECOMMENDED elementId={}", elementId);
+                });
+            return toElementResponse(elementRepository.save(entity));
+        });
+    }
+
+    @Transactional
+    public LogicalDataElementResponse acceptDescription(UUID elementId) {
+        LogicalDataElementEntity entity = findElementOrThrow(elementId);
+        if (entity.getRecommendedDescription() == null) {
+            throw new NoSuchElementException("No pending description recommendation for element: " + elementId);
+        }
+        entity.setDescription(entity.getRecommendedDescription());
+        entity.setRecommendedDescription(null);
+        entity.setDescriptionReasoning(null);
+        entity.setDescriptionRecommendedAt(null);
+        log.info("action=DESCRIPTION_ACCEPTED elementId={}", elementId);
+        return toElementResponse(elementRepository.save(entity));
+    }
+
+    @Transactional
+    public LogicalDataElementResponse rejectDescription(UUID elementId) {
+        LogicalDataElementEntity entity = findElementOrThrow(elementId);
+        entity.setRecommendedDescription(null);
+        entity.setDescriptionReasoning(null);
+        entity.setDescriptionRecommendedAt(null);
+        log.info("action=DESCRIPTION_REJECTED elementId={}", elementId);
         return toElementResponse(elementRepository.save(entity));
     }
 
@@ -483,7 +575,8 @@ public class LogicalModelService {
             e.isRequired(), e.isIdentifier(), e.isNullable(),
             physicalColumnIds, mappings, e.getCreatedAt(), e.getUpdatedAt(),
             e.getClassification(), e.getRecommendedClassification(),
-            e.getClassificationReasoning(), e.getClassificationRecommendedAt()
+            e.getClassificationReasoning(), e.getClassificationRecommendedAt(),
+            e.getRecommendedDescription(), e.getDescriptionReasoning(), e.getDescriptionRecommendedAt()
         );
     }
 

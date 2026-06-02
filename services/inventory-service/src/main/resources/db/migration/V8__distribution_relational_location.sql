@@ -1,0 +1,4 @@
+ALTER TABLE distributions
+  ADD COLUMN IF NOT EXISTS database_name VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS schema_name   VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS table_name    VARCHAR(255);

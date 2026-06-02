@@ -8,6 +8,7 @@ import com.odin.catalog.inventory.api.v1.dto.DatasetSemanticContext;
 import com.odin.catalog.inventory.api.v1.dto.DatasetSemanticTagRequest;
 import com.odin.catalog.inventory.api.v1.dto.DatasetSemanticTagResponse;
 import com.odin.catalog.inventory.api.v1.dto.OwnershipProposalResponse;
+import com.odin.catalog.inventory.api.v1.dto.ResolveProposalRequest;
 import com.odin.catalog.inventory.api.v1.dto.SemanticRecommendationResponse;
 import com.odin.catalog.inventory.api.v1.dto.PageResponse;
 import com.odin.catalog.inventory.api.v1.dto.ProposeTransferRequest;
@@ -239,8 +240,9 @@ public class DatasetsController {
     @PostMapping("/{id}/ownership-proposals/{proposalId}/approve")
     public DatasetResponse approveTransfer(
             @Parameter(description = "Dataset UUID") @PathVariable UUID id,
-            @Parameter(description = "Proposal UUID") @PathVariable UUID proposalId) {
-        return datasetService.approveTransfer(id, proposalId);
+            @Parameter(description = "Proposal UUID") @PathVariable UUID proposalId,
+            @RequestBody(required = false) ResolveProposalRequest request) {
+        return datasetService.approveTransfer(id, proposalId, request != null ? request.note() : null);
     }
 
     @Operation(summary = "Reject ownership transfer",
@@ -255,8 +257,9 @@ public class DatasetsController {
     @PostMapping("/{id}/ownership-proposals/{proposalId}/reject")
     public OwnershipProposalResponse rejectTransfer(
             @Parameter(description = "Dataset UUID") @PathVariable UUID id,
-            @Parameter(description = "Proposal UUID") @PathVariable UUID proposalId) {
-        return datasetService.rejectTransfer(id, proposalId);
+            @Parameter(description = "Proposal UUID") @PathVariable UUID proposalId,
+            @RequestBody(required = false) ResolveProposalRequest request) {
+        return datasetService.rejectTransfer(id, proposalId, request != null ? request.note() : null);
     }
 
     @Operation(summary = "Get pending ownership proposal",

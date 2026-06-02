@@ -390,7 +390,7 @@ info "Creating distributions (idempotent by access/download URL)..."
 
 DIST_TRADES_SF=$(get_or_create_distribution "${DS_TRADES}" "accessUrl" \
   "snowflake://meridian.snowflakecomputing.com/TRADING/TRADE_CAPTURE/EXECUTED_TRADES" \
-  '{"title":"Snowflake Table — Executed Trades","description":"Live Snowflake table; query via Snowsight or JDBC with TRADING role.","accessUrl":"snowflake://meridian.snowflakecomputing.com/TRADING/TRADE_CAPTURE/EXECUTED_TRADES","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available"}')
+  '{"title":"Snowflake Table — Executed Trades","description":"Live Snowflake table; query via Snowsight or JDBC with TRADING role.","accessUrl":"snowflake://meridian.snowflakecomputing.com/TRADING/TRADE_CAPTURE/EXECUTED_TRADES","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available","databaseName":"TRADING","schemaName":"TRADE_CAPTURE","tableName":"EXECUTED_TRADES"}')
 
 DIST_TRADES_PQ=$(get_or_create_distribution "${DS_TRADES}" "downloadUrl" \
   "s3://meridian-datalake/trading/executed_trades/" \
@@ -399,7 +399,7 @@ success "Distributions: Executed Trades (Snowflake=${DIST_TRADES_SF:0:8}… Parq
 
 DIST_POSITIONS_SF=$(get_or_create_distribution "${DS_POSITIONS}" "accessUrl" \
   "snowflake://meridian.snowflakecomputing.com/TRADING/POSITIONS/DAILY_BLOTTER" \
-  '{"title":"Snowflake Table — Daily Positions","accessUrl":"snowflake://meridian.snowflakecomputing.com/TRADING/POSITIONS/DAILY_BLOTTER","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available"}')
+  '{"title":"Snowflake Table — Daily Positions","accessUrl":"snowflake://meridian.snowflakecomputing.com/TRADING/POSITIONS/DAILY_BLOTTER","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available","databaseName":"TRADING","schemaName":"POSITIONS","tableName":"DAILY_BLOTTER"}')
 
 DIST_POSITIONS_REST=$(get_or_create_distribution "${DS_POSITIONS}" "accessUrl" \
   "https://api.meridian.internal/v2/positions" \
@@ -408,7 +408,7 @@ success "Distributions: Daily Position Blotter (Snowflake=${DIST_POSITIONS_SF:0:
 
 DIST_VAR_SF=$(get_or_create_distribution "${DS_VAR}" "accessUrl" \
   "snowflake://meridian.snowflakecomputing.com/RISK/MARKET_RISK/VAR_DAILY" \
-  '{"title":"Snowflake Table — VaR Daily","accessUrl":"snowflake://meridian.snowflakecomputing.com/RISK/MARKET_RISK/VAR_DAILY","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available"}')
+  '{"title":"Snowflake Table — VaR Daily","accessUrl":"snowflake://meridian.snowflakecomputing.com/RISK/MARKET_RISK/VAR_DAILY","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available","databaseName":"RISK","schemaName":"MARKET_RISK","tableName":"VAR_DAILY"}')
 
 DIST_VAR_CSV=$(get_or_create_distribution "${DS_VAR}" "downloadUrl" \
   "https://datahub.meridian.internal/risk/var/history.csv.gz" \
@@ -417,7 +417,7 @@ success "Distributions: Market Risk VaR (Snowflake=${DIST_VAR_SF:0:8}… CSV=${D
 
 DIST_SECURITIES_SF=$(get_or_create_distribution "${DS_SECURITIES}" "accessUrl" \
   "snowflake://meridian.snowflakecomputing.com/REFDATA/SECURITIES/MASTER" \
-  '{"title":"Snowflake Table — Securities Master","accessUrl":"snowflake://meridian.snowflakecomputing.com/REFDATA/SECURITIES/MASTER","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available"}')
+  '{"title":"Snowflake Table — Securities Master","accessUrl":"snowflake://meridian.snowflakecomputing.com/REFDATA/SECURITIES/MASTER","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available","databaseName":"REFDATA","schemaName":"SECURITIES","tableName":"MASTER"}')
 
 DIST_SECURITIES_REST=$(get_or_create_distribution "${DS_SECURITIES}" "accessUrl" \
   "https://api.meridian.internal/v1/securities" \
@@ -430,7 +430,7 @@ success "Distributions: Securities Master (SF=${DIST_SECURITIES_SF:0:8}… REST=
 
 DIST_RISK_METRICS_SF=$(get_or_create_distribution "${DS_RISK_METRICS}" "accessUrl" \
   "snowflake://meridian.snowflakecomputing.com/RISK/MARKET_RISK/AGG_RISK_METRICS" \
-  '{"title":"Snowflake Table — Aggregated Market Risk Metrics","description":"Snowflake table containing aggregated Greeks and sensitivity metrics per desk and asset class, updated intraday.","accessUrl":"snowflake://meridian.snowflakecomputing.com/RISK/MARKET_RISK/AGG_RISK_METRICS","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available"}')
+  '{"title":"Snowflake Table — Aggregated Market Risk Metrics","description":"Snowflake table containing aggregated Greeks and sensitivity metrics per desk and asset class, updated intraday.","accessUrl":"snowflake://meridian.snowflakecomputing.com/RISK/MARKET_RISK/AGG_RISK_METRICS","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available","databaseName":"RISK","schemaName":"MARKET_RISK","tableName":"AGG_RISK_METRICS"}')
 
 DIST_RISK_METRICS_REST=$(get_or_create_distribution "${DS_RISK_METRICS}" "accessUrl" \
   "https://api.meridian.internal/v1/risk/metrics" \
@@ -501,7 +501,7 @@ EL_PRICE=$(      get_or_create_element "${LM_TRADES}" "tradePrice"      "Trade P
 EL_DATE=$(       get_or_create_element "${LM_TRADES}" "tradeDate"       "Trade Date"              "Date"           6 true  false)
 EL_DIRECTION=$(  get_or_create_element "${LM_TRADES}" "direction"       "Buy / Sell Indicator"    "Code"           7 true  false)
 EL_COUNTERPARTY=$(get_or_create_element "${LM_TRADES}" "counterpartyLei" "Counterparty LEI"       "Identifier"     8 true  false)
-EL_VENUE=$(      get_or_create_element "${LM_TRADES}" "executionVenue"  "Execution Venue (MIC)"   "Code"           9 false false)
+EL_VENUE=$(      get_or_create_element "${LM_TRADES}" "executionVenue"  "Execution Venue"         "Code"           9 false false)
 EL_TRADER=$(     get_or_create_element "${LM_TRADES}" "traderId"        "Trader Identifier"       "Identifier"    10 true  false)
 
 add_vocab_mapping_if_missing "${EL_TRADE_ID}"     "${VOCAB_FBC}"    "https://spec.edmcouncil.org/fibo/ontology/FBC/FunctionalEntities/FinancialServicesEntities/TradeIdentifier" "TradeIdentifier"
@@ -522,7 +522,7 @@ EL_POS_PORTFOLIO=$(get_or_create_element "${LM_POSITIONS}" "portfolioId"  "Portf
 EL_POS_ISIN=$(      get_or_create_element "${LM_POSITIONS}" "isin"         "ISIN"                 "Identifier"     2 true false)
 EL_POS_QTY=$(       get_or_create_element "${LM_POSITIONS}" "netQuantity"  "Net Quantity"          "Quantity"       3 true false)
 EL_POS_MV=$(        get_or_create_element "${LM_POSITIONS}" "marketValue"  "Market Value"          "MonetaryAmount" 4 true false)
-EL_POS_PNL=$(       get_or_create_element "${LM_POSITIONS}" "dailyPnl"     "Daily P&L"             "MonetaryAmount" 5 true false)
+EL_POS_PNL=$(       get_or_create_element "${LM_POSITIONS}" "dailyPnl"     "Daily Profit and Loss"  "MonetaryAmount" 5 true false)
 EL_POS_CCY=$(       get_or_create_element "${LM_POSITIONS}" "baseCurrency" "Base Currency"         "Currency"       6 true false)
 EL_POS_DATE=$(      get_or_create_element "${LM_POSITIONS}" "positionDate" "Position Date"         "Date"           7 true false)
 
@@ -559,10 +559,10 @@ LM_VAR=$(get_or_create_logical_model "${DS_VAR}" "VaR Measure Logical Model" \
   '{"name":"VaR Measure Logical Model","description":"Draft logical model for the VaR output dataset. Pending final sign-off from the risk quants team.","version":"0.3","status":"draft"}')
 
 EL_VAR_PORTFOLIO=$(get_or_create_element "${LM_VAR}" "portfolioId"    "Portfolio Identifier"  "Identifier"     1 true true)
-EL_VAR_VALUE=$(    get_or_create_element "${LM_VAR}" "varValue"        "VaR Value (USD)"       "MonetaryAmount" 2 true false)
-EL_VAR_SVAR=$(     get_or_create_element "${LM_VAR}" "stressedVar"     "Stressed VaR (USD)"    "MonetaryAmount" 3 true false)
-EL_VAR_CONF=$(     get_or_create_element "${LM_VAR}" "confidenceLevel" "Confidence Level"      "Percentage"     4 true false)
-EL_VAR_HORIZON=$(  get_or_create_element "${LM_VAR}" "holdingPeriod"   "Holding Period (days)" "Integer"        5 true false)
+EL_VAR_VALUE=$(    get_or_create_element "${LM_VAR}" "varValue"        "Value at Risk"          "MonetaryAmount" 2 true false)
+EL_VAR_SVAR=$(     get_or_create_element "${LM_VAR}" "stressedVar"     "Stressed Value at Risk" "MonetaryAmount" 3 true false)
+EL_VAR_CONF=$(     get_or_create_element "${LM_VAR}" "confidenceLevel" "Confidence Level"       "Percentage"     4 true false)
+EL_VAR_HORIZON=$(  get_or_create_element "${LM_VAR}" "holdingPeriod"   "Holding Period in Days" "Integer"        5 true false)
 EL_VAR_DATE=$(     get_or_create_element "${LM_VAR}" "valuationDate"   "Valuation Date"        "Date"           6 true false)
 
 add_vocab_mapping_if_missing "${EL_VAR_VALUE}" "${VOCAB_FND}" "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/MonetaryAmount" "MonetaryAmount"
@@ -574,15 +574,15 @@ info "Building logical model: MiFID II Transaction Reports..."
 LM_MIFID=$(get_or_create_logical_model "${DS_MIFID}" "MiFID II Report Logical Model" \
   '{"name":"MiFID II Report Logical Model","description":"Logical structure of a MiFID II Article 26 transaction report field set. ESMA field numbering in labels.","version":"2.0","status":"published"}')
 
-EL_MIF_UTI=$(      get_or_create_element "${LM_MIFID}" "uti"               "UTI (Field 1)"                 "Identifier" 1 true  true)
-EL_MIF_ISIN=$(     get_or_create_element "${LM_MIFID}" "instrumentIsin"    "Instrument ISIN (Field 41)"    "Identifier" 2 true  false)
-EL_MIF_PRICE=$(    get_or_create_element "${LM_MIFID}" "price"             "Price (Field 33)"              "Price"      3 true  false)
-EL_MIF_QTY=$(      get_or_create_element "${LM_MIFID}" "quantity"          "Quantity (Field 30)"           "Quantity"   4 true  false)
-EL_MIF_CCY=$(      get_or_create_element "${LM_MIFID}" "priceCurrency"     "Price Currency (Field 34)"     "Currency"   5 true  false)
-EL_MIF_BUY_LEI=$(  get_or_create_element "${LM_MIFID}" "buyerLei"          "Buyer LEI (Field 15)"          "Identifier" 6 true  false)
-EL_MIF_SELL_LEI=$( get_or_create_element "${LM_MIFID}" "sellerLei"         "Seller LEI (Field 16)"         "Identifier" 7 true  false)
-EL_MIF_VENUE=$(    get_or_create_element "${LM_MIFID}" "tradingVenueMic"   "Trading Venue MIC (Field 36)"  "Code"       8 true  false)
-EL_MIF_TS=$(       get_or_create_element "${LM_MIFID}" "executionTimestamp" "Execution Timestamp (Field 28)" "DateTime" 9 true  false)
+EL_MIF_UTI=$(      get_or_create_element "${LM_MIFID}" "uti"               "Unique Transaction Identifier"  "Identifier" 1 true  true)
+EL_MIF_ISIN=$(     get_or_create_element "${LM_MIFID}" "instrumentIsin"    "Instrument ISIN"                "Identifier" 2 true  false)
+EL_MIF_PRICE=$(    get_or_create_element "${LM_MIFID}" "price"             "Transaction Price"              "Price"      3 true  false)
+EL_MIF_QTY=$(      get_or_create_element "${LM_MIFID}" "quantity"          "Transaction Quantity"           "Quantity"   4 true  false)
+EL_MIF_CCY=$(      get_or_create_element "${LM_MIFID}" "priceCurrency"     "Price Currency"                 "Currency"   5 true  false)
+EL_MIF_BUY_LEI=$(  get_or_create_element "${LM_MIFID}" "buyerLei"          "Buyer Legal Entity Identifier"  "Identifier" 6 true  false)
+EL_MIF_SELL_LEI=$( get_or_create_element "${LM_MIFID}" "sellerLei"         "Seller Legal Entity Identifier" "Identifier" 7 true  false)
+EL_MIF_VENUE=$(    get_or_create_element "${LM_MIFID}" "tradingVenueMic"   "Trading Venue"                  "Code"       8 true  false)
+EL_MIF_TS=$(       get_or_create_element "${LM_MIFID}" "executionTimestamp" "Execution Timestamp"           "DateTime"   9 true  false)
 
 add_vocab_mapping_if_missing "${EL_MIF_ISIN}"     "${VOCAB_SEC}" "https://spec.edmcouncil.org/fibo/ontology/SEC/Securities/SecuritiesIdentificationSchemes/InternationalSecuritiesIdentificationNumber" "ISIN"
 add_vocab_mapping_if_missing "${EL_MIF_PRICE}"    "${VOCAB_MD}"  "https://spec.edmcouncil.org/fibo/ontology/MD/TemporalCore/SecurityMarketConcepts/MarketPrice" "MarketPrice"
@@ -597,31 +597,31 @@ info "Building logical model: Counterparty Credit Exposure..."
 LM_COUNTERPARTY=$(get_or_create_logical_model "${DS_COUNTERPARTY}" "Counterparty Credit Exposure Model" \
   '{"name":"Counterparty Credit Exposure Model","description":"Business-oriented view of counterparty credit risk exposure. Covers current exposure, PFE, CVA/DVA, netting sets, and ISDA agreement references. FIBO-annotated for regulatory and semantic interoperability.","version":"1.0","status":"draft"}')
 
-EL_CE_EXPOSURE_ID=$(  get_or_create_element "${LM_COUNTERPARTY}" "exposureId"               "Exposure Record ID"              "Identifier"     1 true  true)
-EL_CE_CP_ID=$(        get_or_create_element "${LM_COUNTERPARTY}" "counterpartyId"            "Counterparty Internal ID"        "Identifier"     2 true  false)
+EL_CE_EXPOSURE_ID=$(  get_or_create_element "${LM_COUNTERPARTY}" "exposureId"               "Exposure Record Identifier"      "Identifier"     1 true  true)
+EL_CE_CP_ID=$(        get_or_create_element "${LM_COUNTERPARTY}" "counterpartyId"            "Counterparty Internal Identifier" "Identifier"    2 true  false)
 EL_CE_CP_LEI=$(       get_or_create_element "${LM_COUNTERPARTY}" "counterpartyLei"           "Counterparty LEI"                "Identifier"     3 true  false)
 EL_CE_CP_NAME=$(      get_or_create_element "${LM_COUNTERPARTY}" "counterpartyName"          "Counterparty Legal Name"         "Text"           4 true  false)
 EL_CE_NETTING=$(      get_or_create_element "${LM_COUNTERPARTY}" "nettingSetId"              "Netting Set Identifier"          "Identifier"     5 true  false)
 EL_CE_AS_OF=$(        get_or_create_element "${LM_COUNTERPARTY}" "asOfDate"                  "As-Of Date"                      "Date"           6 true  false)
 EL_CE_CCY=$(          get_or_create_element "${LM_COUNTERPARTY}" "baseCurrency"              "Base Currency"                   "Currency"       7 true  false)
-EL_CE_CURRENT=$(      get_or_create_element "${LM_COUNTERPARTY}" "currentExposure"           "Current Exposure (CE)"           "MonetaryAmount" 8 true  false)
-EL_CE_PFE=$(          get_or_create_element "${LM_COUNTERPARTY}" "potentialFutureExposure"   "Potential Future Exposure (PFE)" "MonetaryAmount" 9 true  false)
-EL_CE_EE=$(           get_or_create_element "${LM_COUNTERPARTY}" "expectedExposure"          "Expected Exposure (EE)"          "MonetaryAmount" 10 true  false)
-EL_CE_PEAK=$(         get_or_create_element "${LM_COUNTERPARTY}" "peakExposure"              "Peak Exposure (EPE)"             "MonetaryAmount" 11 false false)
+EL_CE_CURRENT=$(      get_or_create_element "${LM_COUNTERPARTY}" "currentExposure"           "Current Exposure"                "MonetaryAmount" 8 true  false)
+EL_CE_PFE=$(          get_or_create_element "${LM_COUNTERPARTY}" "potentialFutureExposure"   "Potential Future Exposure"       "MonetaryAmount" 9 true  false)
+EL_CE_EE=$(           get_or_create_element "${LM_COUNTERPARTY}" "expectedExposure"          "Expected Exposure"               "MonetaryAmount" 10 true  false)
+EL_CE_PEAK=$(         get_or_create_element "${LM_COUNTERPARTY}" "peakExposure"              "Peak Exposure"                   "MonetaryAmount" 11 false false)
 EL_CE_CVA=$(          get_or_create_element "${LM_COUNTERPARTY}" "creditValuationAdjustment" "Credit Valuation Adjustment"     "MonetaryAmount" 12 true  false)
 EL_CE_DVA=$(          get_or_create_element "${LM_COUNTERPARTY}" "debitValuationAdjustment"  "Debit Valuation Adjustment"      "MonetaryAmount" 13 false false)
-EL_CE_COL_POST=$(     get_or_create_element "${LM_COUNTERPARTY}" "collateralPostedAmount"    "Collateral Posted"               "MonetaryAmount" 14 false false)
-EL_CE_COL_RECV=$(     get_or_create_element "${LM_COUNTERPARTY}" "collateralReceivedAmount"  "Collateral Received"             "MonetaryAmount" 15 false false)
+EL_CE_COL_POST=$(     get_or_create_element "${LM_COUNTERPARTY}" "collateralPostedAmount"    "Collateral Posted Amount"        "MonetaryAmount" 14 false false)
+EL_CE_COL_RECV=$(     get_or_create_element "${LM_COUNTERPARTY}" "collateralReceivedAmount"  "Collateral Received Amount"      "MonetaryAmount" 15 false false)
 EL_CE_NET=$(          get_or_create_element "${LM_COUNTERPARTY}" "netExposure"               "Net Exposure"                    "MonetaryAmount" 16 true  false)
 EL_CE_WWR_FLAG=$(     get_or_create_element "${LM_COUNTERPARTY}" "wrongWayRiskFlag"          "Wrong-Way Risk Flag"             "Boolean"        17 true  false)
 EL_CE_WWR_SCORE=$(    get_or_create_element "${LM_COUNTERPARTY}" "wrongWayRiskScore"         "Wrong-Way Risk Score"            "Decimal"        18 false false)
-EL_CE_ISDA=$(         get_or_create_element "${LM_COUNTERPARTY}" "isdaAgreementId"           "ISDA Master Agreement ID"        "Identifier"     19 false false)
+EL_CE_ISDA=$(         get_or_create_element "${LM_COUNTERPARTY}" "isdaAgreementId"           "ISDA Master Agreement Identifier" "Identifier"   19 false false)
 EL_CE_RATING=$(       get_or_create_element "${LM_COUNTERPARTY}" "creditRating"              "Credit Rating"                   "Code"           20 false false)
 EL_CE_THRESHOLD=$(    get_or_create_element "${LM_COUNTERPARTY}" "thresholdAmount"           "Threshold Amount"                "MonetaryAmount" 21 false false)
 EL_CE_MTA=$(          get_or_create_element "${LM_COUNTERPARTY}" "minimumTransferAmount"     "Minimum Transfer Amount"         "MonetaryAmount" 22 false false)
 EL_CE_CALC_METHOD=$(  get_or_create_element "${LM_COUNTERPARTY}" "calculationMethod"         "Calculation Method"              "Code"           23 true  false)
 EL_CE_CONF_LVL=$(     get_or_create_element "${LM_COUNTERPARTY}" "confidenceLevel"           "Confidence Level"                "Decimal"        24 true  false)
-EL_CE_HORIZON=$(      get_or_create_element "${LM_COUNTERPARTY}" "timeHorizonDays"           "Time Horizon (days)"             "Integer"        25 true  false)
+EL_CE_HORIZON=$(      get_or_create_element "${LM_COUNTERPARTY}" "timeHorizonDays"           "Time Horizon in Days"            "Integer"        25 true  false)
 
 add_vocab_mapping_if_missing "${EL_CE_CP_LEI}"   "${VOCAB_FBC}"    "https://spec.edmcouncil.org/fibo/ontology/FBC/FunctionalEntities/RegistrationAuthorities/LegalEntityIdentifier" "LegalEntityIdentifier"
 add_vocab_mapping_if_missing "${EL_CE_AS_OF}"    "${VOCAB_SCHEMA}" "https://schema.org/startDate" "startDate"
@@ -640,11 +640,11 @@ LM_RISK_METRICS=$(get_or_create_logical_model "${DS_RISK_METRICS}" "Market Risk 
 EL_RM_DESK=$(      get_or_create_element "${LM_RISK_METRICS}" "deskId"         "Trading Desk Identifier"   "Identifier"     1 true  true)
 EL_RM_ASSET=$(     get_or_create_element "${LM_RISK_METRICS}" "assetClass"     "Asset Class"               "Code"           2 true  false)
 EL_RM_DATE=$(      get_or_create_element "${LM_RISK_METRICS}" "reportDate"     "Report Date"               "Date"           3 true  false)
-EL_RM_DV01=$(      get_or_create_element "${LM_RISK_METRICS}" "dv01"           "DV01 (USD per bp)"         "MonetaryAmount" 4 true  false)
-EL_RM_CS01=$(      get_or_create_element "${LM_RISK_METRICS}" "cs01"           "CS01 (USD per bp)"         "MonetaryAmount" 5 true  false)
-EL_RM_VEGA=$(      get_or_create_element "${LM_RISK_METRICS}" "vegaExposure"   "Vega Exposure (USD)"       "MonetaryAmount" 6 true  false)
-EL_RM_DELTA=$(     get_or_create_element "${LM_RISK_METRICS}" "deltaExposure"  "Delta Exposure (USD)"      "MonetaryAmount" 7 true  false)
-EL_RM_GAMMA=$(     get_or_create_element "${LM_RISK_METRICS}" "gammaExposure"  "Gamma Exposure (USD)"      "MonetaryAmount" 8 false false)
+EL_RM_DV01=$(      get_or_create_element "${LM_RISK_METRICS}" "dv01"           "Interest Rate Sensitivity (DV01)" "MonetaryAmount" 4 true  false)
+EL_RM_CS01=$(      get_or_create_element "${LM_RISK_METRICS}" "cs01"           "Credit Spread Sensitivity (CS01)" "MonetaryAmount" 5 true  false)
+EL_RM_VEGA=$(      get_or_create_element "${LM_RISK_METRICS}" "vegaExposure"   "Vega Exposure"             "MonetaryAmount" 6 true  false)
+EL_RM_DELTA=$(     get_or_create_element "${LM_RISK_METRICS}" "deltaExposure"  "Delta Exposure"            "MonetaryAmount" 7 true  false)
+EL_RM_GAMMA=$(     get_or_create_element "${LM_RISK_METRICS}" "gammaExposure"  "Gamma Exposure"            "MonetaryAmount" 8 false false)
 
 add_vocab_mapping_if_missing "${EL_RM_DATE}"  "${VOCAB_SCHEMA}" "https://schema.org/startDate" "startDate"
 add_vocab_mapping_if_missing "${EL_RM_DV01}"  "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/MonetaryAmount" "MonetaryAmount"

@@ -27,4 +27,8 @@ public class DistributionEntity extends ResourceEntity {
     private String packageFormat;
     private String availability;
     private UUID csvwTableId;
+
+    private String databaseName;
+    private String schemaName;
+    private String tableName;
 }

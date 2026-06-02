@@ -97,6 +97,9 @@ public class DistributionsController {
         if (body.get("byteSize") instanceof Number n) dist.setByteSize(n.longValue());
         dist.setCompressFormat((String) body.get("compressFormat"));
         dist.setAvailability((String) body.get("availability"));
+        dist.setDatabaseName((String) body.get("databaseName"));
+        dist.setSchemaName((String) body.get("schemaName"));
+        dist.setTableName((String) body.get("tableName"));
         return distributionRepository.save(dist);
     }
 

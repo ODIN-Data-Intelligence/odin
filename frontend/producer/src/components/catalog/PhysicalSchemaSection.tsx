@@ -8,6 +8,7 @@ interface Props {
   distributionId: string;
   datasetId: string;
   tenant: string;
+  canAction: boolean;
 }
 
 // ── Suggest Mappings Modal ────────────────────────────────────────────────────
@@ -170,11 +171,13 @@ function SuggestMappingsModal({
 function MappingCell({
   col,
   elements,
+  canAction,
   onBind,
   onUnbind,
 }: {
   col: CsvwColumn;
   elements: LogicalDataElement[];
+  canAction: boolean;
   onBind: (elementId: string, colId: string) => void;
   onUnbind: (elementId: string) => void;
 }) {
@@ -186,20 +189,28 @@ function MappingCell({
     return (
       <div className="flex items-center gap-2">
         <span className="text-green-700 font-medium">{el?.name ?? '✓ Mapped'}</span>
-        <button
-          onClick={() => { setSelected(col.logicalDataElementId!); setEditing(true); }}
-          className="text-xs text-blue-600 hover:text-blue-700"
-        >
-          Change
-        </button>
-        <button
-          onClick={() => onUnbind(col.logicalDataElementId!)}
-          className="text-xs text-red-500 hover:text-red-600"
-        >
-          Unmap
-        </button>
+        {canAction && (
+          <>
+            <button
+              onClick={() => { setSelected(col.logicalDataElementId!); setEditing(true); }}
+              className="text-xs text-blue-600 hover:text-blue-700"
+            >
+              Change
+            </button>
+            <button
+              onClick={() => onUnbind(col.logicalDataElementId!)}
+              className="text-xs text-red-500 hover:text-red-600"
+            >
+              Unmap
+            </button>
+          </>
+        )}
       </div>
     );
+  }
+
+  if (!canAction) {
+    return <span className="text-gray-300">—</span>;
   }
 
   return (
@@ -236,7 +247,7 @@ function MappingCell({
 
 // ── Main section ──────────────────────────────────────────────────────────────
 
-export default function PhysicalSchemaSection({ distributionId, datasetId, tenant }: Props) {
+export default function PhysicalSchemaSection({ distributionId, datasetId, tenant, canAction }: Props) {
   const qc = useQueryClient();
   const [modalSuggestions, setModalSuggestions] = useState<ColumnElementSuggestion[] | null>(null);
 
@@ -306,7 +317,7 @@ export default function PhysicalSchemaSection({ distributionId, datasetId, tenan
             {columns.length > 0 && <span className="ml-2 text-gray-400 font-normal text-xs">({columns.length} columns)</span>}
           </p>
           <div className="flex items-center gap-3">
-            {hasElements && columns.length > 0 && (
+            {hasElements && columns.length > 0 && canAction && (
               <button
                 onClick={() => suggestMut.mutate()}
                 disabled={suggestMut.isPending}
@@ -362,6 +373,7 @@ export default function PhysicalSchemaSection({ distributionId, datasetId, tenan
                         <MappingCell
                           col={col}
                           elements={elements}
+                          canAction={canAction}
                           onBind={(elementId, colId) => bindMut.mutate({ elementId, colId })}
                           onUnbind={(elementId) => unbindMut.mutate(elementId)}
                         />

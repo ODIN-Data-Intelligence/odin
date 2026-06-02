@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { datasetApi, logicalModelApi, lineageApi, useIriTranslations, iriFragment } from '@datacatalog/shared';
-import type { Dataset, Distribution } from '@datacatalog/shared';
+import type { Dataset, Distribution, OwnershipProposal } from '@datacatalog/shared';
 import PageHeader from '../components/ui/PageHeader';
 import Button from '../components/ui/Button';
 import DatasetForm from '../components/catalog/DatasetForm';
@@ -15,17 +15,20 @@ import DatasetHistoryTab from '../components/catalog/DatasetHistoryTab';
 import SemanticContextPanel from '../components/catalog/SemanticContextPanel';
 import { cn } from '../lib/utils';
 import { formatDate } from '../lib/utils';
+import { useAuthStore } from '../store/authStore';
 
-const TABS = ['Overview', 'Distributions', 'Schema', 'Lineage', 'Governance', 'History'] as const;
+const TABS = ['Overview', 'Distributions', 'Model', 'Lineage', 'Governance', 'History'] as const;
 type Tab = typeof TABS[number];
 
 export default function DatasetDetailPage() {
   const { id, tenant } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { userId, hasRole, hasAnyRole } = useAuthStore();
   const [activeTab, setActiveTab] = useState<Tab>('Overview');
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [ownershipRequested, setOwnershipRequested] = useState(false);
 
   const { data: dataset, isLoading } = useQuery({
     queryKey: ['dataset', id],
@@ -36,7 +39,7 @@ export default function DatasetDetailPage() {
   const { data: logicalModels = [] } = useQuery({
     queryKey: ['logical-models', id],
     queryFn: () => logicalModelApi.list(id!),
-    enabled: !!id && activeTab === 'Schema',
+    enabled: !!id && activeTab === 'Model',
   });
 
   const updateMutation = useMutation({
@@ -55,33 +58,82 @@ export default function DatasetDetailPage() {
     },
   });
 
+  const requestOwnershipMutation = useMutation<Dataset | OwnershipProposal>({
+    mutationFn: () => dataset!.ownerId
+      ? datasetApi.proposeTransfer(id!, userId!)
+      : datasetApi.assignOwner(id!, userId!),
+    onSuccess: (result) => {
+      if ('resourceType' in result) {
+        qc.setQueryData(['dataset', id], result);
+      } else {
+        qc.invalidateQueries({ queryKey: ['pending-proposal', id] });
+      }
+      setOwnershipRequested(true);
+    },
+  });
+
   if (isLoading) return <div className="p-6 text-sm text-gray-500">Loading...</div>;
   if (!dataset) return <div className="p-6 text-sm text-red-500">Not found</div>;
 
+  // Only the dataset's assigned Data Owner or an Administrator may edit dataset metadata.
+  // AI suggestion actions (classification, description, semantic tags) are owner-only —
+  // the data owner is accountable for accepting or rejecting AI-generated metadata.
+  const isCurrentOwner  = !!dataset.ownerId && dataset.ownerId === userId;
+  const isAdmin         = hasRole('administrator');
+  const canEditAny      = hasAnyRole(['administrator', 'data-governance']);
+  const canEdit         = isAdmin || isCurrentOwner;
+  const canOwnerAction  = isCurrentOwner;
+  const canDelete       = canEditAny || isCurrentOwner;
+  const canRequestOwnership = hasRole('data-owner') && !isCurrentOwner && !canEditAny;
+
   const headerActions = editing ? null : (
     <>
-      <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>
-        Edit
-      </Button>
-      {confirmDelete ? (
-        <>
-          <span className="text-xs text-red-600 font-medium">Delete this dataset?</span>
-          <Button
-            size="sm"
-            variant="danger"
-            disabled={deleteMutation.isPending}
-            onClick={() => deleteMutation.mutate()}
-          >
-            {deleteMutation.isPending ? 'Deleting…' : 'Confirm'}
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(false)}>
-            Cancel
-          </Button>
-        </>
-      ) : (
-        <Button size="sm" variant="danger" onClick={() => setConfirmDelete(true)}>
-          Delete
+      {canEdit && (
+        <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>
+          Edit
         </Button>
+      )}
+      {canRequestOwnership && !ownershipRequested && (
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={requestOwnershipMutation.isPending}
+          onClick={() => requestOwnershipMutation.mutate()}
+        >
+          {requestOwnershipMutation.isPending
+            ? 'Requesting…'
+            : dataset.ownerId ? 'Request Ownership' : 'Claim Ownership'}
+        </Button>
+      )}
+      {canRequestOwnership && ownershipRequested && (
+        <span className="text-xs text-green-700 font-medium">
+          {dataset.ownerId ? 'Request sent — awaiting approval' : 'Ownership claimed'}
+        </span>
+      )}
+      {requestOwnershipMutation.isError && (
+        <span className="text-xs text-red-600">Request failed. Please try again.</span>
+      )}
+      {canDelete && (
+        confirmDelete ? (
+          <>
+            <span className="text-xs text-red-600 font-medium">Delete this dataset?</span>
+            <Button
+              size="sm"
+              variant="danger"
+              disabled={deleteMutation.isPending}
+              onClick={() => deleteMutation.mutate()}
+            >
+              {deleteMutation.isPending ? 'Deleting…' : 'Confirm'}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(false)}>
+              Cancel
+            </Button>
+          </>
+        ) : (
+          <Button size="sm" variant="danger" onClick={() => setConfirmDelete(true)}>
+            Delete
+          </Button>
+        )
       )}
     </>
   );
@@ -128,16 +180,16 @@ export default function DatasetDetailPage() {
             <div className="max-w-2xl space-y-8">
               <OverviewTab dataset={dataset} />
               <div className="border-t pt-6">
-                <SemanticContextPanel datasetId={id!} />
+                <SemanticContextPanel datasetId={id!} canAction={canOwnerAction} />
               </div>
             </div>
           )
         )}
         {activeTab === 'Distributions' && (
-          <DistributionsTab datasetId={id!} tenant={tenant!} />
+          <DistributionsTab datasetId={id!} tenant={tenant!} canOwnerAction={canOwnerAction} />
         )}
-        {activeTab === 'Schema' && (
-          <LogicalModelEditor datasetId={id!} models={logicalModels} />
+        {activeTab === 'Model' && (
+          <LogicalModelEditor datasetId={id!} models={logicalModels} canAction={canOwnerAction} />
         )}
         {activeTab === 'Lineage' && (
           <LineageTab datasetId={id!} tenant={tenant!} />
@@ -360,8 +412,8 @@ function formatBytes(bytes?: number) {
 }
 
 function DistributionRow({
-  d, datasetId, tenant,
-}: { d: Distribution; datasetId: string; tenant: string }) {
+  d, datasetId, tenant, canOwnerAction,
+}: { d: Distribution; datasetId: string; tenant: string; canOwnerAction: boolean }) {
   return (
     <div className="space-y-3">
       <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -404,12 +456,12 @@ function DistributionRow({
           </p>
         )}
       </div>
-      <PhysicalSchemaSection distributionId={d.id} datasetId={datasetId} tenant={tenant} />
+      <PhysicalSchemaSection distributionId={d.id} datasetId={datasetId} tenant={tenant} canAction={canOwnerAction} />
     </div>
   );
 }
 
-function DistributionsTab({ datasetId, tenant }: { datasetId: string; tenant: string }) {
+function DistributionsTab({ datasetId, tenant, canOwnerAction }: { datasetId: string; tenant: string; canOwnerAction: boolean }) {
   const [adding, setAdding] = useState(false);
 
   const { data: distributions = [] } = useQuery({
@@ -420,7 +472,7 @@ function DistributionsTab({ datasetId, tenant }: { datasetId: string; tenant: st
   return (
     <div className="space-y-6 max-w-4xl">
       {distributions.map(d => (
-        <DistributionRow key={d.id} d={d} datasetId={datasetId} tenant={tenant} />
+        <DistributionRow key={d.id} d={d} datasetId={datasetId} tenant={tenant} canOwnerAction={canOwnerAction} />
       ))}
 
       {distributions.length === 0 && !adding && (

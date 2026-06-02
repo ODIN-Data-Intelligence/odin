@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { datasetApi, lineageApi, iriFragment, useIriTranslations } from '@datacatalog/shared';
+import { datasetApi, lineageApi, userApi, iriFragment, useIriTranslations } from '@datacatalog/shared';
 import { useDrawerStore } from '../store/drawerStore';
 import DistributionsTab from './DistributionsTab';
 import LogicalSchemaTable from './LogicalSchemaTable';
@@ -10,7 +10,7 @@ import MiniLineageGraph from './MiniLineageGraph';
 const TABS = [
   { key: 'overview',       label: 'Overview' },
   { key: 'distributions',  label: 'Distributions' },
-  { key: 'schema',         label: 'Schema' },
+  { key: 'schema',         label: 'Model' },
   { key: 'lineage',        label: 'Lineage' },
   { key: 'access',         label: 'Access' },
 ] as const;
@@ -40,6 +40,14 @@ export default function DatasetDetailDrawer() {
     queryFn: () => datasetApi.getSemanticContext(openDatasetId!),
     enabled: !!openDatasetId && activeTab === 'overview',
     staleTime: 60_000,
+  });
+
+  const { data: owner } = useQuery({
+    queryKey: ['user-by-keycloak', dataset?.ownerId],
+    queryFn: () => userApi.getByKeycloakId(dataset!.ownerId!),
+    enabled: !!dataset?.ownerId && activeTab === 'overview',
+    staleTime: 300_000,
+    retry: false,
   });
 
   // Collect all IRI-valued fields for batch translation
@@ -150,6 +158,25 @@ export default function DatasetDetailDrawer() {
                 )}
 
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
+                  {dataset.ownerId && (
+                    <div className="col-span-2 flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-semibold flex-shrink-0">
+                        {owner
+                          ? (owner.firstName?.[0] ?? owner.email[0]).toUpperCase()
+                          : '?'}
+                      </div>
+                      <div className="min-w-0">
+                        <dt className="text-xs font-medium text-gray-500">Data Owner</dt>
+                        <dd className="text-gray-800 truncate">
+                          {owner
+                            ? (owner.firstName || owner.lastName
+                                ? `${owner.firstName ?? ''} ${owner.lastName ?? ''}`.trim()
+                                : owner.email)
+                            : <span className="text-gray-400 italic">Loading…</span>}
+                        </dd>
+                      </div>
+                    </div>
+                  )}
                   {dataset.version && <DlItem label="Version" value={dataset.version} />}
                   {dataset.accrualPeriodicity && <DlItem label="Frequency" value={friendlyPeriodicity(dataset.accrualPeriodicity)} />}
                   {dataset.license && <DlItem label="License" value={t(dataset.license)} />}

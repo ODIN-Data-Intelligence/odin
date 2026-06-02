@@ -81,6 +81,12 @@ server {
         proxy_pass http://$upstream_ai;
     }
 
+    # Identity service — user lookups (owner display)
+    location /api/v1/users {
+        set $upstream_identity identity-service:8006;
+        proxy_pass http://$upstream_identity;
+    }
+
     # Everything else → catalog service (inventory-service is the compose container name)
     location /api/ {
         set $upstream_catalog inventory-service:8001;

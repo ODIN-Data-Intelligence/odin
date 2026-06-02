@@ -81,6 +81,36 @@ public class AiServiceClient {
         ) {}
     }
 
+    public List<ElementDescriptionResult> describeElements(List<ElementClassificationInput> elements) {
+        log.info("action=AI_REQUEST_START operation=describeElements elementCount={}", elements.size());
+        long t = System.currentTimeMillis();
+        try {
+            DescribeResponse response = restClient.post()
+                .uri("/api/v1/describe/elements")
+                .body(new ClassifyRequest(elements))
+                .retrieve()
+                .body(DescribeResponse.class);
+            List<ElementDescriptionResult> results = response != null ? response.results() : List.of();
+            log.info("action=AI_REQUEST_COMPLETE operation=describeElements elementCount={} resultCount={} elapsed={}ms",
+                elements.size(), results.size(), System.currentTimeMillis() - t);
+            return results;
+        } catch (Exception e) {
+            log.warn("action=AI_REQUEST_FAILED operation=describeElements elementCount={} elapsed={}ms error={}",
+                elements.size(), System.currentTimeMillis() - t, e.getMessage());
+            throw new AiServiceUnavailableException("Description recommendation service is unavailable", e);
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ElementDescriptionResult(
+        String elementId,
+        String description,
+        String reasoning
+    ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record DescribeResponse(List<ElementDescriptionResult> results) {}
+
     public List<ElementClassificationResult> classify(List<ElementClassificationInput> elements) {
         log.info("action=AI_REQUEST_START operation=classify elementCount={}", elements.size());
         long t = System.currentTimeMillis();

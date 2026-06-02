@@ -6,12 +6,18 @@ import Button from '../ui/Button';
 
 interface OwnershipTransferModalProps {
   datasetId: string;
+  title?: string;
+  description?: string;
+  submitLabel?: string;
   onSuccess: (proposal: OwnershipProposal) => void;
   onCancel: () => void;
 }
 
 export default function OwnershipTransferModal({
   datasetId,
+  title = 'Propose Ownership Transfer',
+  description = 'The selected user will become owner once the current owner approves.',
+  submitLabel = 'Propose Transfer',
   onSuccess,
   onCancel,
 }: OwnershipTransferModalProps) {
@@ -24,7 +30,11 @@ export default function OwnershipTransferModal({
   });
 
   const mutation = useMutation({
-    mutationFn: () => datasetApi.proposeTransfer(datasetId, selectedId),
+    mutationFn: () => {
+      const user = users.find(u => u.id === selectedId);
+      const ownerId = user?.keycloakUserId ?? selectedId;
+      return datasetApi.proposeTransfer(datasetId, ownerId);
+    },
     onSuccess,
   });
 
@@ -41,10 +51,8 @@ export default function OwnershipTransferModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100">
-          <h2 className="text-base font-semibold text-gray-900">Propose Ownership Transfer</h2>
-          <p className="text-xs text-gray-500 mt-0.5">
-            The selected user will become owner once the current owner approves.
-          </p>
+          <h2 className="text-base font-semibold text-gray-900">{title}</h2>
+          <p className="text-xs text-gray-500 mt-0.5">{description}</p>
         </div>
         <div className="p-5 space-y-3">
           <input
@@ -95,7 +103,7 @@ export default function OwnershipTransferModal({
             disabled={!selectedId || mutation.isPending}
             onClick={() => mutation.mutate()}
           >
-            {mutation.isPending ? 'Submitting…' : 'Propose Transfer'}
+            {mutation.isPending ? 'Submitting…' : submitLabel}
           </Button>
         </div>
       </div>

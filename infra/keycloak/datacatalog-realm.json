@@ -29,7 +29,72 @@
       ],
       "webOrigins": ["+"],
       "protocol": "openid-connect",
-      "defaultClientScopes": ["openid", "profile", "email", "catalog-scopes"]
+      "defaultClientScopes": ["openid", "catalog-scopes"],
+      "protocolMappers": [
+        {
+          "name": "full name",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-full-name-mapper",
+          "config": {
+            "full.path": "name",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "given name",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "config": {
+            "user.attribute": "firstName",
+            "claim.name": "given_name",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "family name",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "config": {
+            "user.attribute": "lastName",
+            "claim.name": "family_name",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "email",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "config": {
+            "user.attribute": "email",
+            "claim.name": "email",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "config": {
+            "user.attribute": "username",
+            "claim.name": "preferred_username",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
     },
     {
       "clientId": "identity-service",
@@ -162,6 +227,79 @@
       "attributes": {
         "tenant_id":   ["00000000-0000-0000-0000-000000000001"],
         "permissions": ["catalog:read", "catalog:write"]
+      }
+    },
+    {
+      "username": "trading.owner@datacatalog.local",
+      "email": "trading.owner@datacatalog.local",
+      "firstName": "Alice",
+      "lastName": "Chen",
+      "enabled": true,
+      "credentials": [{ "type": "password", "value": "password", "temporary": true }],
+      "realmRoles": ["data-owner"],
+      "attributes": {
+        "tenant_id":   ["00000000-0000-0000-0000-000000000001"],
+        "permissions": ["catalog:read", "catalog:write"]
+      }
+    },
+    {
+      "username": "risk.owner@datacatalog.local",
+      "email": "risk.owner@datacatalog.local",
+      "firstName": "Marcus",
+      "lastName": "Webb",
+      "enabled": true,
+      "credentials": [{ "type": "password", "value": "password", "temporary": true }],
+      "realmRoles": ["data-owner"],
+      "attributes": {
+        "tenant_id":   ["00000000-0000-0000-0000-000000000001"],
+        "permissions": ["catalog:read", "catalog:write"]
+      }
+    },
+    {
+      "username": "refdata.owner@datacatalog.local",
+      "email": "refdata.owner@datacatalog.local",
+      "firstName": "Priya",
+      "lastName": "Nair",
+      "enabled": true,
+      "credentials": [{ "type": "password", "value": "password", "temporary": true }],
+      "realmRoles": ["data-owner"],
+      "attributes": {
+        "tenant_id":   ["00000000-0000-0000-0000-000000000001"],
+        "permissions": ["catalog:read", "catalog:write"]
+      }
+    },
+    {
+      "username": "compliance.owner@datacatalog.local",
+      "email": "compliance.owner@datacatalog.local",
+      "firstName": "David",
+      "lastName": "Park",
+      "enabled": true,
+      "credentials": [{ "type": "password", "value": "password", "temporary": true }],
+      "realmRoles": ["data-owner"],
+      "attributes": {
+        "tenant_id":   ["00000000-0000-0000-0000-000000000001"],
+        "permissions": ["catalog:read", "catalog:write"]
+      }
+    },
+    {
+      "username": "finance.owner@datacatalog.local",
+      "email": "finance.owner@datacatalog.local",
+      "firstName": "Sofia",
+      "lastName": "Reyes",
+      "enabled": true,
+      "credentials": [{ "type": "password", "value": "password", "temporary": true }],
+      "realmRoles": ["data-owner"],
+      "attributes": {
+        "tenant_id":   ["00000000-0000-0000-0000-000000000001"],
+        "permissions": ["catalog:read", "catalog:write"]
+      }
+    },
+    {
+      "username": "service-account-identity-service",
+      "serviceAccountClientId": "identity-service",
+      "enabled": true,
+      "clientRoles": {
+        "realm-management": ["view-users", "manage-users", "query-users", "query-roles", "view-realm"]
       }
     }
   ],

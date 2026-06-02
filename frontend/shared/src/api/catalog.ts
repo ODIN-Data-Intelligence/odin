@@ -5,7 +5,7 @@ import type {
   Vocabulary, DatasetVocabularyProfile, VocabularyConcept,
   ColumnElementSuggestion, DatasetAuditEntry, OwnershipProposal,
   BulkRecommendationJob, DatasetSemanticContext, SemanticContextRecommendation,
-  AcceptedSemanticTag,
+  AcceptedSemanticTag, DashboardSummary, UserActivity,
 } from '../types/catalog';
 
 const BASE = '/api/v1';
@@ -42,10 +42,10 @@ export const datasetApi = {
     post<OwnershipProposal>(`${BASE}/datasets/${id}/ownership-proposals`, { proposedOwnerId }),
   getPendingProposal: (id: string) =>
     get<OwnershipProposal | null>(`${BASE}/datasets/${id}/ownership-proposals/pending`),
-  approveTransfer: (id: string, proposalId: string) =>
-    post<Dataset>(`${BASE}/datasets/${id}/ownership-proposals/${proposalId}/approve`, {}),
-  rejectTransfer: (id: string, proposalId: string) =>
-    post<OwnershipProposal>(`${BASE}/datasets/${id}/ownership-proposals/${proposalId}/reject`, {}),
+  approveTransfer: (id: string, proposalId: string, note?: string) =>
+    post<Dataset>(`${BASE}/datasets/${id}/ownership-proposals/${proposalId}/approve`, { note }),
+  rejectTransfer: (id: string, proposalId: string, note?: string) =>
+    post<OwnershipProposal>(`${BASE}/datasets/${id}/ownership-proposals/${proposalId}/reject`, { note }),
   // Audit history
   getHistory: (id: string, page = 0, size = 20) =>
     get<PageResponse<DatasetAuditEntry>>(`${BASE}/datasets/${id}/history?page=${page}&size=${size}`),
@@ -148,6 +148,22 @@ export const logicalElementApi = {
     post<BulkRecommendationJob>(`${BASE}/logical-models/${modelId}/recommend-classifications`, {}),
   getRecommendationJob: (jobId: string) =>
     get<BulkRecommendationJob>(`${BASE}/logical-models/recommend-classifications/jobs/${jobId}`),
+  recommendDescription: (id: string) =>
+    post<LogicalDataElement>(`${BASE}/logical-data-elements/${id}/recommend-description`, {}),
+  acceptDescription: (id: string) =>
+    post<LogicalDataElement>(`${BASE}/logical-data-elements/${id}/accept-description`, {}),
+  rejectDescription: (id: string) =>
+    post<LogicalDataElement>(`${BASE}/logical-data-elements/${id}/reject-description`, {}),
+  recommendModelDescriptions: (modelId: string) =>
+    post<BulkRecommendationJob>(`${BASE}/logical-models/${modelId}/recommend-descriptions`, {}),
+  getDescriptionRecommendationJob: (jobId: string) =>
+    get<BulkRecommendationJob>(`${BASE}/logical-models/recommend-descriptions/jobs/${jobId}`),
+};
+
+// Dashboard
+export const dashboardApi = {
+  getSummary:  () => get<DashboardSummary>(`${BASE}/dashboard/summary`),
+  getActivity: () => get<UserActivity>(`${BASE}/dashboard/activity`),
 };
 
 // Vocabulary Mappings
