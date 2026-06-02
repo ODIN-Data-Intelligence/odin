@@ -28,6 +28,9 @@ public record OwnershipProposalResponse(
     OffsetDateTime createdAt,
 
     @Schema(description = "When the proposal was approved or rejected", accessMode = Schema.AccessMode.READ_ONLY)
-    OffsetDateTime resolvedAt
+    OffsetDateTime resolvedAt,
+
+    @Schema(description = "Optional note left by the approver or rejector", example = "Transferring ownership to the trading desk lead")
+    String note
 
 ) {}

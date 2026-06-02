@@ -68,20 +68,29 @@ describe('ClassificationRecommendationRow', () => {
     expect(screen.getByText('Contains financial transaction data.')).toBeInTheDocument();
   });
 
-  it('should show Accept and Reject buttons', () => {
+  it('should show Accept and Reject buttons when canAction is true', () => {
     render(
-      <table><tbody><ClassificationRecommendationRow element={ELEMENT} modelId="model-1" /></tbody></table>,
+      <table><tbody><ClassificationRecommendationRow element={ELEMENT} modelId="model-1" canAction={true} /></tbody></table>,
       { wrapper },
     );
     expect(screen.getByRole('button', { name: 'Accept' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument();
   });
 
+  it('should not show Accept and Reject buttons when canAction is false', () => {
+    render(
+      <table><tbody><ClassificationRecommendationRow element={ELEMENT} modelId="model-1" canAction={false} /></tbody></table>,
+      { wrapper },
+    );
+    expect(screen.queryByRole('button', { name: 'Accept' })).not.toBeInTheDocument();
+    expect(screen.getByText('Owner only')).toBeInTheDocument();
+  });
+
   it('should call acceptClassification when Accept is clicked', async () => {
     mockedApi.acceptClassification.mockResolvedValue({ ...ELEMENT, classification: 'CONFIDENTIAL' });
     const user = userEvent.setup();
     render(
-      <table><tbody><ClassificationRecommendationRow element={ELEMENT} modelId="model-1" /></tbody></table>,
+      <table><tbody><ClassificationRecommendationRow element={ELEMENT} modelId="model-1" canAction={true} /></tbody></table>,
       { wrapper },
     );
     await user.click(screen.getByRole('button', { name: 'Accept' }));
@@ -92,7 +101,7 @@ describe('ClassificationRecommendationRow', () => {
     mockedApi.rejectClassification.mockResolvedValue({ ...ELEMENT, recommendedClassification: undefined });
     const user = userEvent.setup();
     render(
-      <table><tbody><ClassificationRecommendationRow element={ELEMENT} modelId="model-1" /></tbody></table>,
+      <table><tbody><ClassificationRecommendationRow element={ELEMENT} modelId="model-1" canAction={true} /></tbody></table>,
       { wrapper },
     );
     await user.click(screen.getByRole('button', { name: 'Reject' }));

@@ -52,6 +52,20 @@ public class UsersController {
         return userService.get(id);
     }
 
+    @Operation(summary = "Get user by Keycloak ID",
+        description = "Looks up a user by their Keycloak subject UUID. Used by services that store the Keycloak UUID as an owner reference.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "User found"),
+        @ApiResponse(responseCode = "404", description = "User not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @GetMapping("/by-keycloak/{keycloakId}")
+    public UserResponse getByKeycloakId(
+            @Parameter(description = "Keycloak subject UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
+            @PathVariable String keycloakId) {
+        return userService.getByKeycloakId(keycloakId);
+    }
+
     @Operation(summary = "Invite a user",
         description = "Creates a Keycloak account for the user and sends an invitation email. "
             + "The user must complete registration before they can log in.")
@@ -66,6 +80,37 @@ public class UsersController {
     @ResponseStatus(HttpStatus.CREATED)
     public UserResponse invite(@Valid @RequestBody UserRequest request) {
         return userService.invite(request);
+    }
+
+    @Operation(summary = "Update a user",
+        description = "Updates the user's name and/or role assignments. Only provided fields are changed.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "User updated"),
+        @ApiResponse(responseCode = "404", description = "User not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content),
+        @ApiResponse(responseCode = "403", description = "Insufficient permissions", content = @Content)
+    })
+    @PutMapping("/{id}")
+    public UserResponse update(
+            @Parameter(description = "User UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
+            @PathVariable UUID id,
+            @Valid @RequestBody UserRequest request) {
+        return userService.update(id, request);
+    }
+
+    @Operation(summary = "Activate a user",
+        description = "Re-enables a previously deactivated user account.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "User activated"),
+        @ApiResponse(responseCode = "404", description = "User not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content),
+        @ApiResponse(responseCode = "403", description = "Insufficient permissions", content = @Content)
+    })
+    @PostMapping("/{id}/activate")
+    public UserResponse activate(
+            @Parameter(description = "User UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
+            @PathVariable UUID id) {
+        return userService.activate(id);
     }
 
     @Operation(summary = "Deactivate a user",

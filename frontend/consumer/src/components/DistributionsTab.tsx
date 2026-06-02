@@ -140,6 +140,35 @@ function DistributionCard({ dist, elements }: { dist: Distribution; elements: Lo
           </div>
         )}
 
+        {(dist.databaseName || dist.schemaName || dist.tableName) && (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <p className="text-xs font-medium text-gray-400 mb-2">Table Location</p>
+            <code className="text-sm font-mono font-semibold text-gray-900">
+              {[dist.databaseName, dist.schemaName, dist.tableName].filter(Boolean).join('.')}
+            </code>
+            <dl className="mt-2 flex gap-5 text-xs">
+              {dist.databaseName && (
+                <div>
+                  <dt className="text-gray-400 font-medium">Database</dt>
+                  <dd className="text-gray-700 font-mono mt-0.5">{dist.databaseName}</dd>
+                </div>
+              )}
+              {dist.schemaName && (
+                <div>
+                  <dt className="text-gray-400 font-medium">Schema</dt>
+                  <dd className="text-gray-700 font-mono mt-0.5">{dist.schemaName}</dd>
+                </div>
+              )}
+              {dist.tableName && (
+                <div>
+                  <dt className="text-gray-400 font-medium">Table</dt>
+                  <dd className="text-gray-700 font-mono mt-0.5">{dist.tableName}</dd>
+                </div>
+              )}
+            </dl>
+          </div>
+        )}
+
         <PhysicalSchemaSection columns={columns} isLoading={schemaLoading} elements={elements} />
       </div>
     </div>

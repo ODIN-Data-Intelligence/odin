@@ -23,4 +23,6 @@ public interface DatasetRepository extends JpaRepository<DatasetEntity, UUID> {
            countQuery = "SELECT count(*) FROM datasets d JOIN resources r ON r.id = d.resource_id WHERE r.tenant_id = :tenantId AND r.is_deleted = false AND :keyword = ANY(r.keywords)",
            nativeQuery = true)
     Page<DatasetEntity> findByTenantIdAndKeyword(UUID tenantId, String keyword, Pageable pageable);
+
+    long countByOwnerIdAndTenantIdAndIsDeletedFalse(UUID ownerId, UUID tenantId);
 }

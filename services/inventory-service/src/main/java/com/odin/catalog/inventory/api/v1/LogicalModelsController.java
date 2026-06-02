@@ -295,6 +295,50 @@ public class LogicalModelsController {
         return logicalModelService.rejectClassification(elementId);
     }
 
+    @Operation(summary = "Request AI description recommendation",
+        description = "Uses the AI service to generate a description for this element based on its vocabulary concept mappings. "
+            + "The recommended description is stored as a pending suggestion and must be accepted or rejected.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Recommendation generated"),
+        @ApiResponse(responseCode = "404", description = "Element not found", content = @Content),
+        @ApiResponse(responseCode = "503", description = "AI service unavailable", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @PostMapping("/api/v1/logical-data-elements/{elementId}/recommend-description")
+    public LogicalDataElementResponse recommendDescription(
+            @Parameter(description = "Logical data element UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
+            @PathVariable UUID elementId) {
+        return logicalModelService.recommendDescription(elementId);
+    }
+
+    @Operation(summary = "Accept the pending AI description recommendation",
+        description = "Copies the recommended description to the element's description and clears the recommendation.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Description accepted"),
+        @ApiResponse(responseCode = "404", description = "Element not found or no pending recommendation", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @PostMapping("/api/v1/logical-data-elements/{elementId}/accept-description")
+    public LogicalDataElementResponse acceptDescription(
+            @Parameter(description = "Logical data element UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
+            @PathVariable UUID elementId) {
+        return logicalModelService.acceptDescription(elementId);
+    }
+
+    @Operation(summary = "Reject the pending AI description recommendation",
+        description = "Clears the pending description recommendation without changing the current description.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Recommendation rejected"),
+        @ApiResponse(responseCode = "404", description = "Element not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @PostMapping("/api/v1/logical-data-elements/{elementId}/reject-description")
+    public LogicalDataElementResponse rejectDescription(
+            @Parameter(description = "Logical data element UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
+            @PathVariable UUID elementId) {
+        return logicalModelService.rejectDescription(elementId);
+    }
+
     @Operation(summary = "Batch-recommend classifications for all elements in a model",
         description = "Enqueues an AI classification job for every element in the model. "
             + "Returns 202 Accepted with a jobId — poll GET .../jobs/{jobId} for status.")
@@ -327,6 +371,38 @@ public class LogicalModelsController {
         return jobRegistry.get(jobId)
             .map(this::toJobResponse)
             .orElseThrow(() -> new NoSuchElementException("Recommendation job not found: " + jobId));
+    }
+
+    @Operation(summary = "Batch-recommend descriptions for all elements in a model",
+        description = "Enqueues an AI description job for every element in the model. "
+            + "Returns 202 Accepted with a jobId — poll GET .../jobs/{jobId} for status.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "202", description = "Job accepted"),
+        @ApiResponse(responseCode = "404", description = "Logical model not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @PostMapping("/api/v1/logical-models/{modelId}/recommend-descriptions")
+    public ResponseEntity<BulkRecommendationJobResponse> recommendModelDescriptions(
+            @Parameter(description = "Logical model UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
+            @PathVariable UUID modelId) {
+        UUID jobId = jobRegistry.register(modelId);
+        logicalModelService.recommendModelDescriptions(modelId, jobId);
+        return ResponseEntity.accepted().body(toJobResponse(jobRegistry.get(jobId).orElseThrow()));
+    }
+
+    @Operation(summary = "Get bulk description recommendation job status")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Job status"),
+        @ApiResponse(responseCode = "404", description = "Job not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @GetMapping("/api/v1/logical-models/recommend-descriptions/jobs/{jobId}")
+    public BulkRecommendationJobResponse getDescriptionRecommendationJob(
+            @Parameter(description = "Job UUID returned by the POST endpoint")
+            @PathVariable UUID jobId) {
+        return jobRegistry.get(jobId)
+            .map(this::toJobResponse)
+            .orElseThrow(() -> new NoSuchElementException("Description recommendation job not found: " + jobId));
     }
 
     private BulkRecommendationJobResponse toJobResponse(BulkRecommendationJobRegistry.Job job) {
