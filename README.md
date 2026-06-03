@@ -326,14 +326,19 @@ Authorization is enforced from the token's `permissions` claim: `GET` requests n
 
 ### Default users
 
-The realm seeds one account per role (change these before any non-local deployment):
+The realm seeds one account per role plus five additional data owners for development and testing (change these before any non-local deployment):
 
-| Username | Role | Password |
-|----------|------|----------|
-| `admin@datacatalog.local` | Administrator | `admin` |
-| `governance@datacatalog.local` | Data Governance | `password` |
-| `owner@datacatalog.local` | Data Owner | `password` |
-| `steward@datacatalog.local` | Data Steward | `password` |
+| Username | Name | Role | Password |
+|----------|------|------|----------|
+| `admin@datacatalog.local` | Catalog Admin | Administrator | `admin` |
+| `governance@datacatalog.local` | Grace Governance | Data Governance | `password` |
+| `owner@datacatalog.local` | Owen Owner | Data Owner | `password` |
+| `steward@datacatalog.local` | Sam Steward | Data Steward | `password` |
+| `trading.owner@datacatalog.local` | Alice Chen | Data Owner | `password` |
+| `risk.owner@datacatalog.local` | Marcus Webb | Data Owner | `password` |
+| `refdata.owner@datacatalog.local` | Priya Nair | Data Owner | `password` |
+| `compliance.owner@datacatalog.local` | David Park | Data Owner | `password` |
+| `finance.owner@datacatalog.local` | Sofia Reyes | Data Owner | `password` |
 
 Manage users via the producer **Admin › Users** page (administrator only) or the identity-service
 endpoints (backed by the Keycloak Admin API) — invite, list, and deactivate.

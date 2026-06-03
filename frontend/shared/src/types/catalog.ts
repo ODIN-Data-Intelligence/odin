@@ -29,6 +29,29 @@ export interface Dataset extends Resource {
   distributions?: Distribution[];
   logicalModels?: LogicalModel[];
   semanticTypes?: string[];
+  hasPolicy?: string;
+}
+
+export interface TermsOfUseDerivationDetails {
+  totalPublishedElementCount: number;
+  classifiedElementCount: number;
+  elementsWithVocabCount: number;
+  distinctClassifications: string[];
+  vocabConceptCount: number;
+  matchedSignals: string[];
+  readyToAccept: boolean;
+}
+
+export interface TermsOfUse {
+  effectiveClassification?: string;
+  accessLevel?: 'OPEN' | 'INTERNAL_ONLY' | 'RESTRICTED' | 'HIGHLY_RESTRICTED';
+  permissions: string[];
+  prohibitions: string[];
+  obligations: string[];
+  applicableRegulations: string[];
+  odrlPolicy?: Record<string, unknown>;
+  policySource?: 'derived' | 'explicit' | 'fallback';
+  derivationDetails?: TermsOfUseDerivationDetails;
 }
 
 export interface AcceptedSemanticTag {
@@ -79,6 +102,7 @@ export interface OwnershipProposal {
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
   createdAt: string;
   resolvedAt?: string;
+  note?: string;
 }
 
 export interface Distribution extends Resource {
@@ -93,6 +117,9 @@ export interface Distribution extends Resource {
   csvwTableId?: string;
   compressFormat?: string;
   availability?: string;
+  databaseName?: string;
+  schemaName?: string;
+  tableName?: string;
 }
 
 export interface DataProduct extends Resource {
@@ -187,6 +214,14 @@ export interface LogicalModel {
   updatedAt: string;
 }
 
+export interface RecommendedVocabMapping {
+  conceptIri: string;
+  conceptLabel?: string;
+  conceptDefinition?: string;
+  matchType: string;
+  reasoning?: string;
+}
+
 export interface LogicalDataElement {
   id: string;
   logicalModelId: string;
@@ -208,6 +243,12 @@ export interface LogicalDataElement {
   recommendedClassification?: 'PUBLIC' | 'INTERNAL' | 'CONFIDENTIAL' | 'HIGH_CONFIDENTIAL';
   classificationReasoning?: string;
   classificationRecommendedAt?: string;
+  recommendedDescription?: string;
+  descriptionReasoning?: string;
+  descriptionRecommendedAt?: string;
+  recommendedVocabMappings?: RecommendedVocabMapping[];
+  vocabMappingReasoning?: string;
+  vocabMappingRecommendedAt?: string;
 }
 
 export interface LogicalElementVocabMapping {
@@ -245,4 +286,36 @@ export interface PageResponse<T> {
   totalPages: number;
   size: number;
   number: number;
+}
+
+export interface DashboardSummary {
+  ownedDatasetCount: number;
+  ownedDataProductCount: number;
+  pendingTransferRequests: OwnershipProposal[];
+}
+
+export interface ActivityProposal {
+  id: string;
+  datasetId: string;
+  datasetTitle: string;
+  proposedOwnerId: string;
+  proposedById: string;
+  role: 'PROPOSER' | 'NOMINEE';
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  createdAt: string;
+  resolvedAt?: string;
+  note?: string;
+}
+
+export interface ActivityChange {
+  id: string;
+  datasetId: string;
+  datasetTitle: string;
+  eventType: string;
+  createdAt: string;
+}
+
+export interface UserActivity {
+  proposals: ActivityProposal[];
+  changes: ActivityChange[];
 }

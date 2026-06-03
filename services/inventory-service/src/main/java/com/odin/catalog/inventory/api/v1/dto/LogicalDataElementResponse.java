@@ -68,6 +68,24 @@ public record LogicalDataElementResponse(
     String classificationReasoning,
 
     @Schema(description = "When the AI recommendation was generated", accessMode = Schema.AccessMode.READ_ONLY)
-    OffsetDateTime classificationRecommendedAt
+    OffsetDateTime classificationRecommendedAt,
+
+    @Schema(description = "AI-recommended description pending review")
+    String recommendedDescription,
+
+    @Schema(description = "One-sentence reasoning from the AI for the description recommendation")
+    String descriptionReasoning,
+
+    @Schema(description = "When the description recommendation was generated", accessMode = Schema.AccessMode.READ_ONLY)
+    OffsetDateTime descriptionRecommendedAt,
+
+    @Schema(description = "AI-recommended vocabulary concept mappings pending review")
+    java.util.List<RecommendedVocabMapping> recommendedVocabMappings,
+
+    @Schema(description = "Overall reasoning for the vocabulary concept recommendations")
+    String vocabMappingReasoning,
+
+    @Schema(description = "When the vocabulary concept recommendations were generated", accessMode = Schema.AccessMode.READ_ONLY)
+    OffsetDateTime vocabMappingRecommendedAt
 
 ) {}

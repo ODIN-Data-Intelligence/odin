@@ -1,14 +1,15 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { logicalElementApi } from '@datacatalog/shared';
 import type { LogicalDataElement } from '@datacatalog/shared';
-import ClassificationBadge from './ClassificationBadge';
+import { ClassificationBadge } from '@datacatalog/shared';
 
 interface Props {
   element: LogicalDataElement;
   modelId: string;
+  canAction: boolean;
 }
 
-export default function ClassificationRecommendationRow({ element, modelId }: Props) {
+export default function ClassificationRecommendationRow({ element, modelId, canAction }: Props) {
   const qc = useQueryClient();
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['logical-elements', modelId] });
@@ -39,22 +40,26 @@ export default function ClassificationRecommendationRow({ element, modelId }: Pr
               <p className="text-xs text-amber-700 italic">{element.classificationReasoning}</p>
             )}
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => accept.mutate()}
-              disabled={isPending}
-              className="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {accept.isPending ? 'Accepting…' : 'Accept'}
-            </button>
-            <button
-              onClick={() => reject.mutate()}
-              disabled={isPending}
-              className="px-3 py-1.5 bg-white text-gray-700 text-xs font-medium rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {reject.isPending ? 'Rejecting…' : 'Reject'}
-            </button>
-          </div>
+          {canAction ? (
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => accept.mutate()}
+                disabled={isPending}
+                className="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {accept.isPending ? 'Accepting…' : 'Accept'}
+              </button>
+              <button
+                onClick={() => reject.mutate()}
+                disabled={isPending}
+                className="px-3 py-1.5 bg-white text-gray-700 text-xs font-medium rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {reject.isPending ? 'Rejecting…' : 'Reject'}
+              </button>
+            </div>
+          ) : (
+            <p className="text-xs text-amber-600 italic shrink-0">Owner only</p>
+          )}
         </div>
       </td>
     </tr>

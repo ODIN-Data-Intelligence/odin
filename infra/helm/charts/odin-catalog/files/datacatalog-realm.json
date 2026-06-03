@@ -8,10 +8,8 @@
   "resetPasswordAllowed": true,
   "editUsernameAllowed": false,
   "bruteForceProtected": true,
-
   "accessTokenLifespan": 3600,
   "refreshTokenMaxReuse": 0,
-
   "clients": [
     {
       "clientId": "catalog-frontend",
@@ -27,9 +25,79 @@
         "http://localhost:3000/*",
         "http://localhost:3001/*"
       ],
-      "webOrigins": ["+"],
+      "webOrigins": [
+        "+"
+      ],
       "protocol": "openid-connect",
-      "defaultClientScopes": ["openid", "profile", "email", "catalog-scopes"]
+      "defaultClientScopes": [
+        "openid",
+        "catalog-scopes"
+      ],
+      "protocolMappers": [
+        {
+          "name": "full name",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-full-name-mapper",
+          "config": {
+            "full.path": "name",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "given name",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "config": {
+            "user.attribute": "firstName",
+            "claim.name": "given_name",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "family name",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "config": {
+            "user.attribute": "lastName",
+            "claim.name": "family_name",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "email",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "config": {
+            "user.attribute": "email",
+            "claim.name": "email",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "config": {
+            "user.attribute": "username",
+            "claim.name": "preferred_username",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
     },
     {
       "clientId": "identity-service",
@@ -52,15 +120,18 @@
       "secret": "catalog-api-secret",
       "bearerOnly": true,
       "protocol": "openid-connect",
-      "defaultClientScopes": ["catalog-scopes"]
+      "defaultClientScopes": [
+        "catalog-scopes"
+      ]
     }
   ],
-
   "clientScopes": [
     {
       "name": "catalog-scopes",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "true" },
+      "attributes": {
+        "include.in.token.scope": "true"
+      },
       "protocolMappers": [
         {
           "name": "tenant_id",
@@ -89,17 +160,30 @@
       ]
     }
   ],
-
   "roles": {
     "realm": [
-      { "name": "catalog-admin",    "description": "Full catalog administration" },
-      { "name": "data-steward",     "description": "Can publish and govern datasets" },
-      { "name": "data-owner",       "description": "Owns data products in their domain" },
-      { "name": "data-engineer",    "description": "Configures harvest sources and jobs" },
-      { "name": "data-consumer",    "description": "Can discover and read datasets" }
+      {
+        "name": "catalog-admin",
+        "description": "Full catalog administration"
+      },
+      {
+        "name": "data-steward",
+        "description": "Can publish and govern datasets"
+      },
+      {
+        "name": "data-owner",
+        "description": "Owns data products in their domain"
+      },
+      {
+        "name": "data-engineer",
+        "description": "Configures harvest sources and jobs"
+      },
+      {
+        "name": "data-consumer",
+        "description": "Can discover and read datasets"
+      }
     ]
   },
-
   "users": [
     {
       "username": "admin@datacatalog.local",
@@ -107,9 +191,21 @@
       "firstName": "Catalog",
       "lastName": "Admin",
       "enabled": true,
-      "credentials": [{ "type": "password", "value": "admin", "temporary": false }],
-      "realmRoles": ["catalog-admin"],
-      "attributes": { "tenant_id": ["00000000-0000-0000-0000-000000000001"] }
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "catalog-admin"
+      ],
+      "attributes": {
+        "tenant_id": [
+          "00000000-0000-0000-0000-000000000001"
+        ]
+      }
     }
   ]
 }

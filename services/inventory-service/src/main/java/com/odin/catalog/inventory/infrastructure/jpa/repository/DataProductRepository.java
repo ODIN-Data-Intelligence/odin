@@ -14,4 +14,6 @@ public interface DataProductRepository extends JpaRepository<DataProductEntity, 
     Page<DataProductEntity> findByTenantIdAndDomainIdAndIsDeletedFalse(UUID tenantId, UUID domainId, Pageable pageable);
 
     Page<DataProductEntity> findByTenantIdAndLifecycleStatusAndIsDeletedFalse(UUID tenantId, String lifecycleStatus, Pageable pageable);
+
+    long countByOwnerIdAndTenantIdAndIsDeletedFalse(UUID ownerId, UUID tenantId);
 }

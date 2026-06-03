@@ -147,7 +147,7 @@ public class DatasetService {
     }
 
     @Transactional
-    public DatasetResponse approveTransfer(UUID datasetId, UUID proposalId) {
+    public DatasetResponse approveTransfer(UUID datasetId, UUID proposalId, String note) {
         DatasetEntity entity = findOrThrow(datasetId);
         UserContext uc = currentUser();
         UUID callerId = uc.id() != null ? UUID.fromString(uc.id()) : null;
@@ -168,6 +168,7 @@ public class DatasetService {
 
         proposal.setStatus("APPROVED");
         proposal.setResolvedAt(OffsetDateTime.now());
+        proposal.setNote(note);
         proposalRepository.save(proposal);
 
         entity.setOwnerId(proposal.getProposedOwnerId());
@@ -179,7 +180,7 @@ public class DatasetService {
     }
 
     @Transactional
-    public OwnershipProposalResponse rejectTransfer(UUID datasetId, UUID proposalId) {
+    public OwnershipProposalResponse rejectTransfer(UUID datasetId, UUID proposalId, String note) {
         DatasetEntity entity = findOrThrow(datasetId);
         UserContext uc = currentUser();
         UUID callerId = uc.id() != null ? UUID.fromString(uc.id()) : null;
@@ -199,6 +200,7 @@ public class DatasetService {
 
         proposal.setStatus("REJECTED");
         proposal.setResolvedAt(OffsetDateTime.now());
+        proposal.setNote(note);
         proposalRepository.save(proposal);
 
         audit(datasetId, "OWNER_TRANSFER_REJECTED", uc.id(), uc.email(), null, null, entity.getTenantId());
@@ -278,6 +280,7 @@ public class DatasetService {
         entity.setLicense(req.license());
         entity.setVersion(req.version());
         entity.setSourceUri(req.sourceUri());
+        entity.setHasPolicy(req.hasPolicy());
     }
 
     private DatasetEntity findOrThrow(UUID id) {
@@ -294,14 +297,15 @@ public class DatasetService {
             e.getLanguage(), e.getLicense(), e.getVersion(),
             e.getSourceUri(), e.isDeleted(),
             e.getCreatedAt(), e.getUpdatedAt(),
-            e.getOwnerId(), null
+            e.getOwnerId(), null, e.getHasPolicy()
         );
     }
 
     private OwnershipProposalResponse toProposalResponse(OwnershipProposalEntity e) {
         return new OwnershipProposalResponse(
             e.getId(), e.getDatasetId(), e.getProposedOwnerId(),
-            e.getProposedById(), e.getStatus(), e.getCreatedAt(), e.getResolvedAt()
+            e.getProposedById(), e.getStatus(), e.getCreatedAt(), e.getResolvedAt(),
+            e.getNote()
         );
     }
 

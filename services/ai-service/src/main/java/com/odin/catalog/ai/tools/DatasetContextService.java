@@ -20,17 +20,22 @@ public class DatasetContextService {
             You are a data catalog assistant. Use the available tools to retrieve complete \
             information about the requested dataset and return a concise, factual summary. \
             Always call getDatasetInfo first, then getLogicalElementsWithVocabulary. \
-            Do not add commentary — return only the retrieved facts.
+            When the user asks to write, generate, or suggest a SQL query: \
+            - If the user specifically asks for Snowflake SQL, call getSnowflakeQueryContext \
+              to get the Snowflake account, fully-qualified table name (DATABASE.SCHEMA.TABLE), \
+              and column schema before writing the query. \
+            - Otherwise call getQueryContext to detect the platform and retrieve schema. \
+            Do not add commentary — return only the retrieved facts and any requested SQL.
             """)
         String gatherContext(@UserMessage @V("prompt") String prompt);
     }
 
     private final DatasetContextAgent agent;
 
-    public DatasetContextService(OllamaChatModel ollamaChatModel, DatasetContextTool tool) {
+    public DatasetContextService(OllamaChatModel ollamaChatModel, DatasetContextTool contextTool, SqlGenerationTool sqlTool) {
         this.agent = AiServices.builder(DatasetContextAgent.class)
             .chatLanguageModel(ollamaChatModel)
-            .tools(tool)
+            .tools(contextTool, sqlTool)
             .build();
     }
 
@@ -42,6 +47,7 @@ public class DatasetContextService {
     public String buildFocusedContext(String datasetId, String userQuery, String conversationId) {
         // Ensure MDC is set for tool-call threads spawned by the LangChain4j agent
         MDC.put("conversationId", conversationId);
+        DatasetIdContext.set(datasetId);
         try {
             log.info("step=TOOL_CHAIN_INVOKE datasetId={} agent=DatasetContextAgent", datasetId);
             String result = agent.gatherContext(
@@ -54,6 +60,7 @@ public class DatasetContextService {
             log.warn("step=TOOL_CHAIN_ERROR datasetId={} error={}", datasetId, e.getMessage());
             return "";
         } finally {
+            DatasetIdContext.clear();
             MDC.remove("conversationId");
         }
     }

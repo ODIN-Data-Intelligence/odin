@@ -1,13 +1,33 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { datasetApi, userApi } from '@datacatalog/shared';
-import type { Dataset, OwnershipProposal } from '@datacatalog/shared';
-import Button from '../ui/Button';
+import type { Dataset, OwnershipProposal, User } from '@datacatalog/shared';
+import { useAuthStore } from '../../store/authStore';
+import { Button } from '@datacatalog/shared';
 import OwnershipTransferModal from './OwnershipTransferModal';
+import AssignOwnerModal from './AssignOwnerModal';
 
-// Stub: replace with real auth store when wired
-function useCurrentUserId(): string | null {
-  return null;
+function resolveUser(users: User[], id: string): User | undefined {
+  return users.find(u => u.keycloakUserId === id || u.id === id);
+}
+
+function userName(u: User | undefined): string | undefined {
+  if (!u) return undefined;
+  const name = `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim();
+  return name || undefined;
+}
+
+function UserChip({ users, id }: { users: User[]; id: string }) {
+  const u = resolveUser(users, id);
+  const name = userName(u);
+  const email = u?.email;
+  if (!name && !email) return <span className="font-mono text-xs text-gray-600">{id}</span>;
+  return (
+    <span className="inline-flex flex-col leading-tight">
+      {name && <span className="font-medium text-gray-800">{name}</span>}
+      {email && <span className="text-xs text-gray-500">{email}</span>}
+    </span>
+  );
 }
 
 interface OwnershipPanelProps {
@@ -17,24 +37,37 @@ interface OwnershipPanelProps {
 
 export default function OwnershipPanel({ dataset, onUpdated }: OwnershipPanelProps) {
   const qc = useQueryClient();
-  const currentUserId = useCurrentUserId();
+  const { userId, hasRole, hasAnyRole } = useAuthStore();
   const [showTransferModal, setShowTransferModal] = useState(false);
+  const [showAssignModal,   setShowAssignModal]   = useState(false);
+  const [showProposeModal,  setShowProposeModal]  = useState(false);
 
-  // Resolve owner display name
-  const { data: owner } = useQuery({
-    queryKey: ['user', dataset.ownerId],
-    queryFn: () => userApi.get(dataset.ownerId!),
-    enabled: !!dataset.ownerId,
+  // Fetch all users: powers the admin assign picker and proposal user display.
+  const { data: users = [] } = useQuery({
+    queryKey: ['users'],
+    queryFn: () => userApi.list(),
   });
 
-  // Check for pending proposal
+  // Direct lookup of the owner by Keycloak ID — more reliable than scanning the list
+  // because keycloakUserId is optional in the list response.
+  const { data: owner } = useQuery({
+    queryKey: ['user-by-keycloak', dataset.ownerId],
+    queryFn: () => userApi.getByKeycloakId(dataset.ownerId!),
+    enabled: !!dataset.ownerId,
+    staleTime: 300_000,
+    retry: false,
+  });
+
+  const currentLocalUser = users.find(u => u.keycloakUserId === userId);
+
+  // Pending proposal
   const { data: pendingProposal, refetch: refetchProposal } = useQuery({
     queryKey: ['pending-proposal', dataset.id],
     queryFn: () => datasetApi.getPendingProposal(dataset.id),
   });
 
   const assignMutation = useMutation({
-    mutationFn: (userId: string) => datasetApi.assignOwner(dataset.id, userId),
+    mutationFn: (assignUserId: string) => datasetApi.assignOwner(dataset.id, assignUserId),
     onSuccess: (updated) => {
       onUpdated(updated);
       qc.invalidateQueries({ queryKey: ['pending-proposal', dataset.id] });
@@ -42,7 +75,8 @@ export default function OwnershipPanel({ dataset, onUpdated }: OwnershipPanelPro
   });
 
   const approveMutation = useMutation({
-    mutationFn: (proposalId: string) => datasetApi.approveTransfer(dataset.id, proposalId),
+    mutationFn: ({ proposalId, note }: { proposalId: string; note?: string }) =>
+      datasetApi.approveTransfer(dataset.id, proposalId, note),
     onSuccess: (updated) => {
       onUpdated(updated);
       qc.invalidateQueries({ queryKey: ['pending-proposal', dataset.id] });
@@ -50,13 +84,22 @@ export default function OwnershipPanel({ dataset, onUpdated }: OwnershipPanelPro
   });
 
   const rejectMutation = useMutation({
-    mutationFn: (proposalId: string) => datasetApi.rejectTransfer(dataset.id, proposalId),
-    onSuccess: () => {
-      refetchProposal();
-    },
+    mutationFn: ({ proposalId, note }: { proposalId: string; note?: string }) =>
+      datasetApi.rejectTransfer(dataset.id, proposalId, note),
+    onSuccess: () => refetchProposal(),
   });
 
-  const isCurrentOwner = !!dataset.ownerId && dataset.ownerId === currentUserId;
+  // Role-based permissions.
+  // isCurrentOwner matches against Keycloak UUID (new data) or local catalog UUID (legacy data).
+  const canDirectAssign = hasRole('administrator');
+  const canProposeOwner = hasAnyRole(['data-governance', 'data-steward']) && !canDirectAssign;
+  const canClaimSelf    = hasRole('data-owner') && !!userId && !canDirectAssign && !canProposeOwner;
+  const isCurrentOwner  = !!dataset.ownerId && (
+    dataset.ownerId === userId ||
+    (!!currentLocalUser && dataset.ownerId === currentLocalUser.id)
+  );
+  // Nominated user can accept their own proposal on an unowned dataset.
+  const isProposedOwner = !!pendingProposal && pendingProposal.proposedOwnerId === userId;
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -64,16 +107,20 @@ export default function OwnershipPanel({ dataset, onUpdated }: OwnershipPanelPro
       <Section title="Data Owner">
         {!dataset.ownerId ? (
           <UnownedState
-            onAssignSelf={() => currentUserId && assignMutation.mutate(currentUserId)}
+            canDirectAssign={canDirectAssign}
+            canProposeOwner={canProposeOwner}
+            canClaimSelf={canClaimSelf}
+            onOpenPicker={() => setShowAssignModal(true)}
+            onOpenProposalPicker={() => setShowProposeModal(true)}
+            onClaimSelf={() => userId && assignMutation.mutate(userId)}
             isPending={assignMutation.isPending}
-            hasCurrentUser={!!currentUserId}
             error={assignMutation.isError}
           />
         ) : (
           <OwnedState
             ownerId={dataset.ownerId}
             ownerEmail={owner?.email}
-            ownerName={owner ? `${owner.firstName ?? ''} ${owner.lastName ?? ''}`.trim() : undefined}
+            ownerName={owner ? `${owner.firstName ?? ''} ${owner.lastName ?? ''}`.trim() || undefined : undefined}
             isCurrentOwner={isCurrentOwner}
             onTransfer={() => setShowTransferModal(true)}
           />
@@ -82,16 +129,31 @@ export default function OwnershipPanel({ dataset, onUpdated }: OwnershipPanelPro
 
       {/* Pending proposal section */}
       {pendingProposal && (
-        <Section title="Pending Transfer Proposal">
+        <Section title={dataset.ownerId ? 'Pending Transfer Proposal' : 'Pending Ownership Nomination'}>
           <ProposalCard
             proposal={pendingProposal}
-            isCurrentOwner={isCurrentOwner}
-            onApprove={() => approveMutation.mutate(pendingProposal.id)}
-            onReject={() => rejectMutation.mutate(pendingProposal.id)}
+            users={users}
+            isUnowned={!dataset.ownerId}
+            canAct={dataset.ownerId
+              ? (isCurrentOwner || canDirectAssign)
+              : (isCurrentOwner || isProposedOwner || canDirectAssign)}
+            onApprove={(note) => approveMutation.mutate({ proposalId: pendingProposal.id, note })}
+            onReject={(note) => rejectMutation.mutate({ proposalId: pendingProposal.id, note })}
             isApprovePending={approveMutation.isPending}
             isRejectPending={rejectMutation.isPending}
           />
         </Section>
+      )}
+
+      {showAssignModal && (
+        <AssignOwnerModal
+          datasetId={dataset.id}
+          onSuccess={(updated) => {
+            setShowAssignModal(false);
+            onUpdated(updated);
+          }}
+          onCancel={() => setShowAssignModal(false)}
+        />
       )}
 
       {showTransferModal && (
@@ -102,6 +164,20 @@ export default function OwnershipPanel({ dataset, onUpdated }: OwnershipPanelPro
             qc.setQueryData(['pending-proposal', dataset.id], proposal);
           }}
           onCancel={() => setShowTransferModal(false)}
+        />
+      )}
+
+      {showProposeModal && (
+        <OwnershipTransferModal
+          datasetId={dataset.id}
+          title="Nominate Data Owner"
+          description="Select the user you are proposing as data owner. They will be notified and can accept the nomination."
+          submitLabel="Nominate"
+          onSuccess={(proposal) => {
+            setShowProposeModal(false);
+            qc.setQueryData(['pending-proposal', dataset.id], proposal);
+          }}
+          onCancel={() => setShowProposeModal(false)}
         />
       )}
     </div>
@@ -120,14 +196,22 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function UnownedState({
-  onAssignSelf,
+  canDirectAssign,
+  canProposeOwner,
+  canClaimSelf,
+  onOpenPicker,
+  onOpenProposalPicker,
+  onClaimSelf,
   isPending,
-  hasCurrentUser,
   error,
 }: {
-  onAssignSelf: () => void;
+  canDirectAssign: boolean;
+  canProposeOwner: boolean;
+  canClaimSelf: boolean;
+  onOpenPicker: () => void;
+  onOpenProposalPicker: () => void;
+  onClaimSelf: () => void;
   isPending: boolean;
-  hasCurrentUser: boolean;
   error: boolean;
 }) {
   return (
@@ -141,11 +225,23 @@ function UnownedState({
         </p>
         {error && <p className="text-xs text-red-600 mt-1">Failed to assign owner. Please try again.</p>}
       </div>
-      {hasCurrentUser && (
-        <Button size="sm" onClick={onAssignSelf} disabled={isPending}>
-          {isPending ? 'Assigning…' : 'Assign myself as owner'}
-        </Button>
-      )}
+      <div className="flex flex-col gap-2 shrink-0">
+        {canDirectAssign && (
+          <Button size="sm" onClick={onOpenPicker} disabled={isPending}>
+            Assign Owner
+          </Button>
+        )}
+        {canProposeOwner && (
+          <Button size="sm" variant="secondary" onClick={onOpenProposalPicker} disabled={isPending}>
+            Propose Owner
+          </Button>
+        )}
+        {canClaimSelf && (
+          <Button size="sm" variant="secondary" onClick={onClaimSelf} disabled={isPending}>
+            {isPending ? 'Claiming…' : 'Claim as Owner'}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
@@ -184,58 +280,96 @@ function OwnedState({
 
 function ProposalCard({
   proposal,
-  isCurrentOwner,
+  users,
+  isUnowned,
+  canAct,
   onApprove,
   onReject,
   isApprovePending,
   isRejectPending,
 }: {
   proposal: OwnershipProposal;
-  isCurrentOwner: boolean;
-  onApprove: () => void;
-  onReject: () => void;
+  users: User[];
+  isUnowned: boolean;
+  canAct: boolean;
+  onApprove: (note?: string) => void;
+  onReject: (note?: string) => void;
   isApprovePending: boolean;
   isRejectPending: boolean;
 }) {
+  const [action, setAction] = useState<'approve' | 'decline' | null>(null);
+  const [note, setNote] = useState('');
   const created = new Date(proposal.createdAt).toLocaleDateString(undefined, { dateStyle: 'medium' });
+  const isPending = isApprovePending || isRejectPending;
+
+  function confirm() {
+    if (action === 'approve') onApprove(note.trim() || undefined);
+    else onReject(note.trim() || undefined);
+  }
+
+  function cancel() { setAction(null); setNote(''); }
 
   return (
     <div className="p-4 rounded-lg border border-amber-200 bg-amber-50 space-y-3">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">
-            PENDING
-          </span>
-          <p className="text-sm text-gray-700 mt-1.5">
-            Transfer to <span className="font-medium font-mono text-xs">{proposal.proposedOwnerId}</span>
-          </p>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Proposed by <span className="font-mono">{proposal.proposedById}</span> on {created}
-          </p>
+      <div>
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">
+          PENDING
+        </span>
+        <p className="text-sm text-gray-700 mt-1.5 flex items-center gap-1.5 flex-wrap">
+          <span>{isUnowned ? 'Nominated owner:' : 'Transfer to'}</span>
+          <UserChip users={users} id={proposal.proposedOwnerId} />
+        </p>
+        <p className="text-xs text-gray-500 mt-1 flex items-center gap-1.5 flex-wrap">
+          <span>Proposed by</span>
+          <UserChip users={users} id={proposal.proposedById} />
+          <span>on {created}</span>
+        </p>
+      </div>
+
+      {canAct && !action && (
+        <div className="flex items-center gap-2">
+          <Button size="sm" onClick={() => setAction('approve')} disabled={isPending}>
+            {isUnowned ? 'Accept' : 'Approve'}
+          </Button>
+          <Button size="sm" variant="danger" onClick={() => setAction('decline')} disabled={isPending}>
+            Decline
+          </Button>
         </div>
-        {isCurrentOwner && (
-          <div className="flex items-center gap-2 flex-shrink-0">
+      )}
+
+      {canAct && action && (
+        <div className="space-y-2">
+          <textarea
+            value={note}
+            onChange={e => setNote(e.target.value)}
+            placeholder={`Optional note for ${action === 'approve' ? (isUnowned ? 'accepting' : 'approving') : 'declining'}…`}
+            rows={2}
+            className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            autoFocus
+          />
+          <div className="flex items-center gap-2">
             <Button
               size="sm"
-              onClick={onApprove}
-              disabled={isApprovePending || isRejectPending}
+              variant={action === 'approve' ? 'primary' : 'danger'}
+              onClick={confirm}
+              disabled={isPending}
             >
-              {isApprovePending ? 'Approving…' : 'Approve'}
+              {isPending
+                ? (action === 'approve' ? (isUnowned ? 'Accepting…' : 'Approving…') : 'Declining…')
+                : (action === 'approve' ? (isUnowned ? 'Confirm Accept' : 'Confirm Approve') : 'Confirm Decline')}
             </Button>
-            <Button
-              size="sm"
-              variant="danger"
-              onClick={onReject}
-              disabled={isApprovePending || isRejectPending}
-            >
-              {isRejectPending ? 'Rejecting…' : 'Reject'}
+            <Button size="sm" variant="ghost" onClick={cancel} disabled={isPending}>
+              Cancel
             </Button>
           </div>
-        )}
-      </div>
-      {!isCurrentOwner && (
+        </div>
+      )}
+
+      {!canAct && (
         <p className="text-xs text-gray-500">
-          Awaiting approval from the current owner.
+          {isUnowned
+            ? 'Awaiting acceptance from the nominated user.'
+            : 'Awaiting approval from the current owner.'}
         </p>
       )}
     </div>

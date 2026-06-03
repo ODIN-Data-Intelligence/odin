@@ -2,9 +2,10 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { datasetApi } from '@datacatalog/shared';
 import type { Distribution } from '@datacatalog/shared';
-import PageHeader from '../components/ui/PageHeader';
+import { PageHeader } from '@datacatalog/shared';
 import PhysicalSchemaSection from '../components/catalog/PhysicalSchemaSection';
 import { formatDate } from '../lib/utils';
+import { useAuthStore } from '../store/authStore';
 
 const FORMAT_COLORS: Record<string, string> = {
   Parquet: 'bg-orange-100 text-orange-700',
@@ -26,6 +27,7 @@ function formatBytes(bytes?: number) {
 
 export default function DistributionDetailPage() {
   const { datasetId, id, tenant } = useParams();
+  const { userId } = useAuthStore();
 
   const { data: distributions = [], isLoading } = useQuery({
     queryKey: ['distributions', datasetId],
@@ -33,7 +35,14 @@ export default function DistributionDetailPage() {
     enabled: !!datasetId,
   });
 
+  const { data: dataset } = useQuery({
+    queryKey: ['dataset', datasetId],
+    queryFn: () => datasetApi.get(datasetId!),
+    enabled: !!datasetId,
+  });
+
   const dist: Distribution | undefined = distributions.find(d => d.id === id);
+  const canOwnerAction = !!dataset?.ownerId && dataset.ownerId === userId;
 
   if (isLoading) return <div className="p-6 text-sm text-gray-400">Loading...</div>;
   if (!dist) return <div className="p-6 text-sm text-red-500">Distribution not found</div>;
@@ -151,6 +160,7 @@ export default function DistributionDetailPage() {
           distributionId={id!}
           datasetId={datasetId!}
           tenant={tenant!}
+          canAction={canOwnerAction}
         />
       </div>
     </div>

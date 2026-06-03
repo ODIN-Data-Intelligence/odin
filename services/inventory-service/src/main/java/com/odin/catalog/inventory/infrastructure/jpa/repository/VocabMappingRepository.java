@@ -29,6 +29,26 @@ public interface VocabMappingRepository extends JpaRepository<VocabMappingEntity
 
     void deleteByLogicalElementIdAndConceptIri(UUID logicalElementId, String conceptIri);
 
+    @Query(nativeQuery = true, value = """
+        SELECT DISTINCT levm.concept_iri
+        FROM logical_element_vocab_mappings levm
+        JOIN logical_data_elements lde ON lde.id = levm.logical_element_id
+        JOIN logical_models lm ON lm.id = lde.logical_model_id
+        WHERE lm.dataset_id = :datasetId
+          AND levm.concept_iri IS NOT NULL
+        """)
+    List<String> findConceptIrisByDatasetId(@Param("datasetId") UUID datasetId);
+
+    @Query(nativeQuery = true, value = """
+        SELECT COUNT(DISTINCT lde.id)
+        FROM logical_data_elements lde
+        JOIN logical_models lm ON lm.id = lde.logical_model_id
+        JOIN logical_element_vocab_mappings levm ON levm.logical_element_id = lde.id
+        WHERE lm.dataset_id = :datasetId
+          AND lm.status = 'published'
+        """)
+    long countPublishedElementsWithVocabByDatasetId(@Param("datasetId") UUID datasetId);
+
     /**
      * Returns distinct semantic type labels derived from vocab concept IRIs.
      * Only considers exactMatch/closeMatch mappings on elements belonging to published logical models.

@@ -81,6 +81,89 @@ public class AiServiceClient {
         ) {}
     }
 
+    public List<ElementDescriptionResult> describeElements(List<ElementClassificationInput> elements) {
+        log.info("action=AI_REQUEST_START operation=describeElements elementCount={}", elements.size());
+        long t = System.currentTimeMillis();
+        try {
+            DescribeResponse response = restClient.post()
+                .uri("/api/v1/describe/elements")
+                .body(new ClassifyRequest(elements))
+                .retrieve()
+                .body(DescribeResponse.class);
+            List<ElementDescriptionResult> results = response != null ? response.results() : List.of();
+            log.info("action=AI_REQUEST_COMPLETE operation=describeElements elementCount={} resultCount={} elapsed={}ms",
+                elements.size(), results.size(), System.currentTimeMillis() - t);
+            return results;
+        } catch (Exception e) {
+            log.warn("action=AI_REQUEST_FAILED operation=describeElements elementCount={} elapsed={}ms error={}",
+                elements.size(), System.currentTimeMillis() - t, e.getMessage());
+            throw new AiServiceUnavailableException("Description recommendation service is unavailable", e);
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ElementDescriptionResult(
+        String elementId,
+        String description,
+        String reasoning
+    ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record DescribeResponse(List<ElementDescriptionResult> results) {}
+
+    public List<VocabConceptRecommendation> recommendVocabConcepts(List<ElementVocabInput> elements) {
+        log.info("action=AI_REQUEST_START operation=recommendVocabConcepts elementCount={}", elements.size());
+        long t = System.currentTimeMillis();
+        try {
+            VocabConceptRecommendationResponse response = restClient.post()
+                .uri("/api/v1/recommend-vocab-concepts")
+                .body(new VocabConceptRecommendationRequest(elements))
+                .retrieve()
+                .body(VocabConceptRecommendationResponse.class);
+            List<VocabConceptRecommendation> results = response != null ? response.results() : List.of();
+            log.info("action=AI_REQUEST_COMPLETE operation=recommendVocabConcepts elementCount={} resultCount={} elapsed={}ms",
+                elements.size(), results.size(), System.currentTimeMillis() - t);
+            return results;
+        } catch (Exception e) {
+            log.warn("action=AI_REQUEST_FAILED operation=recommendVocabConcepts elementCount={} elapsed={}ms error={}",
+                elements.size(), System.currentTimeMillis() - t, e.getMessage());
+            throw new AiServiceUnavailableException("Vocabulary concept recommendation service is unavailable", e);
+        }
+    }
+
+    public record VocabInfo(String prefix, String baseIri, String name) {}
+
+    public record ElementVocabInput(
+        String elementId,
+        String name,
+        String label,
+        String logicalType,
+        String description,
+        List<String> existingConceptIris,
+        List<String> existingConceptLabels,
+        List<VocabInfo> availableVocabularies
+    ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record RecommendedConcept(
+        String conceptIri,
+        String conceptLabel,
+        String conceptDefinition,
+        String matchType,
+        String reasoning
+    ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record VocabConceptRecommendation(
+        String elementId,
+        List<RecommendedConcept> concepts
+    ) {}
+
+    private record VocabConceptRecommendationRequest(List<ElementVocabInput> elements) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record VocabConceptRecommendationResponse(List<VocabConceptRecommendation> results) {}
+
     public List<ElementClassificationResult> classify(List<ElementClassificationInput> elements) {
         log.info("action=AI_REQUEST_START operation=classify elementCount={}", elements.size());
         long t = System.currentTimeMillis();

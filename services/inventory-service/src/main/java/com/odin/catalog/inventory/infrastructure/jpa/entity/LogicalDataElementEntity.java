@@ -3,6 +3,8 @@ package com.odin.catalog.inventory.infrastructure.jpa.entity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -53,6 +55,16 @@ public class LogicalDataElementEntity {
     private String recommendedClassification;
     private String classificationReasoning;
     private OffsetDateTime classificationRecommendedAt;
+
+    private String recommendedDescription;
+    private String descriptionReasoning;
+    private OffsetDateTime descriptionRecommendedAt;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "recommended_vocab_mappings", columnDefinition = "jsonb")
+    private String recommendedVocabMappings;
+    private String vocabMappingReasoning;
+    private OffsetDateTime vocabMappingRecommendedAt;
 
     @PrePersist
     void prePersist() {

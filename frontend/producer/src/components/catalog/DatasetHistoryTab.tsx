@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { datasetApi } from '@datacatalog/shared';
 import type { DatasetAuditEntry } from '@datacatalog/shared';
-import JsonDiffView from './JsonDiffView';
-import Button from '../ui/Button';
+import { JsonDiffView } from '@datacatalog/shared';
+import { Button } from '@datacatalog/shared';
 
 const EVENT_COLORS: Record<string, string> = {
   CREATED:                   'bg-green-100 text-green-700',

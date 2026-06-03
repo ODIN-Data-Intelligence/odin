@@ -2,13 +2,14 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { datasetApi, preferredLabel, useIriTranslations } from '@datacatalog/shared';
 import type { AcceptedSemanticTag, RecommendedSemanticType } from '@datacatalog/shared';
-import Button from '../ui/Button';
+import { Button } from '@datacatalog/shared';
 
 interface Props {
   datasetId: string;
+  canAction: boolean;
 }
 
-export default function SemanticContextPanel({ datasetId }: Props) {
+export default function SemanticContextPanel({ datasetId, canAction }: Props) {
   const qc = useQueryClient();
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
@@ -61,7 +62,7 @@ export default function SemanticContextPanel({ datasetId }: Props) {
             </svg>
             Analysing dataset…
           </div>
-        ) : (
+        ) : canAction ? (
           <Button
             size="sm"
             variant="secondary"
@@ -69,7 +70,7 @@ export default function SemanticContextPanel({ datasetId }: Props) {
           >
             {recommendation ? 'Refresh AI Recommendations' : 'Get AI Recommendations'}
           </Button>
-        )}
+        ) : null}
       </div>
 
       {/* Vocab-derived semantic types */}
@@ -104,6 +105,7 @@ export default function SemanticContextPanel({ datasetId }: Props) {
               <AcceptedTagBadge
                 key={tag.id}
                 tag={tag}
+                canAction={canAction}
                 onDelete={() => deleteMutation.mutate(tag.id)}
                 deleting={deleteMutation.isPending}
               />
@@ -143,6 +145,7 @@ export default function SemanticContextPanel({ datasetId }: Props) {
                 key={rec.type}
                 rec={rec}
                 hintLabel={rec.vocabularyHint ? (hintTranslations[rec.vocabularyHint] ?? preferredLabel(rec.vocabularyHint)) : undefined}
+                canAction={canAction}
                 accepting={acceptMutation.isPending}
                 onAccept={() => acceptMutation.mutate(rec)}
                 onDismiss={() => dismiss(rec.type)}
@@ -160,9 +163,10 @@ export default function SemanticContextPanel({ datasetId }: Props) {
 }
 
 function AcceptedTagBadge({
-  tag, onDelete, deleting,
+  tag, canAction, onDelete, deleting,
 }: {
   tag: AcceptedSemanticTag;
+  canAction: boolean;
   onDelete: () => void;
   deleting: boolean;
 }) {
@@ -178,23 +182,26 @@ function AcceptedTagBadge({
       className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded font-medium ${hintColor}`}
     >
       {tag.type}
-      <button
-        onClick={onDelete}
-        disabled={deleting}
-        className="ml-0.5 opacity-60 hover:opacity-100"
-        aria-label={`Remove ${tag.type}`}
-      >
-        ×
-      </button>
+      {canAction && (
+        <button
+          onClick={onDelete}
+          disabled={deleting}
+          className="ml-0.5 opacity-60 hover:opacity-100"
+          aria-label={`Remove ${tag.type}`}
+        >
+          ×
+        </button>
+      )}
     </span>
   );
 }
 
 function RecommendationCard({
-  rec, hintLabel, accepting, onAccept, onDismiss,
+  rec, hintLabel, canAction, accepting, onAccept, onDismiss,
 }: {
   rec: RecommendedSemanticType;
   hintLabel?: string;
+  canAction: boolean;
   accepting: boolean;
   onAccept: () => void;
   onDismiss: () => void;
@@ -219,9 +226,13 @@ function RecommendationCard({
         )}
       </div>
       <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
-        <Button size="sm" onClick={onAccept} disabled={accepting}>
-          Accept
-        </Button>
+        {canAction ? (
+          <Button size="sm" onClick={onAccept} disabled={accepting}>
+            Accept
+          </Button>
+        ) : (
+          <span className="text-xs text-gray-400 italic">Owner only</span>
+        )}
         <button
           onClick={onDismiss}
           className="text-gray-300 hover:text-gray-500 p-1"

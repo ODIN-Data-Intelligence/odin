@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { vocabularyApi } from '@datacatalog/shared';
-import PageHeader from '../../components/ui/PageHeader';
-import Button from '../../components/ui/Button';
-import Badge from '../../components/ui/Badge';
+import { PageHeader } from '@datacatalog/shared';
+import { Button } from '@datacatalog/shared';
+import { Badge } from '@datacatalog/shared';
 
 const VOCAB_TYPE_COLORS: Record<string, string> = {
   general: 'bg-gray-100 text-gray-700',

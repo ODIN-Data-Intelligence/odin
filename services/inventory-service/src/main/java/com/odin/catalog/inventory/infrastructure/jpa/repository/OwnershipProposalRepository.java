@@ -12,4 +12,10 @@ public interface OwnershipProposalRepository extends JpaRepository<OwnershipProp
     List<OwnershipProposalEntity> findByDatasetIdAndStatus(UUID datasetId, String status);
 
     Optional<OwnershipProposalEntity> findByIdAndDatasetId(UUID id, UUID datasetId);
+
+    List<OwnershipProposalEntity> findByProposedOwnerIdAndStatusAndTenantId(UUID proposedOwnerId, String status, UUID tenantId);
+
+    List<OwnershipProposalEntity> findByProposedOwnerIdAndTenantIdOrderByCreatedAtDesc(UUID proposedOwnerId, UUID tenantId);
+
+    List<OwnershipProposalEntity> findByProposedByIdAndTenantIdOrderByCreatedAtDesc(UUID proposedById, UUID tenantId);
 }

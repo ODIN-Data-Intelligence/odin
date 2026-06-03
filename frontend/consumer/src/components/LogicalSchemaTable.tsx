@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { logicalModelApi, logicalElementApi, useIriTranslations, resolveLabel } from '@datacatalog/shared';
 import type { LogicalDataElement } from '@datacatalog/shared';
-import VocabConceptBadge from './VocabConceptBadge';
+import { VocabConceptBadge } from '@datacatalog/shared';
 
 type ClassificationLevel = NonNullable<LogicalDataElement['classification']>;
 
@@ -88,6 +88,7 @@ export default function LogicalSchemaTable({ datasetId }: LogicalSchemaTableProp
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Business Name</th>
+              <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
               <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Logical Type</th>
               <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Classification</th>
               <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Vocabulary Concept</th>
@@ -107,6 +108,11 @@ export default function LogicalSchemaTable({ datasetId }: LogicalSchemaTableProp
                       {el.name}
                     </Link>
                     {el.label && el.label !== el.name && <p className="text-xs text-gray-500">{el.label}</p>}
+                  </td>
+                  <td className="px-3 py-2.5 max-w-[200px]">
+                    {el.description
+                      ? <p className="text-xs text-gray-600 line-clamp-2">{el.description}</p>
+                      : <span className="text-gray-400 text-xs">—</span>}
                   </td>
                   <td className="px-3 py-2.5">
                     {el.logicalType ? (
@@ -144,7 +150,7 @@ export default function LogicalSchemaTable({ datasetId }: LogicalSchemaTableProp
                 </tr>
                 {expandedIds.has(el.id) && (
                   <tr key={`${el.id}-physical`} className="bg-blue-50">
-                    <td colSpan={5} className="px-4 py-2">
+                    <td colSpan={6} className="px-4 py-2">
                       <div className="flex items-center gap-4 text-xs text-gray-600">
                         <span className="font-mono font-medium">
                           {el.physicalColumn?.name ?? el.physicalColumnRef?.column ?? '—'}
@@ -165,7 +171,7 @@ export default function LogicalSchemaTable({ datasetId }: LogicalSchemaTableProp
               </>
             ))}
             {elements.length === 0 && (
-              <tr><td colSpan={5} className="px-3 py-6 text-center text-gray-400 text-xs">No elements defined</td></tr>
+              <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-400 text-xs">No elements defined</td></tr>
             )}
           </tbody>
         </table>

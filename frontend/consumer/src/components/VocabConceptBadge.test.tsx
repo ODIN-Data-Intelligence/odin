@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import VocabConceptBadge, { humanize } from './VocabConceptBadge';
+import { VocabConceptBadge, iriFragment as humanize } from '@datacatalog/shared';
 
 function renderBadge(props: { iri: string; label?: string; matchType?: string }) {
   return render(
