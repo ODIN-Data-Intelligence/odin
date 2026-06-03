@@ -88,6 +88,15 @@ public class UserService {
         return toResponse(findOrThrow(id));
     }
 
+    @Transactional(readOnly = true)
+    public UserResponse getByKeycloakId(String keycloakId) {
+        return userRepository.findByKeycloakUserId(keycloakId)
+            .map(this::toResponse)
+            .orElseThrow(() -> new NoSuchElementException("User not found for Keycloak ID: " + keycloakId));
+    }
+
+    // ── Invite ───────────────────────────────────────────────────────────────
+
     @Transactional
     public UserResponse getByKeycloakId(String keycloakId) {
         // Fast path: already synced locally
