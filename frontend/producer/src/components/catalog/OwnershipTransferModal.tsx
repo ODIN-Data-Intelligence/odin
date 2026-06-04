@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { userApi, datasetApi } from '@datacatalog/shared';
 import type { OwnershipProposal } from '@datacatalog/shared';
-import Button from '../ui/Button';
+import { Button } from '@datacatalog/shared';
 
 interface OwnershipTransferModalProps {
   datasetId: string;

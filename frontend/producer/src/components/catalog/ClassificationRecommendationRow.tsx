@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { logicalElementApi } from '@datacatalog/shared';
 import type { LogicalDataElement } from '@datacatalog/shared';
-import ClassificationBadge from './ClassificationBadge';
+import { ClassificationBadge } from '@datacatalog/shared';
 
 interface Props {
   element: LogicalDataElement;

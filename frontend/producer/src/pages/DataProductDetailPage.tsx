@@ -3,9 +3,9 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { dataProductApi, lineageApi } from '@datacatalog/shared';
 import type { Dataset } from '@datacatalog/shared';
-import PageHeader from '../components/ui/PageHeader';
-import Button from '../components/ui/Button';
-import Badge from '../components/ui/Badge';
+import { PageHeader } from '@datacatalog/shared';
+import { Button } from '@datacatalog/shared';
+import { Badge } from '@datacatalog/shared';
 import LineageGraph from '../components/lineage/LineageGraph';
 import { LIFECYCLE_COLORS, formatDate } from '../lib/utils';
 

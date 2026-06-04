@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { dashboardApi } from '@datacatalog/shared';
 import type { ActivityProposal, ActivityChange } from '@datacatalog/shared';
-import PageHeader from '../components/ui/PageHeader';
+import { PageHeader } from '@datacatalog/shared';
 
 export default function DashboardPage() {
   const { data: summary, isLoading: summaryLoading } = useQuery({

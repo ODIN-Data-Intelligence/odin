@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { logicalModelApi, logicalElementApi, useIriTranslations, resolveLabel } from '@datacatalog/shared';
 import type { LogicalDataElement } from '@datacatalog/shared';
-import VocabConceptBadge from './VocabConceptBadge';
+import { VocabConceptBadge } from '@datacatalog/shared';
 
 type ClassificationLevel = NonNullable<LogicalDataElement['classification']>;
 

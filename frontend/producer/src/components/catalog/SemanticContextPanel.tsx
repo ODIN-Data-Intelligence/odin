@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { datasetApi, preferredLabel, useIriTranslations } from '@datacatalog/shared';
 import type { AcceptedSemanticTag, RecommendedSemanticType } from '@datacatalog/shared';
-import Button from '../ui/Button';
+import { Button } from '@datacatalog/shared';
 
 interface Props {
   datasetId: string;

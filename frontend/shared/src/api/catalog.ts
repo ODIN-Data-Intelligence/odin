@@ -5,7 +5,7 @@ import type {
   Vocabulary, DatasetVocabularyProfile, VocabularyConcept,
   ColumnElementSuggestion, DatasetAuditEntry, OwnershipProposal,
   BulkRecommendationJob, DatasetSemanticContext, SemanticContextRecommendation,
-  AcceptedSemanticTag, DashboardSummary, UserActivity,
+  AcceptedSemanticTag, DashboardSummary, UserActivity, TermsOfUse,
 } from '../types/catalog';
 
 const BASE = '/api/v1';
@@ -58,6 +58,13 @@ export const datasetApi = {
     post<AcceptedSemanticTag>(`${BASE}/datasets/${id}/semantic-tags`, body),
   deleteSemanticTag: (id: string, tagId: string) =>
     del<void>(`${BASE}/datasets/${id}/semantic-tags/${tagId}`),
+  // Terms of use
+  getTermsOfUse: (id: string) =>
+    get<TermsOfUse>(`${BASE}/datasets/${id}/terms-of-use`),
+  acceptTermsOfUse: (id: string) =>
+    post<TermsOfUse>(`${BASE}/datasets/${id}/terms-of-use/accept`, {}),
+  resetTermsOfUse: (id: string) =>
+    del<TermsOfUse>(`${BASE}/datasets/${id}/terms-of-use/policy`),
 };
 
 // Distributions
@@ -158,6 +165,16 @@ export const logicalElementApi = {
     post<BulkRecommendationJob>(`${BASE}/logical-models/${modelId}/recommend-descriptions`, {}),
   getDescriptionRecommendationJob: (jobId: string) =>
     get<BulkRecommendationJob>(`${BASE}/logical-models/recommend-descriptions/jobs/${jobId}`),
+  recommendVocabConcepts: (id: string) =>
+    post<LogicalDataElement>(`${BASE}/logical-data-elements/${id}/recommend-vocab-concepts`, {}),
+  acceptVocabConcepts: (id: string) =>
+    post<LogicalDataElement>(`${BASE}/logical-data-elements/${id}/accept-vocab-concepts`, {}),
+  rejectVocabConcepts: (id: string) =>
+    post<LogicalDataElement>(`${BASE}/logical-data-elements/${id}/reject-vocab-concepts`, {}),
+  recommendModelVocabConcepts: (modelId: string) =>
+    post<BulkRecommendationJob>(`${BASE}/logical-models/${modelId}/recommend-vocab-concepts`, {}),
+  getVocabRecommendationJob: (jobId: string) =>
+    get<BulkRecommendationJob>(`${BASE}/logical-models/recommend-vocab-concepts/jobs/${jobId}`),
 };
 
 // Dashboard

@@ -4,13 +4,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { datasetApi, logicalModelApi, lineageApi, useIriTranslations, iriFragment } from '@datacatalog/shared';
 import type { Dataset, Distribution, OwnershipProposal } from '@datacatalog/shared';
-import PageHeader from '../components/ui/PageHeader';
-import Button from '../components/ui/Button';
+import { PageHeader } from '@datacatalog/shared';
+import { Button } from '@datacatalog/shared';
 import DatasetForm from '../components/catalog/DatasetForm';
 import LogicalModelEditor from '../components/catalog/LogicalModelEditor';
 import PhysicalSchemaSection from '../components/catalog/PhysicalSchemaSection';
 import LineageGraph from '../components/lineage/LineageGraph';
 import OwnershipPanel from '../components/catalog/OwnershipPanel';
+import TermsOfUsePanel from '../components/catalog/TermsOfUsePanel';
 import DatasetHistoryTab from '../components/catalog/DatasetHistoryTab';
 import SemanticContextPanel from '../components/catalog/SemanticContextPanel';
 import { cn } from '../lib/utils';
@@ -195,7 +196,12 @@ export default function DatasetDetailPage() {
           <LineageTab datasetId={id!} tenant={tenant!} />
         )}
         {activeTab === 'Governance' && (
-          <OwnershipPanel dataset={dataset} onUpdated={d => qc.setQueryData(['dataset', id], d)} />
+          <div className="max-w-2xl space-y-8">
+            <OwnershipPanel dataset={dataset} onUpdated={d => qc.setQueryData(['dataset', id], d)} />
+            <div className="border-t pt-6">
+              <TermsOfUsePanel datasetId={id!} canAction={canOwnerAction} />
+            </div>
+          </div>
         )}
         {activeTab === 'History' && (
           <DatasetHistoryTab datasetId={id!} />

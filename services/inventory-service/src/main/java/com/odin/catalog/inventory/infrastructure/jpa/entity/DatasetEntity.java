@@ -3,6 +3,8 @@ package com.odin.catalog.inventory.infrastructure.jpa.entity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -29,4 +31,8 @@ public class DatasetEntity extends ResourceEntity {
     private DatasetEntity isVersionOf;
 
     private UUID ownerId;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "has_policy", columnDefinition = "jsonb")
+    private String hasPolicy;
 }

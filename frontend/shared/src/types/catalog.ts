@@ -29,6 +29,29 @@ export interface Dataset extends Resource {
   distributions?: Distribution[];
   logicalModels?: LogicalModel[];
   semanticTypes?: string[];
+  hasPolicy?: string;
+}
+
+export interface TermsOfUseDerivationDetails {
+  totalPublishedElementCount: number;
+  classifiedElementCount: number;
+  elementsWithVocabCount: number;
+  distinctClassifications: string[];
+  vocabConceptCount: number;
+  matchedSignals: string[];
+  readyToAccept: boolean;
+}
+
+export interface TermsOfUse {
+  effectiveClassification?: string;
+  accessLevel?: 'OPEN' | 'INTERNAL_ONLY' | 'RESTRICTED' | 'HIGHLY_RESTRICTED';
+  permissions: string[];
+  prohibitions: string[];
+  obligations: string[];
+  applicableRegulations: string[];
+  odrlPolicy?: Record<string, unknown>;
+  policySource?: 'derived' | 'explicit' | 'fallback';
+  derivationDetails?: TermsOfUseDerivationDetails;
 }
 
 export interface AcceptedSemanticTag {
@@ -191,6 +214,14 @@ export interface LogicalModel {
   updatedAt: string;
 }
 
+export interface RecommendedVocabMapping {
+  conceptIri: string;
+  conceptLabel?: string;
+  conceptDefinition?: string;
+  matchType: string;
+  reasoning?: string;
+}
+
 export interface LogicalDataElement {
   id: string;
   logicalModelId: string;
@@ -215,6 +246,9 @@ export interface LogicalDataElement {
   recommendedDescription?: string;
   descriptionReasoning?: string;
   descriptionRecommendedAt?: string;
+  recommendedVocabMappings?: RecommendedVocabMapping[];
+  vocabMappingReasoning?: string;
+  vocabMappingRecommendedAt?: string;
 }
 
 export interface LogicalElementVocabMapping {

@@ -6,12 +6,14 @@ import { useDrawerStore } from '../store/drawerStore';
 import DistributionsTab from './DistributionsTab';
 import LogicalSchemaTable from './LogicalSchemaTable';
 import MiniLineageGraph from './MiniLineageGraph';
+import TermsOfUseTab from './TermsOfUseTab';
 
 const TABS = [
   { key: 'overview',       label: 'Overview' },
   { key: 'distributions',  label: 'Distributions' },
   { key: 'schema',         label: 'Model' },
   { key: 'lineage',        label: 'Lineage' },
+  { key: 'terms',          label: 'Terms' },
   { key: 'access',         label: 'Access' },
 ] as const;
 
@@ -213,6 +215,10 @@ export default function DatasetDetailDrawer() {
 
             {activeTab === 'lineage' && (
               <LineageTab datasetId={dataset.id} />
+            )}
+
+            {activeTab === 'terms' && (
+              <TermsOfUseTab datasetId={dataset.id} />
             )}
 
             {activeTab === 'access' && (

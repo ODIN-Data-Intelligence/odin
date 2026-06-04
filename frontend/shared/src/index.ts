@@ -13,3 +13,4 @@ export * from './api/lineage';
 export * from './api/search';
 export * from './api/ai';
 export * from './api/identity';
+export * from './components';

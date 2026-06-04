@@ -1,7 +1,7 @@
 import { useForm } from 'react-hook-form';
 import type { Dataset } from '@datacatalog/shared';
 import { cn } from '../../lib/utils';
-import Button from '../ui/Button';
+import { Button } from '@datacatalog/shared';
 
 interface FormValues {
   title: string;

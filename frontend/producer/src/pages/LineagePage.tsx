@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { lineageApi } from '@datacatalog/shared';
-import PageHeader from '../components/ui/PageHeader';
+import { PageHeader } from '@datacatalog/shared';
 import LineageGraph from '../components/lineage/LineageGraph';
 
 export default function LineagePage() {

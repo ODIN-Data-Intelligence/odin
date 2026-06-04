@@ -1,5 +1,5 @@
-import PageHeader from '../../components/ui/PageHeader';
-import Button from '../../components/ui/Button';
+import { PageHeader } from '@datacatalog/shared';
+import { Button } from '@datacatalog/shared';
 
 export default function DomainsPage() {
   return (

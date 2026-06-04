@@ -2,7 +2,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { datasetApi } from '@datacatalog/shared';
 import type { Dataset } from '@datacatalog/shared';
-import PageHeader from '../components/ui/PageHeader';
+import { PageHeader } from '@datacatalog/shared';
 import DatasetForm from '../components/catalog/DatasetForm';
 
 export default function DatasetCreatePage() {

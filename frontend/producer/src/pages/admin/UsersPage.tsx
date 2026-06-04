@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { userApi } from '@datacatalog/shared';
 import type { User } from '@datacatalog/shared';
-import PageHeader from '../../components/ui/PageHeader';
-import Button from '../../components/ui/Button';
-import Badge from '../../components/ui/Badge';
+import { PageHeader } from '@datacatalog/shared';
+import { Button } from '@datacatalog/shared';
+import { Badge } from '@datacatalog/shared';
 import UserInviteForm from '../../components/admin/UserInviteForm';
 
 const ROLE_STYLES: Record<string, string> = {

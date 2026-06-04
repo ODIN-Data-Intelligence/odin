@@ -77,6 +77,22 @@ public class KeycloakAdminClient {
             .toList();
     }
 
+    /** Fetches a single Keycloak user by UUID. Returns empty if not found or admin access fails. */
+    public java.util.Optional<KeycloakUser> getUserById(String keycloakUserId) {
+        try {
+            String token = adminToken();
+            KeycloakUser user = restClient.get()
+                .uri("/admin/realms/{realm}/users/{id}", realm, keycloakUserId)
+                .header("Authorization", "Bearer " + token)
+                .retrieve()
+                .body(KeycloakUser.class);
+            return java.util.Optional.ofNullable(user);
+        } catch (Exception e) {
+            log.warn("action=KEYCLOAK_GET_USER_FAILED userId={} error={}", keycloakUserId, e.getMessage());
+            return java.util.Optional.empty();
+        }
+    }
+
     public List<RealmRole> getUserRealmRoles(String keycloakUserId) {
         String token = adminToken();
         try {
