@@ -280,6 +280,7 @@ public class DatasetService {
         entity.setLicense(req.license());
         entity.setVersion(req.version());
         entity.setSourceUri(req.sourceUri());
+        entity.setHasPolicy(req.hasPolicy());
     }
 
     private DatasetEntity findOrThrow(UUID id) {
@@ -296,7 +297,7 @@ public class DatasetService {
             e.getLanguage(), e.getLicense(), e.getVersion(),
             e.getSourceUri(), e.isDeleted(),
             e.getCreatedAt(), e.getUpdatedAt(),
-            e.getOwnerId(), null
+            e.getOwnerId(), null, e.getHasPolicy()
         );
     }
 

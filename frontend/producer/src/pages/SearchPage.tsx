@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { searchApi } from '@datacatalog/shared';
-import PageHeader from '../components/ui/PageHeader';
+import { PageHeader } from '@datacatalog/shared';
 import SearchResultCard from '../components/search/SearchResultCard';
 
 type TypeFilter = '' | 'DATASET' | 'DATA_PRODUCT' | 'DISTRIBUTION';

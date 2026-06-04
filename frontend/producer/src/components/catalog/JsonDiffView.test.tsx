@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import JsonDiffView, { computeDiff } from './JsonDiffView';
+import { JsonDiffView, computeDiff } from '@datacatalog/shared';
 
 describe('computeDiff', () => {
   it('should mark keys present only in after as added', () => {

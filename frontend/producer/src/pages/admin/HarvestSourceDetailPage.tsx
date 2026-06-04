@@ -1,9 +1,9 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { harvestSourceApi, harvestJobApi } from '@datacatalog/shared';
-import PageHeader from '../../components/ui/PageHeader';
-import Button from '../../components/ui/Button';
-import Badge from '../../components/ui/Badge';
+import { PageHeader } from '@datacatalog/shared';
+import { Button } from '@datacatalog/shared';
+import { Badge } from '@datacatalog/shared';
 
 export default function HarvestSourceDetailPage() {
   const { id, tenant } = useParams();

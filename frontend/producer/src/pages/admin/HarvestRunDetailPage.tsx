@@ -3,8 +3,8 @@ import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { harvestRunApi } from '@datacatalog/shared';
 import type { HarvestRun } from '@datacatalog/shared';
-import PageHeader from '../../components/ui/PageHeader';
-import Badge from '../../components/ui/Badge';
+import { PageHeader } from '@datacatalog/shared';
+import { Badge } from '@datacatalog/shared';
 import { formatDateTime, RUN_STATUS_COLORS } from '../../lib/utils';
 
 export default function HarvestRunDetailPage() {

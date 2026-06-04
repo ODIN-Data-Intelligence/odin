@@ -2,7 +2,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { datasetApi } from '@datacatalog/shared';
 import type { Distribution } from '@datacatalog/shared';
-import PageHeader from '../components/ui/PageHeader';
+import { PageHeader } from '@datacatalog/shared';
 import PhysicalSchemaSection from '../components/catalog/PhysicalSchemaSection';
 import { formatDate } from '../lib/utils';
 import { useAuthStore } from '../store/authStore';

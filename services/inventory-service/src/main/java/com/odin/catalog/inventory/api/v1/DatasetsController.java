@@ -12,7 +12,9 @@ import com.odin.catalog.inventory.api.v1.dto.ResolveProposalRequest;
 import com.odin.catalog.inventory.api.v1.dto.SemanticRecommendationResponse;
 import com.odin.catalog.inventory.api.v1.dto.PageResponse;
 import com.odin.catalog.inventory.api.v1.dto.ProposeTransferRequest;
+import com.odin.catalog.inventory.api.v1.dto.TermsOfUseResponse;
 import com.odin.catalog.inventory.application.dataset.DatasetService;
+import com.odin.catalog.inventory.application.dataset.TermsOfUseService;
 import com.odin.catalog.inventory.application.logical.LogicalModelService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -38,6 +40,7 @@ public class DatasetsController {
 
     private final DatasetService datasetService;
     private final LogicalModelService logicalModelService;
+    private final TermsOfUseService termsOfUseService;
 
     @Operation(summary = "List datasets",
         description = "Returns a paginated list of datasets. Filter by catalog or source URI.")
@@ -275,5 +278,47 @@ public class DatasetsController {
         return datasetService.getPendingProposal(id)
             .map(ResponseEntity::ok)
             .orElse(ResponseEntity.noContent().build());
+    }
+
+    @Operation(summary = "Get terms of use",
+        description = "Derives an ODRL terms-of-use policy from accepted element classifications " +
+            "and controlled vocabulary concept mappings. Returns an explicit stored policy if one has been set.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Terms of use policy"),
+        @ApiResponse(responseCode = "404", description = "Dataset not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @GetMapping("/{id}/terms-of-use")
+    public TermsOfUseResponse getTermsOfUse(
+            @Parameter(description = "Dataset UUID") @PathVariable UUID id) {
+        return termsOfUseService.derive(id);
+    }
+
+    @Operation(summary = "Accept terms of use",
+        description = "Locks the currently derived ODRL policy as the official terms of use for this dataset " +
+            "by persisting it to hasPolicy. Subsequent GET will return policySource=explicit.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Policy accepted and persisted"),
+        @ApiResponse(responseCode = "404", description = "Dataset not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @PostMapping("/{id}/terms-of-use/accept")
+    public TermsOfUseResponse acceptTermsOfUse(
+            @Parameter(description = "Dataset UUID") @PathVariable UUID id) {
+        return termsOfUseService.accept(id);
+    }
+
+    @Operation(summary = "Reset terms of use",
+        description = "Clears any explicitly stored ODRL policy, reverting to dynamic derivation from " +
+            "element classifications and vocabulary concepts.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Policy reset; derived terms returned"),
+        @ApiResponse(responseCode = "404", description = "Dataset not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @DeleteMapping("/{id}/terms-of-use/policy")
+    public TermsOfUseResponse resetTermsOfUse(
+            @Parameter(description = "Dataset UUID") @PathVariable UUID id) {
+        return termsOfUseService.reset(id);
     }
 }

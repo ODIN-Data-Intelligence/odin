@@ -43,6 +43,9 @@ public record DatasetRequest(
 
     @Schema(description = "Source URI used to identify this dataset when harvested from an external system",
         example = "arn:aws:glue:eu-west-1:123456789012:table/trades/positions")
-    String sourceUri
+    String sourceUri,
+
+    @Schema(description = "Explicit ODRL policy JSON (overrides the derived terms-of-use when set)")
+    String hasPolicy
 
 ) {}

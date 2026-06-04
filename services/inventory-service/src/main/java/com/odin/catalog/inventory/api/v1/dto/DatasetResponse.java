@@ -68,6 +68,9 @@ public record DatasetResponse(
     @Schema(description = "Semantic type labels derived from controlled vocabulary mappings on published logical models " +
         "(e.g. 'Customer', 'DebitCardAccount'). Populated only on single-dataset GET responses.",
         example = "[\"Customer\", \"DebitCardAccount\"]")
-    List<String> semanticTypes
+    List<String> semanticTypes,
+
+    @Schema(description = "Explicit ODRL policy JSON (overrides the derived terms-of-use when set)")
+    String hasPolicy
 
 ) {}

@@ -1,9 +1,14 @@
 package com.odin.catalog.inventory.application.logical;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.odin.catalog.inventory.api.v1.dto.*;
 import com.odin.catalog.inventory.infrastructure.ai.AiServiceClient;
 import com.odin.catalog.inventory.infrastructure.ai.AiServiceClient.ElementClassificationInput;
 import com.odin.catalog.inventory.infrastructure.ai.AiServiceClient.ElementClassificationResult;
+import com.odin.catalog.inventory.infrastructure.ai.AiServiceClient.ElementVocabInput;
+import com.odin.catalog.inventory.infrastructure.ai.AiServiceClient.VocabConceptRecommendation;
+import com.odin.catalog.inventory.infrastructure.ai.AiServiceClient.VocabInfo;
 import com.odin.catalog.inventory.infrastructure.jpa.entity.*;
 import com.odin.catalog.inventory.infrastructure.jpa.repository.*;
 import com.odin.catalog.inventory.infrastructure.kafka.CatalogEventProducer;
@@ -34,7 +39,9 @@ public class LogicalModelService {
     private final DatasetRepository datasetRepository;
     private final DatasetSemanticTagRepository semanticTagRepository;
     private final CatalogEventProducer eventProducer;
+    private final VocabularyRepository vocabularyRepository;
     private final AiServiceClient aiServiceClient;
+    private final ObjectMapper objectMapper;
     private final PlatformTransactionManager transactionManager;
     private final BulkRecommendationJobRegistry jobRegistry;
 
@@ -402,6 +409,106 @@ public class LogicalModelService {
         return toElementResponse(elementRepository.save(entity));
     }
 
+    // ── Vocabulary concept recommendations ───────────────────────────────────
+
+    public LogicalDataElementResponse recommendVocabConcepts(UUID elementId) {
+        log.info("action=VOCAB_RECOMMEND_START elementId={}", elementId);
+        TransactionTemplate readTx = new TransactionTemplate(transactionManager);
+        readTx.setReadOnly(true);
+        ElementVocabInput input = readTx.execute(s -> toVocabInput(findElementOrThrow(elementId)));
+
+        List<VocabConceptRecommendation> results = aiServiceClient.recommendVocabConcepts(List.of(input));
+
+        return new TransactionTemplate(transactionManager).execute(s -> {
+            LogicalDataElementEntity entity = findElementOrThrow(elementId);
+            results.stream().filter(r -> elementId.toString().equals(r.elementId())).findFirst()
+                .ifPresent(r -> applyVocabRecommendation(entity, r));
+            return toElementResponse(elementRepository.save(entity));
+        });
+    }
+
+    @Transactional
+    public LogicalDataElementResponse acceptVocabConcepts(UUID elementId) {
+        LogicalDataElementEntity entity = findElementOrThrow(elementId);
+        if (entity.getRecommendedVocabMappings() == null) {
+            throw new NoSuchElementException("No pending vocabulary recommendation for element: " + elementId);
+        }
+        List<RecommendedVocabMapping> recommendations = parseVocabRecommendations(entity.getRecommendedVocabMappings());
+        List<VocabularyEntity> vocabs = vocabularyRepository.findAll();
+        Set<String> existingIris = entity.getVocabMappings() == null ? Set.of()
+            : entity.getVocabMappings().stream().map(VocabMappingEntity::getConceptIri).collect(Collectors.toSet());
+
+        for (RecommendedVocabMapping rec : recommendations) {
+            if (existingIris.contains(rec.conceptIri())) continue;
+            VocabMappingEntity mapping = new VocabMappingEntity();
+            mapping.setLogicalElementId(elementId);
+            mapping.setConceptIri(rec.conceptIri());
+            mapping.setConceptLabel(rec.conceptLabel());
+            mapping.setConceptDefinition(rec.conceptDefinition());
+            mapping.setMatchType(rec.matchType() != null ? rec.matchType() : "exactMatch");
+            UUID vocabId = findVocabularyIdForIri(rec.conceptIri(), vocabs);
+            if (vocabId == null) {
+                log.warn("Skipping vocab mapping — no vocabulary found for IRI prefix: {}", rec.conceptIri());
+                continue;
+            }
+            mapping.setVocabularyId(vocabId);
+            mappingRepository.save(mapping);
+        }
+        entity.setRecommendedVocabMappings(null);
+        entity.setVocabMappingReasoning(null);
+        entity.setVocabMappingRecommendedAt(null);
+        log.info("action=VOCAB_CONCEPTS_ACCEPTED elementId={} count={}", elementId, recommendations.size());
+        return toElementResponse(elementRepository.save(entity));
+    }
+
+    @Transactional
+    public LogicalDataElementResponse rejectVocabConcepts(UUID elementId) {
+        LogicalDataElementEntity entity = findElementOrThrow(elementId);
+        entity.setRecommendedVocabMappings(null);
+        entity.setVocabMappingReasoning(null);
+        entity.setVocabMappingRecommendedAt(null);
+        log.info("action=VOCAB_CONCEPTS_REJECTED elementId={}", elementId);
+        return toElementResponse(elementRepository.save(entity));
+    }
+
+    @Async
+    public void recommendModelVocabConcepts(UUID modelId, UUID jobId) {
+        log.info("action=BULK_VOCAB_START modelId={} jobId={}", modelId, jobId);
+        try {
+            jobRegistry.markRunning(jobId);
+
+            TransactionTemplate readTx = new TransactionTemplate(transactionManager);
+            readTx.setReadOnly(true);
+            List<ElementVocabInput> inputs = readTx.execute(s -> {
+                findModelOrThrow(modelId);
+                return elementRepository.findByLogicalModelIdOrderByOrdinalAsc(modelId)
+                    .stream().map(this::toVocabInput).toList();
+            });
+            if (inputs == null || inputs.isEmpty()) { jobRegistry.markCompleted(jobId); return; }
+
+            List<VocabConceptRecommendation> results = aiServiceClient.recommendVocabConcepts(inputs);
+            Map<String, VocabConceptRecommendation> byId = results.stream()
+                .collect(Collectors.toMap(VocabConceptRecommendation::elementId, r -> r, (a, b) -> a));
+
+            new TransactionTemplate(transactionManager).execute(s -> {
+                List<UUID> ids = inputs.stream().map(i -> UUID.fromString(i.elementId())).toList();
+                List<LogicalDataElementEntity> entities = elementRepository.findAllById(ids);
+                entities.forEach(e -> {
+                    VocabConceptRecommendation r = byId.get(e.getId().toString());
+                    if (r != null) applyVocabRecommendation(e, r);
+                });
+                elementRepository.saveAll(entities);
+                return null;
+            });
+
+            log.info("action=BULK_VOCAB_COMPLETE modelId={} jobId={} resultCount={}", modelId, jobId, results.size());
+            jobRegistry.markCompleted(jobId);
+        } catch (Exception e) {
+            log.error("action=BULK_VOCAB_FAILED modelId={} jobId={} error={}", modelId, jobId, e.getMessage(), e);
+            jobRegistry.markFailed(jobId, e.getMessage());
+        }
+    }
+
     @Transactional(readOnly = true)
     public DatasetSemanticContext getSemanticContext(UUID datasetId) {
         List<LogicalModelEntity> models = modelRepository.findByDatasetIdOrderByCreatedAtDesc(datasetId);
@@ -516,6 +623,56 @@ public class LogicalModelService {
         );
     }
 
+    private ElementVocabInput toVocabInput(LogicalDataElementEntity e) {
+        List<VocabularyEntity> vocabs = vocabularyRepository.findAll();
+        List<VocabInfo> vocabInfos = vocabs.stream()
+            .map(v -> new VocabInfo(v.getPrefix(), v.getBaseIri(), v.getName()))
+            .toList();
+        List<String> existingIris = e.getVocabMappings() == null ? List.of()
+            : e.getVocabMappings().stream().map(VocabMappingEntity::getConceptIri).filter(Objects::nonNull).toList();
+        List<String> existingLabels = e.getVocabMappings() == null ? List.of()
+            : e.getVocabMappings().stream().map(VocabMappingEntity::getConceptLabel).filter(Objects::nonNull).toList();
+        return new ElementVocabInput(
+            e.getId().toString(), e.getName(), e.getLabel(),
+            e.getLogicalType(), e.getDescription(),
+            existingIris, existingLabels, vocabInfos
+        );
+    }
+
+    private void applyVocabRecommendation(LogicalDataElementEntity entity, VocabConceptRecommendation rec) {
+        if (rec.concepts() == null || rec.concepts().isEmpty()) return;
+        try {
+            List<RecommendedVocabMapping> mappings = rec.concepts().stream()
+                .map(c -> new RecommendedVocabMapping(
+                    c.conceptIri(), c.conceptLabel(), c.conceptDefinition(), c.matchType(), c.reasoning()))
+                .toList();
+            entity.setRecommendedVocabMappings(objectMapper.writeValueAsString(mappings));
+            entity.setVocabMappingReasoning(rec.concepts().get(0).reasoning());
+            entity.setVocabMappingRecommendedAt(OffsetDateTime.now());
+            log.info("action=VOCAB_RECOMMENDED elementId={} conceptCount={}", entity.getId(), mappings.size());
+        } catch (Exception e) {
+            log.warn("Failed to serialize vocab recommendations for element {}: {}", entity.getId(), e.getMessage());
+        }
+    }
+
+    private List<RecommendedVocabMapping> parseVocabRecommendations(String json) {
+        if (json == null || json.isBlank()) return List.of();
+        try {
+            return objectMapper.readValue(json, new TypeReference<List<RecommendedVocabMapping>>() {});
+        } catch (Exception e) {
+            log.warn("Failed to parse vocab recommendations JSON: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    private UUID findVocabularyIdForIri(String iri, List<VocabularyEntity> vocabs) {
+        return vocabs.stream()
+            .filter(v -> iri != null && v.getBaseIri() != null && iri.startsWith(v.getBaseIri()))
+            .findFirst()
+            .map(VocabularyEntity::getId)
+            .orElse(null);
+    }
+
     private ElementClassificationInput toClassificationInput(LogicalDataElementEntity e) {
         List<String> iris = e.getVocabMappings() == null ? List.of()
             : e.getVocabMappings().stream().map(VocabMappingEntity::getConceptIri).filter(Objects::nonNull).toList();
@@ -569,6 +726,7 @@ public class LogicalModelService {
             : e.getVocabMappings().stream().map(this::toMappingResponse).toList();
         List<UUID> physicalColumnIds = columnRepository.findByLogicalDataElementId(e.getId())
             .stream().map(CsvwColumnEntity::getId).toList();
+        List<RecommendedVocabMapping> recommendedVocab = parseVocabRecommendations(e.getRecommendedVocabMappings());
         return new LogicalDataElementResponse(
             e.getId(), e.getLogicalModelId(), e.getName(), e.getLabel(),
             e.getDescription(), e.getLogicalType(), e.getOrdinal(),
@@ -576,7 +734,9 @@ public class LogicalModelService {
             physicalColumnIds, mappings, e.getCreatedAt(), e.getUpdatedAt(),
             e.getClassification(), e.getRecommendedClassification(),
             e.getClassificationReasoning(), e.getClassificationRecommendedAt(),
-            e.getRecommendedDescription(), e.getDescriptionReasoning(), e.getDescriptionRecommendedAt()
+            e.getRecommendedDescription(), e.getDescriptionReasoning(), e.getDescriptionRecommendedAt(),
+            recommendedVocab.isEmpty() ? null : recommendedVocab,
+            e.getVocabMappingReasoning(), e.getVocabMappingRecommendedAt()
         );
     }
 

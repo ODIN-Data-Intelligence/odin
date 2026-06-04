@@ -9,6 +9,10 @@
     "./api/*": "./src/api/*.ts",
     "./types/*": "./src/types/*.ts"
   },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-router-dom": ">=6"
+  },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",

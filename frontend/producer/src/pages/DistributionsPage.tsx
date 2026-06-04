@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { distributionApi } from '@datacatalog/shared';
-import PageHeader from '../components/ui/PageHeader';
+import { useQuery, useQueries } from '@tanstack/react-query';
+import { distributionApi, datasetApi } from '@datacatalog/shared';
+import { PageHeader } from '@datacatalog/shared';
 import { cn, formatDate } from '../lib/utils';
 
 const FORMAT_COLORS: Record<string, string> = {
@@ -30,6 +30,18 @@ export default function DistributionsPage() {
   const distributions = pageData?.content ?? [];
   const totalPages = pageData?.totalPages ?? 0;
   const totalElements = pageData?.totalElements ?? 0;
+
+  const uniqueDatasetIds = [...new Set(distributions.map(d => d.datasetId).filter(Boolean))] as string[];
+  const datasetResults = useQueries({
+    queries: uniqueDatasetIds.map(id => ({
+      queryKey: ['dataset', id],
+      queryFn: () => datasetApi.get(id),
+      staleTime: 300_000,
+    })),
+  });
+  const datasetTitles: Record<string, string> = Object.fromEntries(
+    uniqueDatasetIds.map((id, i) => [id, datasetResults[i].data?.title ?? '']).filter(([, t]) => t)
+  );
 
   return (
     <div>
@@ -85,9 +97,9 @@ export default function DistributionsPage() {
                   <td className="px-4 py-3">
                     <Link
                       to={`/${tenant}/datasets/${dist.datasetId}`}
-                      className="text-xs text-blue-600 hover:underline font-mono"
+                      className="text-xs text-blue-600 hover:underline"
                     >
-                      {dist.datasetId?.slice(0, 8)}…
+                      {dist.datasetId ? (datasetTitles[dist.datasetId] || dist.datasetId.slice(0, 8) + '…') : '—'}
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{dist.mediaType ?? '—'}</td>

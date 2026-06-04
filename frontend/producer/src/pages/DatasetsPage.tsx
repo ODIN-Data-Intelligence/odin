@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { datasetApi } from '@datacatalog/shared';
-import PageHeader from '../components/ui/PageHeader';
-import Button from '../components/ui/Button';
+import { datasetApi, useIriTranslations, iriFragment } from '@datacatalog/shared';
+import { PageHeader } from '@datacatalog/shared';
+import { Button } from '@datacatalog/shared';
 import { formatDate } from '../lib/utils';
 
 export default function DatasetsPage() {
@@ -20,6 +20,10 @@ export default function DatasetsPage() {
   const datasets = pageData?.content ?? [];
   const totalPages = pageData?.totalPages ?? 0;
   const totalElements = pageData?.totalElements ?? 0;
+
+  const freqIris = datasets.flatMap(ds => ds.accrualPeriodicity ? [ds.accrualPeriodicity] : []);
+  const freqTranslations = useIriTranslations(freqIris);
+  const tFreq = (iri: string) => freqTranslations[iri] ?? iriFragment(iri);
 
   const filtered = search
     ? datasets.filter(ds =>
@@ -83,7 +87,7 @@ export default function DatasetsPage() {
                       ))}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{ds.accrualPeriodicity ?? '—'}</td>
+                  <td className="px-4 py-3 text-gray-500 text-xs">{ds.accrualPeriodicity ? tFreq(ds.accrualPeriodicity) : '—'}</td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(ds.updatedAt)}</td>
                 </tr>
               ))}

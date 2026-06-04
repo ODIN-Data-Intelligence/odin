@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import ClassificationBadge from './ClassificationBadge';
+import { ClassificationBadge } from '@datacatalog/shared';
 
 describe('ClassificationBadge', () => {
   it('should render "—" when no level is provided', () => {

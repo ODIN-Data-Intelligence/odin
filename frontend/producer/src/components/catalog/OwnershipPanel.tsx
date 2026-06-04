@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { datasetApi, userApi } from '@datacatalog/shared';
 import type { Dataset, OwnershipProposal, User } from '@datacatalog/shared';
 import { useAuthStore } from '../../store/authStore';
-import Button from '../ui/Button';
+import { Button } from '@datacatalog/shared';
 import OwnershipTransferModal from './OwnershipTransferModal';
 import AssignOwnerModal from './AssignOwnerModal';
 
@@ -42,19 +42,23 @@ export default function OwnershipPanel({ dataset, onUpdated }: OwnershipPanelPro
   const [showAssignModal,   setShowAssignModal]   = useState(false);
   const [showProposeModal,  setShowProposeModal]  = useState(false);
 
-  // Fetch users: needed to display the current owner's name and to power the admin assign picker.
+  // Fetch all users: powers the admin assign picker and proposal user display.
   const { data: users = [] } = useQuery({
     queryKey: ['users'],
     queryFn: () => userApi.list(),
   });
 
-  // Resolve the current user and the dataset owner from the users list.
-  // Match by keycloakUserId (authoritative) with local id as fallback for legacy-assigned datasets.
+  // Direct lookup of the owner by Keycloak ID — more reliable than scanning the list
+  // because keycloakUserId is optional in the list response.
+  const { data: owner } = useQuery({
+    queryKey: ['user-by-keycloak', dataset.ownerId],
+    queryFn: () => userApi.getByKeycloakId(dataset.ownerId!),
+    enabled: !!dataset.ownerId,
+    staleTime: 300_000,
+    retry: false,
+  });
+
   const currentLocalUser = users.find(u => u.keycloakUserId === userId);
-  const owner = users.find(u =>
-    (u.keycloakUserId && u.keycloakUserId === dataset.ownerId) ||
-    u.id === dataset.ownerId
-  );
 
   // Pending proposal
   const { data: pendingProposal, refetch: refetchProposal } = useQuery({
@@ -116,7 +120,7 @@ export default function OwnershipPanel({ dataset, onUpdated }: OwnershipPanelPro
           <OwnedState
             ownerId={dataset.ownerId}
             ownerEmail={owner?.email}
-            ownerName={owner ? `${owner.firstName ?? ''} ${owner.lastName ?? ''}`.trim() : undefined}
+            ownerName={owner ? `${owner.firstName ?? ''} ${owner.lastName ?? ''}`.trim() || undefined : undefined}
             isCurrentOwner={isCurrentOwner}
             onTransfer={() => setShowTransferModal(true)}
           />

@@ -405,6 +405,76 @@ public class LogicalModelsController {
             .orElseThrow(() -> new NoSuchElementException("Description recommendation job not found: " + jobId));
     }
 
+    @Operation(summary = "Request AI vocabulary concept recommendations for an element",
+        description = "Calls the AI service to suggest relevant SKOS concept mappings based on the element's name, "
+            + "type, and existing mappings. Results are stored as pending recommendations for owner review.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Recommendations generated"),
+        @ApiResponse(responseCode = "404", description = "Element not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @PostMapping("/api/v1/logical-data-elements/{elementId}/recommend-vocab-concepts")
+    public LogicalDataElementResponse recommendVocabConcepts(
+            @Parameter(description = "Logical data element UUID") @PathVariable UUID elementId) {
+        return logicalModelService.recommendVocabConcepts(elementId);
+    }
+
+    @Operation(summary = "Accept pending vocabulary concept recommendations",
+        description = "Creates VocabMappingEntity rows for each recommended concept and clears the recommendation.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Recommendations accepted"),
+        @ApiResponse(responseCode = "404", description = "Element not found or no pending recommendation", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @PostMapping("/api/v1/logical-data-elements/{elementId}/accept-vocab-concepts")
+    public LogicalDataElementResponse acceptVocabConcepts(
+            @Parameter(description = "Logical data element UUID") @PathVariable UUID elementId) {
+        return logicalModelService.acceptVocabConcepts(elementId);
+    }
+
+    @Operation(summary = "Reject pending vocabulary concept recommendations",
+        description = "Clears the pending vocabulary recommendations without creating any mappings.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Recommendations rejected"),
+        @ApiResponse(responseCode = "404", description = "Element not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @PostMapping("/api/v1/logical-data-elements/{elementId}/reject-vocab-concepts")
+    public LogicalDataElementResponse rejectVocabConcepts(
+            @Parameter(description = "Logical data element UUID") @PathVariable UUID elementId) {
+        return logicalModelService.rejectVocabConcepts(elementId);
+    }
+
+    @Operation(summary = "Batch-recommend vocabulary concepts for all elements in a model",
+        description = "Asynchronously generates vocabulary concept recommendations for every element in the model. "
+            + "Returns a job ID that can be polled for status.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "202", description = "Job accepted"),
+        @ApiResponse(responseCode = "404", description = "Model not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @PostMapping("/api/v1/logical-models/{modelId}/recommend-vocab-concepts")
+    public ResponseEntity<BulkRecommendationJobResponse> recommendModelVocabConcepts(
+            @Parameter(description = "Logical model UUID") @PathVariable UUID modelId) {
+        UUID jobId = jobRegistry.register(modelId);
+        logicalModelService.recommendModelVocabConcepts(modelId, jobId);
+        return ResponseEntity.accepted().body(toJobResponse(jobRegistry.get(jobId).orElseThrow()));
+    }
+
+    @Operation(summary = "Get bulk vocabulary concept recommendation job status")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Job status"),
+        @ApiResponse(responseCode = "404", description = "Job not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @GetMapping("/api/v1/logical-models/recommend-vocab-concepts/jobs/{jobId}")
+    public BulkRecommendationJobResponse getVocabRecommendationJob(
+            @Parameter(description = "Job UUID returned by the POST endpoint") @PathVariable UUID jobId) {
+        return jobRegistry.get(jobId)
+            .map(this::toJobResponse)
+            .orElseThrow(() -> new NoSuchElementException("Vocabulary recommendation job not found: " + jobId));
+    }
+
     private BulkRecommendationJobResponse toJobResponse(BulkRecommendationJobRegistry.Job job) {
         return new BulkRecommendationJobResponse(
             job.jobId().toString(), job.modelId().toString(), job.status().name(),

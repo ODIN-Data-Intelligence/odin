@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { dataProductApi } from '@datacatalog/shared';
-import PageHeader from '../components/ui/PageHeader';
-import Button from '../components/ui/Button';
-import Badge from '../components/ui/Badge';
+import { PageHeader } from '@datacatalog/shared';
+import { Button } from '@datacatalog/shared';
+import { Badge } from '@datacatalog/shared';
 import { LIFECYCLE_COLORS, formatDate } from '../lib/utils';
 import DataProductWizard from '../components/catalog/DataProductWizard';
 

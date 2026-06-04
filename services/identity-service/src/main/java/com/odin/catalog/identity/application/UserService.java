@@ -98,6 +98,29 @@ public class UserService {
     // ── Invite ───────────────────────────────────────────────────────────────
 
     @Transactional
+    public UserResponse getByKeycloakId(String keycloakId) {
+        // Fast path: already synced locally
+        Optional<UserEntity> local = userRepository.findByKeycloakUserId(keycloakId);
+        if (local.isPresent()) return toResponse(local.get());
+
+        // Fallback: look up the user in Keycloak directly and match by email
+        return keycloak.getUserById(keycloakId)
+            .filter(kc -> kc.email() != null)
+            .flatMap(kc -> userRepository.findByEmail(kc.email())
+                .map(entity -> {
+                    entity.setKeycloakUserId(keycloakId);
+                    if (entity.getFirstName() == null && kc.firstName() != null)
+                        entity.setFirstName(kc.firstName());
+                    if (entity.getLastName() == null && kc.lastName() != null)
+                        entity.setLastName(kc.lastName());
+                    return toResponse(userRepository.save(entity));
+                }))
+            .orElseThrow(() -> new NoSuchElementException("User not found for Keycloak ID: " + keycloakId));
+    }
+
+    // ── Invite ───────────────────────────────────────────────────────────────
+
+    @Transactional
     public UserResponse invite(UserRequest request) {
         String tenantId = tenantId();
         List<String> permissions = derivePermissions(request.roles());

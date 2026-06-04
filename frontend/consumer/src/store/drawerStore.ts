@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-type DrawerTab = 'overview' | 'distributions' | 'schema' | 'lineage' | 'access';
+type DrawerTab = 'overview' | 'distributions' | 'schema' | 'lineage' | 'terms' | 'access';
 
 interface DrawerState {
   openDatasetId: string | null;
