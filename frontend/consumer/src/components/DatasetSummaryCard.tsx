@@ -1,5 +1,6 @@
 import type { SearchResult } from '@datacatalog/shared';
 import { useDrawerStore } from '../store/drawerStore';
+import BookmarkButton from './BookmarkButton';
 
 interface DatasetSummaryCardProps {
   result: SearchResult;
@@ -51,10 +52,11 @@ export default function DatasetSummaryCard({ result, isActive }: DatasetSummaryC
             </div>
           )}
         </div>
-        <div className="flex-shrink-0 text-right">
+        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+          <BookmarkButton datasetId={result.id} datasetTitle={result.title} />
           <span className="text-xs text-gray-400 capitalize">{result.entityType.replace('_', ' ').toLowerCase()}</span>
           {result.lifecycleStatus && (
-            <p className="text-xs text-gray-400 mt-0.5">{result.lifecycleStatus}</p>
+            <p className="text-xs text-gray-400">{result.lifecycleStatus}</p>
           )}
         </div>
       </div>
