@@ -88,33 +88,19 @@ public class UserService {
         return toResponse(findOrThrow(id));
     }
 
-    @Transactional(readOnly = true)
-    public UserResponse getByKeycloakId(String keycloakId) {
-        return userRepository.findByKeycloakUserId(keycloakId)
-            .map(this::toResponse)
-            .orElseThrow(() -> new NoSuchElementException("User not found for Keycloak ID: " + keycloakId));
-    }
-
-    // ── Invite ───────────────────────────────────────────────────────────────
-
     @Transactional
     public UserResponse getByKeycloakId(String keycloakId) {
         // Fast path: already synced locally
         Optional<UserEntity> local = userRepository.findByKeycloakUserId(keycloakId);
         if (local.isPresent()) return toResponse(local.get());
 
-        // Fallback: look up the user in Keycloak directly and match by email
+        // Fallback: look up in Keycloak and sync locally (creates the entity if it doesn't exist yet)
         return keycloak.getUserById(keycloakId)
             .filter(kc -> kc.email() != null)
-            .flatMap(kc -> userRepository.findByEmail(kc.email())
-                .map(entity -> {
-                    entity.setKeycloakUserId(keycloakId);
-                    if (entity.getFirstName() == null && kc.firstName() != null)
-                        entity.setFirstName(kc.firstName());
-                    if (entity.getLastName() == null && kc.lastName() != null)
-                        entity.setLastName(kc.lastName());
-                    return toResponse(userRepository.save(entity));
-                }))
+            .map(kc -> {
+                UserEntity entity = userRepository.findByEmail(kc.email()).orElse(null);
+                return toResponse(syncToLocal(kc, entity, tenantId()));
+            })
             .orElseThrow(() -> new NoSuchElementException("User not found for Keycloak ID: " + keycloakId));
     }
 

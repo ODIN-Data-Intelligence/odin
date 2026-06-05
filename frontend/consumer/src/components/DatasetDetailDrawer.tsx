@@ -7,6 +7,7 @@ import DistributionsTab from './DistributionsTab';
 import LogicalSchemaTable from './LogicalSchemaTable';
 import MiniLineageGraph from './MiniLineageGraph';
 import TermsOfUseTab from './TermsOfUseTab';
+import BookmarkButton from './BookmarkButton';
 
 const TABS = [
   { key: 'overview',       label: 'Overview' },
@@ -86,6 +87,9 @@ export default function DatasetDetailDrawer() {
             )}
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
+            {dataset && (
+              <BookmarkButton datasetId={dataset.id} datasetTitle={dataset.title} className="text-xl" />
+            )}
             <button onClick={copyShareLink} title="Copy share link" className="text-gray-400 hover:text-gray-600 text-sm px-2 py-1 rounded hover:bg-gray-100">
               Share
             </button>
