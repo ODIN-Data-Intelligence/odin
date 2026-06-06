@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { datasetApi, lineageApi, userApi, iriFragment, useIriTranslations } from '@datacatalog/shared';
 import { useDrawerStore } from '../store/drawerStore';
 import DistributionsTab from './DistributionsTab';
@@ -258,6 +258,7 @@ export default function DatasetDetailDrawer() {
 }
 
 function LineageTab({ datasetId }: { datasetId: string }) {
+  const navigate = useNavigate();
   const { data: identity, isLoading, isError } = useQuery({
     queryKey: ['lineage-identity', datasetId],
     queryFn: () => lineageApi.getCatalogLineageIdentity(datasetId),
@@ -273,6 +274,7 @@ function LineageTab({ datasetId }: { datasetId: string }) {
     <MiniLineageGraph
       namespace={identity.namespace}
       name={identity.name}
+      onOpenFull={() => navigate(`/lineage?ns=${encodeURIComponent(identity.namespace)}&name=${encodeURIComponent(identity.name)}`)}
     />
   );
 }

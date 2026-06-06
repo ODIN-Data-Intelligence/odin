@@ -4,22 +4,37 @@ services:
   inventory-service:
     environment:
       SPRING_PROFILES_ACTIVE: dev
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:-}
+    ports:
+      - "5001:5005"
 
   harvest-service:
     environment:
       SPRING_PROFILES_ACTIVE: dev
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:-}
+    ports:
+      - "5002:5005"
 
   lineage-service:
     environment:
       SPRING_PROFILES_ACTIVE: dev
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:-}
+    ports:
+      - "5003:5005"
 
   search-service:
     environment:
       SPRING_PROFILES_ACTIVE: dev
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:-}
+    ports:
+      - "5004:5005"
 
   identity-service:
     environment:
       SPRING_PROFILES_ACTIVE: dev
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:-}
+    ports:
+      - "5006:5005"
 
   # AI service (optional — start with: docker compose --profile ai up)
   ai-service:
@@ -38,8 +53,10 @@ services:
       OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       APP_DEV_AUTH_ENABLED: "true"
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:-}
     ports:
       - "8005:8005"
+      - "5005:5005"
     depends_on:
       postgres-ai:
         condition: service_healthy

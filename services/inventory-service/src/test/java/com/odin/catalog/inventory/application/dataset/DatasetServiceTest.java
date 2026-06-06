@@ -119,7 +119,7 @@ class DatasetServiceTest {
         DatasetRequest req = new DatasetRequest(
             "Trades", "desc", UUID.randomUUID(), UUID.randomUUID(),
             "daily", List.of("risk"), List.of("Finance"), List.of("en"),
-            "MIT", "1.0", "s3://bucket/trades"
+            "MIT", "1.0", "s3://bucket/trades", null
         );
         DatasetEntity saved = dataset();
         when(datasetRepository.save(any())).thenReturn(saved);
@@ -148,7 +148,7 @@ class DatasetServiceTest {
 
         DatasetRequest req = new DatasetRequest(
             "Updated Title", null, null, null,
-            null, null, null, null, null, "2.0", null
+            null, null, null, null, null, "2.0", null, null
         );
         service.update(ds.getId(), req);
 
@@ -162,7 +162,7 @@ class DatasetServiceTest {
         UUID id = UUID.randomUUID();
         when(datasetRepository.findById(id)).thenReturn(Optional.empty());
 
-        DatasetRequest req = new DatasetRequest("X", null, null, null, null, null, null, null, null, null, null);
+        DatasetRequest req = new DatasetRequest("X", null, null, null, null, null, null, null, null, null, null, null);
         assertThatThrownBy(() -> service.update(id, req)).isInstanceOf(NoSuchElementException.class);
     }
 

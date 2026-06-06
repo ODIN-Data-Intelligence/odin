@@ -1,16 +1,15 @@
 import { useState, useCallback } from 'react';
+import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { useSearchParams, useNavigate, useParams } from 'react-router-dom';
 import { lineageApi } from '@datacatalog/shared';
 import type { LineageGraph as LineageGraphData, LineageNode, LineageEdge } from '@datacatalog/shared';
-import { PageHeader } from '@datacatalog/shared';
 import ReactFlow, { Background, Controls, MiniMap, Position, type Node, type Edge, type NodeMouseHandler } from 'reactflow';
 import 'reactflow/dist/style.css';
 
 type Direction = 'upstream' | 'downstream' | 'both';
 
-const COL_WIDTH  = 240;
-const ROW_HEIGHT = 100;
+const COL_WIDTH  = 200;
+const ROW_HEIGHT = 90;
 const DATASET_COLOR = '#dbeafe';
 const JOB_COLOR     = '#fef3c7';
 const FOCAL_COLOR   = '#bfdbfe';
@@ -47,21 +46,21 @@ function buildSingleElements(graph: LineageGraphData, upstream = false): { nodes
     const d = n.depth ?? 0;
     const bucket = buckets.get(d)!;
     const rowIdx = bucket.indexOf(n);
-    const totalInDepth = bucket.length;
+    const total  = bucket.length;
     return {
       id: `${n.namespace}/${n.name}`,
       data: { label: n.name, namespace: n.namespace, name: n.name },
       position: {
         x: (upstream ? -d : d) * COL_WIDTH,
-        y: (rowIdx - (totalInDepth - 1) / 2) * ROW_HEIGHT,
+        y: (rowIdx - (total - 1) / 2) * ROW_HEIGHT,
       },
       style: {
         background: d === 0 ? FOCAL_COLOR : n.type === 'Job' ? JOB_COLOR : DATASET_COLOR,
         border: d === 0 ? '2px solid #3b82f6' : '1px solid #cbd5e1',
-        borderRadius: 8,
-        padding: '8px 12px',
-        fontSize: 12,
-        maxWidth: 200,
+        borderRadius: 6,
+        padding: '6px 10px',
+        fontSize: 11,
+        maxWidth: 170,
         fontWeight: d === 0 ? 600 : 400,
       },
     };
@@ -76,9 +75,8 @@ function buildBothElements(
   upGraph: LineageGraphData,
   downGraph: LineageGraphData,
 ): { nodes: Node[]; edges: Edge[] } {
-  // Map: nodeKey → signedDepth
   const signedDepths = new Map<string, number>();
-  const nodeByKey = new Map<string, LineageNode>();
+  const nodeByKey    = new Map<string, LineageNode>();
 
   for (const n of downGraph.nodes) {
     const key = `${n.namespace}/${n.name}`;
@@ -87,13 +85,12 @@ function buildBothElements(
   }
   for (const n of upGraph.nodes) {
     const key = `${n.namespace}/${n.name}`;
-    const sd = -(n.depth ?? 0);
-    if (sd === 0) continue; // focal already covered
+    const sd  = -(n.depth ?? 0);
+    if (sd === 0) continue;
     signedDepths.set(key, sd);
     nodeByKey.set(key, n);
   }
 
-  // Group keys by signed-depth column
   const colBuckets = new Map<number, string[]>();
   for (const [key, sd] of signedDepths) {
     if (!colBuckets.has(sd)) colBuckets.set(sd, []);
@@ -102,10 +99,10 @@ function buildBothElements(
 
   const nodes: Node[] = [];
   for (const [key, sd] of signedDepths) {
-    const n = nodeByKey.get(key)!;
+    const n   = nodeByKey.get(key)!;
     const col = colBuckets.get(sd)!;
     const rowIdx = col.indexOf(key);
-    const total = col.length;
+    const total  = col.length;
     nodes.push({
       id: key,
       data: { label: n.name, namespace: n.namespace, name: n.name },
@@ -116,16 +113,16 @@ function buildBothElements(
       style: {
         background: sd === 0 ? FOCAL_COLOR : n.type === 'Job' ? JOB_COLOR : DATASET_COLOR,
         border: sd === 0 ? '2px solid #3b82f6' : '1px solid #cbd5e1',
-        borderRadius: 8,
-        padding: '8px 12px',
-        fontSize: 12,
-        maxWidth: 200,
+        borderRadius: 6,
+        padding: '6px 10px',
+        fontSize: 11,
+        maxWidth: 170,
         fontWeight: sd === 0 ? 600 : 400,
       },
     });
   }
 
-  const seen = new Set<string>();
+  const seen  = new Set<string>();
   const edges: Edge[] = [];
   for (const e of [...upGraph.edges, ...downGraph.edges]) {
     const eid = `${e.fromNamespace}/${e.fromName}->${e.toNamespace}/${e.toName}`;
@@ -142,9 +139,7 @@ function edgeFromLineage(e: LineageEdge, i: number): Edge {
     id: `e-${i}`,
     source: `${e.fromNamespace}/${e.fromName}`,
     target: `${e.toNamespace}/${e.toName}`,
-    label: e.edgeType,
-    labelStyle: { fontSize: 10 },
-    style: { stroke: '#94a3b8' },
+    style: { stroke: '#94a3b8', strokeWidth: 1.5 },
     animated: e.edgeType === 'DERIVED_FROM',
   };
 }
@@ -152,7 +147,6 @@ function edgeFromLineage(e: LineageEdge, i: number): Edge {
 // ── Page ─────────────────────────────────────────────────────────────────────
 export default function LineagePage() {
   const [searchParams] = useSearchParams();
-  const { tenant } = useParams<{ tenant: string }>();
   const navigate = useNavigate();
   const initNs        = searchParams.get('ns')        ?? '';
   const initName      = searchParams.get('name')      ?? '';
@@ -166,21 +160,21 @@ export default function LineagePage() {
   );
 
   const { data: downGraph, isLoading: downLoading } = useQuery({
-    queryKey: ['lineage', submitted?.ns, submitted?.name, 'downstream'],
+    queryKey: ['lineage-full', submitted?.ns, submitted?.name, 'downstream'],
     queryFn:  () => lineageApi.getDatasetLineage(submitted!.ns, submitted!.name, 'downstream', 5),
     enabled:  !!submitted && (direction === 'downstream' || direction === 'both'),
   });
 
   const { data: upGraph, isLoading: upLoading } = useQuery({
-    queryKey: ['lineage', submitted?.ns, submitted?.name, 'upstream'],
+    queryKey: ['lineage-full', submitted?.ns, submitted?.name, 'upstream'],
     queryFn:  () => lineageApi.getDatasetLineage(submitted!.ns, submitted!.name, 'upstream', 5),
     enabled:  !!submitted && (direction === 'upstream' || direction === 'both'),
   });
 
   const isLoading =
-    direction === 'both'       ? (upLoading || downLoading) :
-    direction === 'upstream'   ? upLoading :
-                                 downLoading;
+    direction === 'both'     ? (upLoading || downLoading) :
+    direction === 'upstream' ? upLoading :
+                               downLoading;
 
   let flowElements: { nodes: Node[]; edges: Edge[] } | null = null;
   if (direction === 'both'       && upGraph && downGraph) flowElements = buildBothElements(upGraph, downGraph);
@@ -191,21 +185,33 @@ export default function LineagePage() {
     const { namespace, name: nodeName } = node.data as { namespace: string; name: string };
     try {
       const { catalogId } = await lineageApi.getCatalogId(namespace, nodeName);
-      navigate(`/${tenant}/datasets/${catalogId}`);
-    } catch { /* no catalog link — do nothing */ }
-  }, [navigate, tenant]);
+      navigate(`/datasets/${catalogId}`);
+    } catch { /* no catalog link */ }
+  }, [navigate]);
 
   return (
-    <div className="flex flex-col h-full">
-      <PageHeader title="Lineage Explorer" description="Explore data lineage across your catalog" />
-      <div className="p-4 bg-white border-b flex items-end gap-3">
+    <div className="flex flex-col h-screen">
+      {/* Header */}
+      <div className="bg-white border-b px-6 py-3 flex items-center gap-4 flex-shrink-0">
+        <Link to="/search" className="text-sm text-gray-500 hover:text-gray-700">← Back to search</Link>
+        <div className="h-4 w-px bg-gray-200" />
+        <h1 className="text-sm font-semibold text-gray-800">Lineage Explorer</h1>
+        {direction === 'both' && flowElements && (
+          <span className="text-xs text-gray-400 ml-2">
+            upstream ← <span className="font-medium text-blue-600">dataset</span> → downstream
+          </span>
+        )}
+      </div>
+
+      {/* Controls */}
+      <div className="bg-white border-b px-6 py-3 flex items-end gap-3 flex-shrink-0">
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">Namespace</label>
           <input
             value={namespace}
             onChange={e => setNamespace(e.target.value)}
             placeholder="e.g. snowflake://my-account/mydb"
-            className="border border-gray-300 rounded px-3 py-1.5 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="border border-gray-300 rounded px-3 py-1.5 text-sm w-72 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
         <div>
@@ -214,7 +220,7 @@ export default function LineagePage() {
             value={name}
             onChange={e => setName(e.target.value)}
             placeholder="e.g. trades"
-            className="border border-gray-300 rounded px-3 py-1.5 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="border border-gray-300 rounded px-3 py-1.5 text-sm w-52 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
         <div>
@@ -237,7 +243,9 @@ export default function LineagePage() {
           Explore
         </button>
       </div>
-      <div className="flex-1 relative">
+
+      {/* Graph */}
+      <div className="flex-1 relative bg-gray-50">
         {isLoading && (
           <div className="absolute inset-0 flex items-center justify-center text-sm text-gray-500">
             Loading lineage...
@@ -254,7 +262,7 @@ export default function LineagePage() {
             elementsSelectable={false}
             attributionPosition="bottom-right"
           >
-            <Background gap={20} color="#e2e8f0" />
+            <Background gap={16} color="#e2e8f0" />
             <Controls />
             <MiniMap nodeColor={n => n.style?.background as string ?? DATASET_COLOR} />
           </ReactFlow>

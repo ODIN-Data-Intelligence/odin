@@ -6,6 +6,8 @@ import type {
   ColumnElementSuggestion, DatasetAuditEntry, OwnershipProposal,
   BulkRecommendationJob, DatasetSemanticContext, SemanticContextRecommendation,
   AcceptedSemanticTag, DashboardSummary, UserActivity, TermsOfUse,
+  TermsPolicySet, TermsPolicyDetail, TermsClassificationRule,
+  TermsRegulationRule, TermsRegulationObligation,
 } from '../types/catalog';
 
 const BASE = '/api/v1';
@@ -190,4 +192,35 @@ export const vocabMappingApi = {
   create: (elementId: string, body: Partial<LogicalElementVocabMapping>) =>
     post<LogicalElementVocabMapping>(`${BASE}/logical-data-elements/${elementId}/vocab-mappings`, body),
   delete: (id: string) => del<void>(`${BASE}/vocab-mappings/${id}`),
+};
+
+// Terms Policies
+export const termsPolicyApi = {
+  list:     () => get<TermsPolicySet[]>(`${BASE}/terms-policies`),
+  get:      (id: string) => get<TermsPolicyDetail>(`${BASE}/terms-policies/${id}`),
+  create:   (body: { name: string; description?: string }) =>
+              post<TermsPolicySet>(`${BASE}/terms-policies`, body),
+  update:   (id: string, body: { name: string; description?: string }) =>
+              put<TermsPolicySet>(`${BASE}/terms-policies/${id}`, body),
+  delete:   (id: string) => del<void>(`${BASE}/terms-policies/${id}`),
+  activate: (id: string) => post<TermsPolicySet>(`${BASE}/terms-policies/${id}/activate`, {}),
+  clone:    (id: string, name: string) =>
+              post<TermsPolicySet>(`${BASE}/terms-policies/${id}/clone`, { name }),
+
+  upsertClassificationRule: (id: string, classification: string, body: Omit<TermsClassificationRule, 'id' | 'classification'>) =>
+    put<TermsClassificationRule>(`${BASE}/terms-policies/${id}/classification-rules/${classification}`, body),
+  deleteClassificationRule: (id: string, classification: string) =>
+    del<void>(`${BASE}/terms-policies/${id}/classification-rules/${classification}`),
+
+  addRegulationRule:    (id: string, body: Omit<TermsRegulationRule, 'id'>) =>
+    post<TermsRegulationRule>(`${BASE}/terms-policies/${id}/regulation-rules`, body),
+  updateRegulationRule: (id: string, ruleId: string, body: Omit<TermsRegulationRule, 'id'>) =>
+    put<TermsRegulationRule>(`${BASE}/terms-policies/${id}/regulation-rules/${ruleId}`, body),
+  deleteRegulationRule: (id: string, ruleId: string) =>
+    del<void>(`${BASE}/terms-policies/${id}/regulation-rules/${ruleId}`),
+
+  addRegulationObligation:    (id: string, body: Omit<TermsRegulationObligation, 'id'>) =>
+    post<TermsRegulationObligation>(`${BASE}/terms-policies/${id}/regulation-obligations`, body),
+  deleteRegulationObligation: (id: string, oblId: string) =>
+    del<void>(`${BASE}/terms-policies/${id}/regulation-obligations/${oblId}`),
 };

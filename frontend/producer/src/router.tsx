@@ -16,6 +16,8 @@ import HarvestRunDetailPage from './pages/admin/HarvestRunDetailPage';
 import DomainsPage from './pages/admin/DomainsPage';
 import UsersPage from './pages/admin/UsersPage';
 import SettingsPage from './pages/admin/SettingsPage';
+import TermsPoliciesPage from './pages/admin/TermsPoliciesPage';
+import TermsPolicyDetailPage from './pages/admin/TermsPolicyDetailPage';
 
 export const router = createBrowserRouter([
   {
@@ -40,6 +42,8 @@ export const router = createBrowserRouter([
       { path: 'admin/harvest/sources/:id', element: <HarvestSourceDetailPage /> },
       { path: 'admin/harvest/runs/:id', element: <HarvestRunDetailPage /> },
       { path: 'admin/domains', element: <DomainsPage /> },
+      { path: 'admin/governance/terms-policies', element: <TermsPoliciesPage /> },
+      { path: 'admin/governance/terms-policies/:policyId', element: <TermsPolicyDetailPage /> },
       { path: 'admin/users', element: <UsersPage /> },
       { path: 'admin/settings', element: <SettingsPage /> },
     ],

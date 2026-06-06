@@ -319,3 +319,48 @@ export interface UserActivity {
   proposals: ActivityProposal[];
   changes: ActivityChange[];
 }
+
+export interface TermsPolicySet {
+  id: string;
+  name: string;
+  description: string | null;
+  status: 'DRAFT' | 'ACTIVE' | 'ARCHIVED';
+  version: number;
+  effectiveFrom: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TermsClassificationRule {
+  id: string;
+  classification: string;
+  rank: number;
+  accessLevel: string;
+  permissions: string[];
+  prohibitions: string[];
+  obligations: string[];
+  odrlPermissions: string[];
+  odrlProhibitions: string[];
+  odrlDuties: string[];
+}
+
+export interface TermsRegulationRule {
+  id: string;
+  signalType: string;
+  pattern: string;
+  regulationName: string;
+  signalLabel: string;
+}
+
+export interface TermsRegulationObligation {
+  id: string;
+  regulationName: string;
+  obligation: string;
+  odrlDuty: string | null;
+}
+
+export interface TermsPolicyDetail extends TermsPolicySet {
+  classificationRules: TermsClassificationRule[];
+  regulationRules: TermsRegulationRule[];
+  regulationObligations: TermsRegulationObligation[];
+}
