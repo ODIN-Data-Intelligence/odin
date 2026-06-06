@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { Link, useOutletContext } from 'react-router-dom';
 import SearchBar from '../components/SearchBar';
 import TrendingDatasets from '../components/TrendingDatasets';
 import RecentlyViewed from '../components/RecentlyViewed';
@@ -20,6 +20,11 @@ export default function HomePage() {
           </div>
           <SearchBar ref={localRef} large />
           <p className="text-center text-xs text-gray-400 mt-3">Press <kbd className="px-1.5 py-0.5 bg-gray-100 rounded">/</kbd> to focus search · <kbd className="px-1.5 py-0.5 bg-gray-100 rounded">⌘K</kbd> to open AI chat</p>
+          <div className="flex justify-center mt-3">
+            <Link to="/bookmarks" className="text-xs text-amber-600 hover:text-amber-700 flex items-center gap-1.5 hover:underline">
+              <span>★</span> My Bookmarks
+            </Link>
+          </div>
 
           <div className="mt-12 space-y-8">
             <RecentlyViewed />

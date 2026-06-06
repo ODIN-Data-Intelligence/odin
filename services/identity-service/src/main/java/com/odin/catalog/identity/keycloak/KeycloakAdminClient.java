@@ -77,7 +77,7 @@ public class KeycloakAdminClient {
             .toList();
     }
 
-    /** Fetches a single Keycloak user by UUID. Returns empty if not found or admin access fails. */
+    /** Fetches a single Keycloak user by UUID. Returns empty only if Keycloak returns 404. Throws for any other failure. */
     public java.util.Optional<KeycloakUser> getUserById(String keycloakUserId) {
         try {
             String token = adminToken();
@@ -87,9 +87,11 @@ public class KeycloakAdminClient {
                 .retrieve()
                 .body(KeycloakUser.class);
             return java.util.Optional.ofNullable(user);
+        } catch (HttpClientErrorException.NotFound e) {
+            return java.util.Optional.empty();
         } catch (Exception e) {
             log.warn("action=KEYCLOAK_GET_USER_FAILED userId={} error={}", keycloakUserId, e.getMessage());
-            return java.util.Optional.empty();
+            throw new KeycloakException("Failed to fetch user from Keycloak: " + e.getMessage());
         }
     }
 

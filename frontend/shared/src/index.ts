@@ -13,4 +13,6 @@ export * from './api/lineage';
 export * from './api/search';
 export * from './api/ai';
 export * from './api/identity';
+export * from './types/bookmarks';
+export * from './api/bookmarks';
 export * from './components';
