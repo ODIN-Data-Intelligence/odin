@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.odin.catalog.inventory.api.v1.dto.TermsOfUseResponse;
 import com.odin.catalog.inventory.api.v1.dto.TermsOfUseResponse.DerivationDetails;
+import com.odin.catalog.inventory.application.dataset.ActiveTermsPolicy.ClassificationRule;
 import com.odin.catalog.inventory.infrastructure.jpa.entity.DatasetEntity;
 import com.odin.catalog.inventory.infrastructure.jpa.repository.DatasetRepository;
 import com.odin.catalog.inventory.infrastructure.jpa.repository.LogicalDataElementRepository;
@@ -33,11 +34,8 @@ public class TermsOfUseService {
     private final DatasetRepository datasetRepository;
     private final LogicalDataElementRepository elementRepository;
     private final VocabMappingRepository vocabMappingRepository;
+    private final TermsPolicyService termsPolicyService;
     private final ObjectMapper objectMapper;
-
-    private static final Map<String, Integer> CLASSIFICATION_RANK = Map.of(
-        "PUBLIC", 0, "INTERNAL", 1, "CONFIDENTIAL", 2, "HIGH_CONFIDENTIAL", 3
-    );
 
     // ── Public API ────────────────────────────────────────────────────────────
 
@@ -52,7 +50,6 @@ public class TermsOfUseService {
         DatasetEntity dataset = findOrThrow(datasetId);
         TermsOfUseResponse derived = buildResponse(dataset, datasetId);
 
-        // Derive if not already explicit; serialize ODRL to hasPolicy
         Map<String, Object> policy = derived.odrlPolicy();
         if (policy != null) {
             try {
@@ -63,7 +60,6 @@ public class TermsOfUseService {
                 throw new IllegalStateException("Failed to serialize ODRL policy: " + e.getMessage(), e);
             }
         }
-        // Re-derive after saving to return explicit policySource
         return buildResponse(dataset, datasetId);
     }
 
@@ -79,7 +75,6 @@ public class TermsOfUseService {
     // ── Core derivation ───────────────────────────────────────────────────────
 
     private TermsOfUseResponse buildResponse(DatasetEntity dataset, UUID datasetId) {
-        // Readiness counts — always computed so the UI can gate Accept Policy correctly
         int totalPublished      = (int) elementRepository.countPublishedByDatasetId(datasetId);
         int classifiedPublished = (int) elementRepository.countClassifiedPublishedByDatasetId(datasetId);
         int withVocab           = (int) vocabMappingRepository.countPublishedElementsWithVocabByDatasetId(datasetId);
@@ -89,7 +84,6 @@ public class TermsOfUseService {
             try {
                 Map<String, Object> policy = objectMapper.readValue(
                     dataset.getHasPolicy(), new TypeReference<>() {});
-                // Still include derivation details so the UI can show element coverage
                 DerivationDetails details = new DerivationDetails(
                     totalPublished, classifiedPublished, withVocab, List.of(), 0, List.of(),
                     totalPublished > 0 && classifiedPublished == totalPublished && withVocab == totalPublished
@@ -100,37 +94,45 @@ public class TermsOfUseService {
             }
         }
 
-        // Classify
+        ActiveTermsPolicy policy = termsPolicyService.getActivePolicy();
+
+        // Classify — find most restrictive classification by rank
         List<String> allClassifications = elementRepository.findClassificationsByDatasetId(datasetId);
         List<String> validClassifications = allClassifications.stream()
-            .filter(CLASSIFICATION_RANK::containsKey)
+            .filter(c -> policy.classificationRules().containsKey(c))
             .collect(Collectors.toList());
         List<String> distinctClassifications = validClassifications.stream().distinct().sorted().collect(Collectors.toList());
 
         String effective = validClassifications.stream()
-            .max((a, b) -> CLASSIFICATION_RANK.get(a) - CLASSIFICATION_RANK.get(b))
+            .max((a, b) -> policy.classificationRules().get(a).rank() - policy.classificationRules().get(b).rank())
             .orElse(null);
 
-        // Fallback
         if (effective == null) {
             return buildFallback(dataset, datasetId, distinctClassifications,
                 totalPublished, classifiedPublished, withVocab);
         }
 
-        // Regulations + signals
+        ClassificationRule rule = policy.classificationRules().get(effective);
+
+        // Detect regulations via policy rules
         List<String> conceptIris = vocabMappingRepository.findConceptIrisByDatasetId(datasetId);
-        RegulationResult regResult = deriveRegulations(conceptIris, dataset.getKeywords());
+        RegulationResult regResult = detectRegulations(conceptIris, dataset.getKeywords(), policy);
 
-        // Build rules
-        List<String> permissions  = new ArrayList<>(permissionsFor(effective));
-        List<String> prohibitions = new ArrayList<>(prohibitionsFor(effective));
-        List<String> obligations  = new ArrayList<>(obligationsFor(effective));
+        // Build rules from policy
+        List<String> permissions  = new ArrayList<>(rule.permissions());
+        List<String> prohibitions = new ArrayList<>(rule.prohibitions());
+        List<String> obligations  = new ArrayList<>(rule.obligations());
 
-        if (regResult.regulations.contains("Market Data Licensing")) {
-            obligations.add("Comply with market data vendor licence terms");
+        // Add regulation-triggered obligations
+        List<String> additionalOdrlDuties = new ArrayList<>();
+        for (ActiveTermsPolicy.RegulationObligation ro : policy.regulationObligations()) {
+            if (regResult.regulations.contains(ro.regulationName())) {
+                obligations.add(ro.obligation());
+                if (ro.odrlDuty() != null) additionalOdrlDuties.add(ro.odrlDuty());
+            }
         }
 
-        Map<String, Object> odrlPolicy = buildOdrlPolicy(datasetId, effective, prohibitions, obligations);
+        Map<String, Object> odrlPolicy = buildOdrlPolicy(datasetId, rule, prohibitions, additionalOdrlDuties);
 
         boolean readyToAccept = totalPublished > 0
             && classifiedPublished == totalPublished
@@ -145,92 +147,46 @@ public class TermsOfUseService {
         log.debug("terms.derived datasetId={} classification={} regulations={}", datasetId, effective, regResult.regulations);
 
         return new TermsOfUseResponse(
-            effective, accessLevelFor(effective),
+            effective, rule.accessLevel(),
             permissions, prohibitions, obligations,
             regResult.regulations, odrlPolicy, "derived", details
         );
     }
 
-    // ── Rules by classification ───────────────────────────────────────────────
-
-    private static String accessLevelFor(String c) {
-        return switch (c) {
-            case "PUBLIC"            -> "OPEN";
-            case "INTERNAL"          -> "INTERNAL_ONLY";
-            case "CONFIDENTIAL"      -> "RESTRICTED";
-            case "HIGH_CONFIDENTIAL" -> "HIGHLY_RESTRICTED";
-            default                  -> "INTERNAL_ONLY";
-        };
-    }
-
-    private static List<String> permissionsFor(String c) {
-        return switch (c) {
-            case "PUBLIC" -> List.of(
-                "Use and reproduce freely",
-                "Redistribute with attribution",
-                "Incorporate into analytics and products"
-            );
-            case "INTERNAL" -> List.of(
-                "Use for internal analytics and reporting",
-                "Share within the organisation"
-            );
-            case "CONFIDENTIAL" -> List.of(
-                "Use for approved internal analytics",
-                "Include in regulatory reporting submissions"
-            );
-            case "HIGH_CONFIDENTIAL" -> List.of(
-                "Use only with explicit written approval from the data owner",
-                "Access limited to named authorised personnel"
-            );
-            default -> List.of();
-        };
-    }
-
-    private static List<String> prohibitionsFor(String c) {
-        return switch (c) {
-            case "PUBLIC"            -> List.of();
-            case "INTERNAL"          -> List.of("Redistribute to external parties", "Sell or sublicense data", "Public disclosure");
-            case "CONFIDENTIAL"      -> List.of("Redistribute or share externally", "Reproduce or publish data samples", "Use for commercial purposes");
-            case "HIGH_CONFIDENTIAL" -> List.of("Redistribute, reproduce, or present externally", "Incorporate into derived data products", "Use for any non-approved purpose");
-            default                  -> List.of();
-        };
-    }
-
-    private static List<String> obligationsFor(String c) {
-        return switch (c) {
-            case "PUBLIC"            -> List.of("Cite the data source when publishing results");
-            case "INTERNAL"          -> List.of();
-            case "CONFIDENTIAL"      -> List.of("Notify the data owner before use in AI/ML models", "Document the intended usage purpose");
-            case "HIGH_CONFIDENTIAL" -> List.of("Obtain explicit consent from the data owner prior to access", "Maintain an audit trail of all access and usage", "Report usage to the data governance team quarterly");
-            default                  -> List.of();
-        };
-    }
-
-    // ── Regulation derivation ─────────────────────────────────────────────────
+    // ── Regulation detection via policy rules ─────────────────────────────────
 
     private record RegulationResult(List<String> regulations, List<String> signals) {}
 
-    private static RegulationResult deriveRegulations(List<String> conceptIris, List<String> keywords) {
+    private static RegulationResult detectRegulations(
+            List<String> conceptIris, List<String> keywords, ActiveTermsPolicy policy) {
         Set<String> regulations = new LinkedHashSet<>();
         Set<String> signals = new LinkedHashSet<>();
 
-        for (String iri : conceptIris) {
-            if (iri.contains("fibo-fbc") || iri.contains("fibo-sec")) {
-                regulations.add("Securities & Market Regulation");
-                signals.add(iri.contains("fibo-fbc") ? "fibo-fbc" : "fibo-sec");
-            }
-            if (iri.contains("fibo-md"))  { regulations.add("Market Data Licensing"); signals.add("fibo-md"); }
-            if (iri.contains("fibo-fnd")) { regulations.add("Financial Foundations Standards"); signals.add("fibo-fnd"); }
-        }
-
-        if (keywords != null) {
-            for (String kw : keywords) {
-                String k = kw.toLowerCase();
-                if (k.contains("mifid"))  { regulations.add("MiFID II Transaction Reporting"); signals.add("mifid"); }
-                if (k.contains("emir"))   { regulations.add("EMIR Derivatives Reporting"); signals.add("emir"); }
-                if (k.contains("finrep")) { regulations.add("EBA FinRep Reporting"); signals.add("finrep"); }
-                if (k.contains("gdpr"))   { regulations.add("GDPR Data Protection"); signals.add("gdpr"); }
-                if (k.contains("basel"))  { regulations.add("Basel III Capital Requirements"); signals.add("basel"); }
+        for (ActiveTermsPolicy.RegulationDetectionRule rule : policy.regulationRules()) {
+            switch (rule.signalType()) {
+                case "IRI_CONTAINS" -> {
+                    for (String iri : conceptIris) {
+                        if (iri.contains(rule.pattern())) {
+                            regulations.add(rule.regulationName());
+                            signals.add(rule.signalLabel());
+                            break;
+                        }
+                    }
+                }
+                case "KEYWORD" -> {
+                    if (keywords != null) {
+                        for (String kw : keywords) {
+                            if (kw.toLowerCase().contains(rule.pattern())) {
+                                regulations.add(rule.regulationName());
+                                signals.add(rule.signalLabel());
+                                break;
+                            }
+                        }
+                    }
+                }
+                case "LOGICAL_TYPE" -> {
+                    // reserved for element-level logical type matching
+                }
             }
         }
 
@@ -240,8 +196,8 @@ public class TermsOfUseService {
     // ── ODRL JSON builder ─────────────────────────────────────────────────────
 
     private static Map<String, Object> buildOdrlPolicy(
-            UUID datasetId, String classification,
-            List<String> prohibitions, List<String> obligations) {
+            UUID datasetId, ClassificationRule rule,
+            List<String> prohibitions, List<String> additionalOdrlDuties) {
 
         String target = "dataset:" + datasetId;
         Map<String, Object> policy = new LinkedHashMap<>();
@@ -250,56 +206,27 @@ public class TermsOfUseService {
         policy.put("uid", "https://catalog/datasets/" + datasetId + "/policy");
 
         List<Map<String, Object>> permList = new ArrayList<>();
-        for (String action : odrlPermissionActions(classification)) {
+        for (String action : rule.odrlPermissions()) {
             permList.add(Map.of("target", target, "action", action));
         }
         if (!permList.isEmpty()) policy.put("permission", permList);
 
         List<Map<String, Object>> prohibList = new ArrayList<>();
-        for (String action : odrlProhibitionActions(classification)) {
+        for (String action : rule.odrlProhibitions()) {
             prohibList.add(Map.of("target", target, "action", action));
         }
         if (!prohibList.isEmpty()) policy.put("prohibition", prohibList);
 
         List<Map<String, Object>> dutyList = new ArrayList<>();
-        for (String action : odrlDutyActions(classification, obligations)) {
+        for (String action : rule.odrlDuties()) {
+            dutyList.add(Map.of("action", action));
+        }
+        for (String action : additionalOdrlDuties) {
             dutyList.add(Map.of("action", action));
         }
         if (!dutyList.isEmpty()) policy.put("obligation", dutyList);
 
         return policy;
-    }
-
-    private static List<String> odrlPermissionActions(String c) {
-        return switch (c) {
-            case "PUBLIC"            -> List.of("use", "reproduce", "distribute");
-            case "INTERNAL"          -> List.of("use", "present");
-            case "CONFIDENTIAL"      -> List.of("use");
-            case "HIGH_CONFIDENTIAL" -> List.of("use");
-            default                  -> List.of("use");
-        };
-    }
-
-    private static List<String> odrlProhibitionActions(String c) {
-        return switch (c) {
-            case "PUBLIC"            -> List.of();
-            case "INTERNAL"          -> List.of("distribute", "sell");
-            case "CONFIDENTIAL"      -> List.of("distribute", "reproduce", "present");
-            case "HIGH_CONFIDENTIAL" -> List.of("distribute", "reproduce", "present", "modify");
-            default                  -> List.of();
-        };
-    }
-
-    private static List<String> odrlDutyActions(String c, List<String> obligations) {
-        List<String> actions = new ArrayList<>();
-        switch (c) {
-            case "PUBLIC"            -> actions.add("attribute");
-            case "CONFIDENTIAL"      -> actions.add("notify");
-            case "HIGH_CONFIDENTIAL" -> { actions.add("obtainConsent"); actions.add("notify"); }
-        }
-        if (obligations.stream().anyMatch(o -> o.toLowerCase().contains("market data")))
-            actions.add("licenseMarketData");
-        return actions;
     }
 
     // ── Fallback ──────────────────────────────────────────────────────────────

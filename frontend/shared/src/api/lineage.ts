@@ -52,4 +52,6 @@ export const lineageApi = {
     get<LineageIdentity>(`${BASE}/catalog-datasets/${catalogId}/lineage-identity`),
   linkCatalogResource: (ns: string, name: string, catalogResourceId: string) =>
     put<void>(`${BASE}/datasets/${encodeURIComponent(ns)}/${encodeURIComponent(name)}/catalog-link`, { catalogResourceId }),
+  getCatalogId: (ns: string, name: string) =>
+    get<{ catalogId: string }>(`${BASE}/datasets/${encodeURIComponent(ns)}/${encodeURIComponent(name)}/catalog-link`),
 };

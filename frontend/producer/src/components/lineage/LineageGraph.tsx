@@ -1,17 +1,36 @@
 import { useState } from 'react';
 import ReactFlow, {
-  Background, Controls, MiniMap,
-  type Node, type Edge,
+  Background, Controls, MiniMap, Position,
+  type Node, type Edge, type NodeMouseHandler,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import type { LineageGraph as LineageGraphData } from '@datacatalog/shared';
 
 interface Props {
   graph: LineageGraphData;
+  onNodeDoubleClick?: NodeMouseHandler;
 }
 
 const DATASET_COLOR = '#dbeafe';
-const JOB_COLOR = '#fef3c7';
+const JOB_COLOR     = '#fef3c7';
+const FOCAL_COLOR   = '#bfdbfe';
+
+function resolveHandles(nodes: Node[], edges: Edge[]): Node[] {
+  const xOf = new Map(nodes.map(n => [n.id, n.position.x]));
+  const sp = new Map<string, Position>();
+  const tp = new Map<string, Position>();
+  for (const e of edges) {
+    const sx = xOf.get(e.source) ?? 0;
+    const tx = xOf.get(e.target) ?? 0;
+    sp.set(e.source, sx <= tx ? Position.Right : Position.Left);
+    tp.set(e.target, sx <= tx ? Position.Left  : Position.Right);
+  }
+  return nodes.map(n => ({
+    ...n,
+    sourcePosition: sp.get(n.id) ?? Position.Right,
+    targetPosition: tp.get(n.id) ?? Position.Left,
+  }));
+}
 
 function buildNodesEdges(graph: LineageGraphData): { nodes: Node[]; edges: Edge[] } {
   const depthBuckets = new Map<number, typeof graph.nodes>();
@@ -23,27 +42,31 @@ function buildNodesEdges(graph: LineageGraphData): { nodes: Node[]; edges: Edge[
 
   const COL_WIDTH = 240;
   const ROW_HEIGHT = 100;
+  const rootKey = `${graph.rootNamespace}/${graph.rootName}`;
+  const isUpstream = graph.direction === 'upstream';
 
   const nodes: Node[] = graph.nodes.map(n => {
     const key = `${n.namespace}/${n.name}`;
     const d = n.depth ?? 0;
+    const isRoot = key === rootKey;
     const bucket = depthBuckets.get(d)!;
     const rowIdx = bucket.indexOf(n);
     const totalInDepth = bucket.length;
     return {
       id: key,
-      data: { label: n.name, namespace: n.namespace, type: n.type },
+      data: { label: n.name, namespace: n.namespace, name: n.name, type: n.type },
       position: {
-        x: d * COL_WIDTH,
+        x: (isUpstream ? -d : d) * COL_WIDTH,
         y: (rowIdx - (totalInDepth - 1) / 2) * ROW_HEIGHT,
       },
       style: {
-        background: n.type === 'Job' ? JOB_COLOR : DATASET_COLOR,
-        border: '1px solid #cbd5e1',
+        background: isRoot ? FOCAL_COLOR : n.type === 'Job' ? JOB_COLOR : DATASET_COLOR,
+        border: isRoot ? '2px solid #3b82f6' : '1px solid #cbd5e1',
         borderRadius: 8,
         padding: '8px 12px',
         fontSize: 12,
         maxWidth: 200,
+        fontWeight: isRoot ? 600 : 400,
       },
     };
   });
@@ -58,12 +81,12 @@ function buildNodesEdges(graph: LineageGraphData): { nodes: Node[]; edges: Edge[
     animated: e.edgeType === 'DERIVED_FROM',
   }));
 
-  return { nodes, edges };
+  return { nodes: resolveHandles(nodes, edges), edges };
 }
 
-function FlowCanvas({ nodes, edges }: { nodes: Node[]; edges: Edge[] }) {
+function FlowCanvas({ nodes, edges, onNodeDoubleClick }: { nodes: Node[]; edges: Edge[]; onNodeDoubleClick?: NodeMouseHandler }) {
   return (
-    <ReactFlow nodes={nodes} edges={edges} fitView attributionPosition="bottom-right">
+    <ReactFlow nodes={nodes} edges={edges} fitView onNodeDoubleClick={onNodeDoubleClick} attributionPosition="bottom-right">
       <Background gap={20} color="#e2e8f0" />
       <Controls />
       <MiniMap nodeColor={n => n.style?.background as string ?? DATASET_COLOR} />
@@ -71,7 +94,7 @@ function FlowCanvas({ nodes, edges }: { nodes: Node[]; edges: Edge[] }) {
   );
 }
 
-export default function LineageGraph({ graph }: Props) {
+export default function LineageGraph({ graph, onNodeDoubleClick }: Props) {
   const [maximized, setMaximized] = useState(false);
   const { nodes, edges } = buildNodesEdges(graph);
 
@@ -85,7 +108,7 @@ export default function LineageGraph({ graph }: Props) {
         >
           ⤢
         </button>
-        <FlowCanvas nodes={nodes} edges={edges} />
+        <FlowCanvas nodes={nodes} edges={edges} onNodeDoubleClick={onNodeDoubleClick} />
       </div>
 
       {maximized && (
@@ -101,7 +124,7 @@ export default function LineageGraph({ graph }: Props) {
             </button>
           </div>
           <div className="flex-1 min-h-0">
-            <FlowCanvas nodes={nodes} edges={edges} />
+            <FlowCanvas nodes={nodes} edges={edges} onNodeDoubleClick={onNodeDoubleClick} />
           </div>
         </div>
       )}

@@ -15,10 +15,11 @@ const navItems = [
 // Each admin item optionally restricted to specific roles.
 // If `roles` is omitted the item is visible to all authenticated users.
 const adminItems = [
-  { label: 'Harvest',  to: 'admin/harvest',  roles: ['administrator'] },
-  { label: 'Domains',  to: 'admin/domains',  roles: ['administrator', 'data-governance'] },
-  { label: 'Users',    to: 'admin/users',    roles: ['administrator'] },
-  { label: 'Settings', to: 'admin/settings', roles: ['administrator'] },
+  { label: 'Harvest',        to: 'admin/harvest',                      roles: ['administrator'] },
+  { label: 'Domains',        to: 'admin/domains',                      roles: ['administrator', 'data-governance'] },
+  { label: 'Terms Policies', to: 'admin/governance/terms-policies',    roles: ['administrator', 'data-governance'] },
+  { label: 'Users',          to: 'admin/users',                        roles: ['administrator'] },
+  { label: 'Settings',       to: 'admin/settings',                     roles: ['administrator'] },
 ];
 
 export default function AppLayout() {

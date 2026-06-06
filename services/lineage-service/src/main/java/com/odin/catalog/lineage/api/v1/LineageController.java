@@ -71,6 +71,9 @@ public class LineageController {
             ? ageGraph.getUpstreamLineage(namespace, name, depth)
             : ageGraph.getDownstreamLineage(namespace, name, depth);
 
+        // Prepend root node at depth 0 — the Cypher traversal starts at depth 1
+        nodes.add(0, Map.of("namespace", namespace, "name", name, "depth", 0L));
+
         List<Map<String, Object>> edges = buildEdgesForSubgraph(namespace, name, nodes);
 
         return new LineageGraphResponse(namespace, name, direction, depth, nodes, edges);
@@ -92,6 +95,7 @@ public class LineageController {
             @Parameter(description = "Maximum number of downstream hops to traverse", example = "10")
             @RequestParam(defaultValue = "10") int depth) {
         List<Map<String, Object>> nodes = ageGraph.getDownstreamLineage(namespace, name, depth);
+        nodes.add(0, Map.of("namespace", namespace, "name", name, "depth", 0L));
         List<Map<String, Object>> edges = buildEdgesForSubgraph(namespace, name, nodes);
         return new LineageGraphResponse(namespace, name, "downstream", depth, nodes, edges);
     }
@@ -111,6 +115,27 @@ public class LineageController {
             @PathVariable UUID catalogId) {
         return lineageDatasetRepository.findByCatalogResourceId(catalogId)
             .map(ds -> ResponseEntity.ok(Map.of("namespace", ds.getNamespace(), "name", ds.getName())))
+            .orElse(ResponseEntity.notFound().build());
+    }
+
+    @Operation(summary = "Resolve catalog dataset ID for a lineage dataset",
+        description = "Returns the ODIN catalog dataset UUID linked to an OpenLineage namespace+name pair. "
+            + "Used by lineage graph views to navigate to the catalog page on node double-click.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Catalog ID resolved",
+            content = @Content(schema = @Schema(example = "{\"catalogId\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\"}"))),
+        @ApiResponse(responseCode = "404", description = "No catalog link found for this lineage dataset", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @GetMapping("/datasets/{namespace}/{name}/catalog-link")
+    public ResponseEntity<Map<String, String>> getCatalogLink(
+            @Parameter(description = "OpenLineage namespace", example = "snowflake://trading_dw")
+            @PathVariable String namespace,
+            @Parameter(description = "OpenLineage dataset name", example = "PUBLIC.TRADE_POSITIONS")
+            @PathVariable String name) {
+        return lineageDatasetRepository.findByNamespaceAndName(namespace, name)
+            .filter(ds -> ds.getCatalogResourceId() != null)
+            .map(ds -> ResponseEntity.ok(Map.of("catalogId", ds.getCatalogResourceId().toString())))
             .orElse(ResponseEntity.notFound().build());
     }
 

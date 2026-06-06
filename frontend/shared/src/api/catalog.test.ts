@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { catalogApi, datasetApi, dataProductApi, vocabularyApi, logicalModelApi, logicalElementApi, vocabMappingApi } from './catalog';
+import { catalogApi, datasetApi, dataProductApi, vocabularyApi, logicalModelApi, logicalElementApi, vocabMappingApi, termsPolicyApi } from './catalog';
 
 beforeEach(() => {
   vi.stubGlobal('localStorage', { getItem: vi.fn().mockReturnValue(null), setItem: vi.fn(), removeItem: vi.fn() });
@@ -161,6 +161,140 @@ describe('vocabMappingApi', () => {
     vi.stubGlobal('fetch', mockFetch);
     await vocabMappingApi.delete('mapping-1');
     expect(mockFetch.mock.calls[0][0]).toBe('/api/v1/vocab-mappings/mapping-1');
+    expect(mockFetch.mock.calls[0][1].method).toBe('DELETE');
+  });
+});
+
+describe('termsPolicyApi', () => {
+  it('list should GET /api/v1/terms-policies', async () => {
+    const mockFetch = mockOk([]);
+    vi.stubGlobal('fetch', mockFetch);
+    await termsPolicyApi.list();
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/v1/terms-policies');
+    expect(mockFetch.mock.calls[0][1].method).toBeUndefined();
+  });
+
+  it('get should GET /api/v1/terms-policies/:id', async () => {
+    const mockFetch = mockOk({ id: 'p-1' });
+    vi.stubGlobal('fetch', mockFetch);
+    await termsPolicyApi.get('p-1');
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/v1/terms-policies/p-1');
+  });
+
+  it('create should POST with name and description', async () => {
+    const mockFetch = mockOk({ id: 'p-2', status: 'DRAFT' });
+    vi.stubGlobal('fetch', mockFetch);
+    await termsPolicyApi.create({ name: 'My Policy', description: 'desc' });
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/v1/terms-policies');
+    expect(mockFetch.mock.calls[0][1].method).toBe('POST');
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.name).toBe('My Policy');
+    expect(body.description).toBe('desc');
+  });
+
+  it('update should PUT to /api/v1/terms-policies/:id', async () => {
+    const mockFetch = mockOk({ id: 'p-1' });
+    vi.stubGlobal('fetch', mockFetch);
+    await termsPolicyApi.update('p-1', { name: 'Updated' });
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/v1/terms-policies/p-1');
+    expect(mockFetch.mock.calls[0][1].method).toBe('PUT');
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.name).toBe('Updated');
+  });
+
+  it('delete should DELETE /api/v1/terms-policies/:id', async () => {
+    const mockFetch = mockNoContent();
+    vi.stubGlobal('fetch', mockFetch);
+    await termsPolicyApi.delete('p-1');
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/v1/terms-policies/p-1');
+    expect(mockFetch.mock.calls[0][1].method).toBe('DELETE');
+  });
+
+  it('activate should POST to /api/v1/terms-policies/:id/activate', async () => {
+    const mockFetch = mockOk({ id: 'p-1', status: 'ACTIVE' });
+    vi.stubGlobal('fetch', mockFetch);
+    await termsPolicyApi.activate('p-1');
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/v1/terms-policies/p-1/activate');
+    expect(mockFetch.mock.calls[0][1].method).toBe('POST');
+  });
+
+  it('clone should POST with name to /api/v1/terms-policies/:id/clone', async () => {
+    const mockFetch = mockOk({ id: 'p-3', status: 'DRAFT' });
+    vi.stubGlobal('fetch', mockFetch);
+    await termsPolicyApi.clone('p-1', 'My Policy (copy)');
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/v1/terms-policies/p-1/clone');
+    expect(mockFetch.mock.calls[0][1].method).toBe('POST');
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.name).toBe('My Policy (copy)');
+  });
+
+  it('upsertClassificationRule should PUT to classification-rules/:classification', async () => {
+    const mockFetch = mockOk({ id: 'cr-1', classification: 'PUBLIC' });
+    vi.stubGlobal('fetch', mockFetch);
+    await termsPolicyApi.upsertClassificationRule('p-1', 'PUBLIC', {
+      rank: 0, accessLevel: 'OPEN',
+      permissions: ['Read'], prohibitions: [], obligations: [],
+      odrlPermissions: [], odrlProhibitions: [], odrlDuties: [],
+    });
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/v1/terms-policies/p-1/classification-rules/PUBLIC');
+    expect(mockFetch.mock.calls[0][1].method).toBe('PUT');
+  });
+
+  it('deleteClassificationRule should DELETE classification-rules/:classification', async () => {
+    const mockFetch = mockNoContent();
+    vi.stubGlobal('fetch', mockFetch);
+    await termsPolicyApi.deleteClassificationRule('p-1', 'PUBLIC');
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/v1/terms-policies/p-1/classification-rules/PUBLIC');
+    expect(mockFetch.mock.calls[0][1].method).toBe('DELETE');
+  });
+
+  it('addRegulationRule should POST to regulation-rules', async () => {
+    const mockFetch = mockOk({ id: 'rr-1', regulationName: 'GDPR' });
+    vi.stubGlobal('fetch', mockFetch);
+    await termsPolicyApi.addRegulationRule('p-1', {
+      signalType: 'KEYWORD', pattern: 'gdpr', regulationName: 'GDPR', signalLabel: 'GDPR keyword',
+    });
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/v1/terms-policies/p-1/regulation-rules');
+    expect(mockFetch.mock.calls[0][1].method).toBe('POST');
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.regulationName).toBe('GDPR');
+  });
+
+  it('updateRegulationRule should PUT to regulation-rules/:ruleId', async () => {
+    const mockFetch = mockOk({ id: 'rr-1' });
+    vi.stubGlobal('fetch', mockFetch);
+    await termsPolicyApi.updateRegulationRule('p-1', 'rr-1', {
+      signalType: 'KEYWORD', pattern: 'gdpr2', regulationName: 'GDPR', signalLabel: 'updated',
+    });
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/v1/terms-policies/p-1/regulation-rules/rr-1');
+    expect(mockFetch.mock.calls[0][1].method).toBe('PUT');
+  });
+
+  it('deleteRegulationRule should DELETE regulation-rules/:ruleId', async () => {
+    const mockFetch = mockNoContent();
+    vi.stubGlobal('fetch', mockFetch);
+    await termsPolicyApi.deleteRegulationRule('p-1', 'rr-1');
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/v1/terms-policies/p-1/regulation-rules/rr-1');
+    expect(mockFetch.mock.calls[0][1].method).toBe('DELETE');
+  });
+
+  it('addRegulationObligation should POST to regulation-obligations', async () => {
+    const mockFetch = mockOk({ id: 'ro-1', regulationName: 'GDPR' });
+    vi.stubGlobal('fetch', mockFetch);
+    await termsPolicyApi.addRegulationObligation('p-1', {
+      regulationName: 'GDPR', obligation: 'Conduct DPIA', odrlDuty: 'conductDPIA',
+    });
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/v1/terms-policies/p-1/regulation-obligations');
+    expect(mockFetch.mock.calls[0][1].method).toBe('POST');
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.obligation).toBe('Conduct DPIA');
+  });
+
+  it('deleteRegulationObligation should DELETE regulation-obligations/:oblId', async () => {
+    const mockFetch = mockNoContent();
+    vi.stubGlobal('fetch', mockFetch);
+    await termsPolicyApi.deleteRegulationObligation('p-1', 'ro-1');
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/v1/terms-policies/p-1/regulation-obligations/ro-1');
     expect(mockFetch.mock.calls[0][1].method).toBe('DELETE');
   });
 });

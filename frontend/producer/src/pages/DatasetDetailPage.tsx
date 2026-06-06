@@ -1,15 +1,16 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { datasetApi, logicalModelApi, lineageApi, useIriTranslations, iriFragment } from '@datacatalog/shared';
-import type { Dataset, Distribution, OwnershipProposal } from '@datacatalog/shared';
+import type { Dataset, Distribution, OwnershipProposal, LineageGraph as LineageGraphData, LineageNode, LineageEdge } from '@datacatalog/shared';
 import { PageHeader } from '@datacatalog/shared';
 import { Button } from '@datacatalog/shared';
 import DatasetForm from '../components/catalog/DatasetForm';
 import LogicalModelEditor from '../components/catalog/LogicalModelEditor';
 import PhysicalSchemaSection from '../components/catalog/PhysicalSchemaSection';
 import LineageGraph from '../components/lineage/LineageGraph';
+import ReactFlow, { Background, Controls, MiniMap, Position, type Node, type Edge, type NodeMouseHandler } from 'reactflow';
 import OwnershipPanel from '../components/catalog/OwnershipPanel';
 import TermsOfUsePanel from '../components/catalog/TermsOfUsePanel';
 import DatasetHistoryTab from '../components/catalog/DatasetHistoryTab';
@@ -502,18 +503,134 @@ function DistributionsTab({ datasetId, tenant, canOwnerAction }: { datasetId: st
 
 // ─── Lineage tab ──────────────────────────────────────────────────────────────
 
+type LineageDirection = 'upstream' | 'downstream' | 'both';
+
+const LINEAGE_COL   = 240;
+const LINEAGE_ROW   = 100;
+const DATASET_BG    = '#dbeafe';
+const JOB_BG        = '#fef3c7';
+const FOCAL_BG      = '#bfdbfe';
+
+function resolveHandles(nodes: Node[], edges: Edge[]): Node[] {
+  const xOf = new Map(nodes.map(n => [n.id, n.position.x]));
+  const sp = new Map<string, Position>();
+  const tp = new Map<string, Position>();
+  for (const e of edges) {
+    const sx = xOf.get(e.source) ?? 0;
+    const tx = xOf.get(e.target) ?? 0;
+    sp.set(e.source, sx <= tx ? Position.Right : Position.Left);
+    tp.set(e.target, sx <= tx ? Position.Left  : Position.Right);
+  }
+  return nodes.map(n => ({
+    ...n,
+    sourcePosition: sp.get(n.id) ?? Position.Right,
+    targetPosition: tp.get(n.id) ?? Position.Left,
+  }));
+}
+
+function makeNode(n: LineageNode, x: number, rowIdx: number, total: number, isRoot: boolean): Node {
+  return {
+    id: `${n.namespace}/${n.name}`,
+    data: { label: n.name, namespace: n.namespace, name: n.name },
+    position: { x, y: (rowIdx - (total - 1) / 2) * LINEAGE_ROW },
+    style: {
+      background: isRoot ? FOCAL_BG : n.type === 'Job' ? JOB_BG : DATASET_BG,
+      border: isRoot ? '2px solid #3b82f6' : '1px solid #cbd5e1',
+      borderRadius: 8, padding: '8px 12px', fontSize: 12, maxWidth: 200,
+      fontWeight: isRoot ? 600 : 400,
+    },
+  };
+}
+
+function makeEdge(e: LineageEdge, i: number): Edge {
+  return {
+    id: `e-${i}`,
+    source: `${e.fromNamespace}/${e.fromName}`,
+    target: `${e.toNamespace}/${e.toName}`,
+    label: e.edgeType, labelStyle: { fontSize: 10 },
+    style: { stroke: '#94a3b8' },
+    animated: e.edgeType === 'DERIVED_FROM',
+  };
+}
+
+function buildLineageFlow(
+  direction: LineageDirection,
+  downGraph: LineageGraphData | undefined,
+  upGraph: LineageGraphData | undefined,
+): { nodes: Node[]; edges: Edge[] } | null {
+  if (direction === 'downstream' && downGraph) {
+    const buckets = new Map<number, LineageNode[]>();
+    downGraph.nodes.forEach(n => { const d = n.depth ?? 0; if (!buckets.has(d)) buckets.set(d, []); buckets.get(d)!.push(n); });
+    const rootKey = `${downGraph.rootNamespace}/${downGraph.rootName}`;
+    const downNodes = downGraph.nodes.map(n => {
+      const d = n.depth ?? 0; const bucket = buckets.get(d)!;
+      return makeNode(n, d * LINEAGE_COL, bucket.indexOf(n), bucket.length, `${n.namespace}/${n.name}` === rootKey);
+    });
+    const downEdges = downGraph.edges.map(makeEdge);
+    return { nodes: resolveHandles(downNodes, downEdges), edges: downEdges };
+  }
+  if (direction === 'upstream' && upGraph) {
+    const buckets = new Map<number, LineageNode[]>();
+    upGraph.nodes.forEach(n => { const d = n.depth ?? 0; if (!buckets.has(d)) buckets.set(d, []); buckets.get(d)!.push(n); });
+    const rootKey = `${upGraph.rootNamespace}/${upGraph.rootName}`;
+    const upNodes = upGraph.nodes.map(n => {
+      const d = n.depth ?? 0; const bucket = buckets.get(d)!;
+      return makeNode(n, -d * LINEAGE_COL, bucket.indexOf(n), bucket.length, `${n.namespace}/${n.name}` === rootKey);
+    });
+    const upEdges = upGraph.edges.map(makeEdge);
+    return { nodes: resolveHandles(upNodes, upEdges), edges: upEdges };
+  }
+  if (direction === 'both' && upGraph && downGraph) {
+    const signedDepths = new Map<string, number>();
+    const nodeByKey   = new Map<string, LineageNode>();
+    for (const n of downGraph.nodes) { const k = `${n.namespace}/${n.name}`; signedDepths.set(k, n.depth ?? 0); nodeByKey.set(k, n); }
+    for (const n of upGraph.nodes)   { const k = `${n.namespace}/${n.name}`; const sd = -(n.depth ?? 0); if (sd === 0) continue; signedDepths.set(k, sd); nodeByKey.set(k, n); }
+    const cols = new Map<number, string[]>();
+    for (const [k, sd] of signedDepths) { if (!cols.has(sd)) cols.set(sd, []); cols.get(sd)!.push(k); }
+    const nodes: Node[] = [];
+    for (const [k, sd] of signedDepths) {
+      const n = nodeByKey.get(k)!; const col = cols.get(sd)!;
+      nodes.push(makeNode(n, sd * LINEAGE_COL, col.indexOf(k), col.length, sd === 0));
+    }
+    const seen = new Set<string>(); const edges: Edge[] = [];
+    for (const e of [...upGraph.edges, ...downGraph.edges]) {
+      const eid = `${e.fromNamespace}/${e.fromName}->${e.toNamespace}/${e.toName}`;
+      if (!seen.has(eid)) { seen.add(eid); edges.push(makeEdge(e, edges.length)); }
+    }
+    return { nodes: resolveHandles(nodes, edges), edges };
+  }
+  return null;
+}
+
 function LineageTab({ datasetId, tenant }: { datasetId: string; tenant: string }) {
+  const [direction, setDirection] = useState<LineageDirection>('downstream');
+
   const { data: identity, isLoading, isError } = useQuery({
     queryKey: ['lineage-identity', datasetId],
     queryFn: () => lineageApi.getCatalogLineageIdentity(datasetId),
     retry: false,
   });
 
-  const { data: graph } = useQuery({
-    queryKey: ['lineage-graph', identity?.namespace, identity?.name],
+  const { data: downGraph, isLoading: downLoading } = useQuery({
+    queryKey: ['lineage-tab', identity?.namespace, identity?.name, 'downstream'],
     queryFn: () => lineageApi.getDatasetLineage(identity!.namespace, identity!.name, 'downstream', 5),
-    enabled: !!identity,
+    enabled: !!identity && (direction === 'downstream' || direction === 'both'),
   });
+
+  const { data: upGraph, isLoading: upLoading } = useQuery({
+    queryKey: ['lineage-tab', identity?.namespace, identity?.name, 'upstream'],
+    queryFn: () => lineageApi.getDatasetLineage(identity!.namespace, identity!.name, 'upstream', 5),
+    enabled: !!identity && (direction === 'upstream' || direction === 'both'),
+  });
+
+  const navigate = useNavigate();
+  const onNodeDoubleClick: NodeMouseHandler = useCallback(async (_evt, node) => {
+    const { namespace, name: nodeName } = node.data as { namespace: string; name: string };
+    try {
+      const { catalogId } = await lineageApi.getCatalogId(namespace, nodeName);
+      navigate(`/${tenant}/datasets/${catalogId}`);
+    } catch { /* no catalog link */ }
+  }, [navigate, tenant]);
 
   if (isLoading) return <div className="text-sm text-gray-400">Looking up lineage...</div>;
   if (isError || !identity) return (
@@ -525,20 +642,52 @@ function LineageTab({ datasetId, tenant }: { datasetId: string; tenant: string }
     </div>
   );
 
+  const graphLoading = direction === 'both' ? (downLoading || upLoading) : direction === 'upstream' ? upLoading : downLoading;
+  const flow = buildLineageFlow(direction, downGraph, upGraph);
+
+  const DIRS: { value: LineageDirection; label: string }[] = [
+    { value: 'upstream',   label: 'Upstream'   },
+    { value: 'downstream', label: 'Downstream' },
+    { value: 'both',       label: 'Both'       },
+  ];
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-gray-500">
-          Lineage identity: <span className="font-mono">{identity.namespace}/{identity.name}</span>
-        </p>
-        <Link to={`/${tenant}/lineage`} className="text-xs text-blue-600 hover:underline">
+        <div className="flex items-center gap-1">
+          {DIRS.map(d => (
+            <button
+              key={d.value}
+              onClick={() => setDirection(d.value)}
+              className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${direction === d.value ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            >
+              {d.label}
+            </button>
+          ))}
+        </div>
+        <Link
+          to={`/${tenant}/lineage?ns=${encodeURIComponent(identity.namespace)}&name=${encodeURIComponent(identity.name)}&direction=${direction}`}
+          className="text-xs text-blue-600 hover:underline"
+        >
           Open full explorer →
         </Link>
       </div>
-      <div className="h-[calc(100vh-200px)] rounded-lg border border-gray-200 overflow-hidden">
-        {graph
-          ? <LineageGraph graph={graph} />
-          : <div className="h-full flex items-center justify-center text-sm text-gray-400">Loading graph...</div>}
+      <div className="h-[calc(100vh-240px)] rounded-lg border border-gray-200 overflow-hidden">
+        {graphLoading && <div className="h-full flex items-center justify-center text-sm text-gray-400">Loading graph...</div>}
+        {!graphLoading && flow && (
+          direction === 'both' || direction === 'upstream'
+            ? (
+              <ReactFlow nodes={flow.nodes} edges={flow.edges} fitView onNodeDoubleClick={onNodeDoubleClick} nodesDraggable={false} nodesConnectable={false} elementsSelectable={false} attributionPosition="bottom-right">
+                <Background gap={20} color="#e2e8f0" />
+                <Controls />
+                <MiniMap nodeColor={n => n.style?.background as string ?? DATASET_BG} />
+              </ReactFlow>
+            )
+            : <LineageGraph graph={downGraph!} onNodeDoubleClick={onNodeDoubleClick} />
+        )}
+        {!graphLoading && !flow && (
+          <div className="h-full flex items-center justify-center text-sm text-gray-400">No lineage data</div>
+        )}
       </div>
     </div>
   );
