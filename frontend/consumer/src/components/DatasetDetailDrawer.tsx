@@ -272,8 +272,7 @@ function LineageTab({ datasetId }: { datasetId: string }) {
 
   return (
     <MiniLineageGraph
-      namespace={identity.namespace}
-      name={identity.name}
+      lineageId={identity.id}
       onOpenFull={() => navigate(`/lineage?ns=${encodeURIComponent(identity.namespace)}&name=${encodeURIComponent(identity.name)}`)}
     />
   );

@@ -428,8 +428,10 @@ public class LogicalModelsController {
     })
     @PostMapping("/api/v1/logical-data-elements/{elementId}/accept-vocab-concepts")
     public LogicalDataElementResponse acceptVocabConcepts(
-            @Parameter(description = "Logical data element UUID") @PathVariable UUID elementId) {
-        return logicalModelService.acceptVocabConcepts(elementId);
+            @Parameter(description = "Logical data element UUID") @PathVariable UUID elementId,
+            @RequestBody(required = false) AcceptSelectedVocabConceptsRequest request) {
+        List<String> iris = request != null && request.iris() != null ? request.iris() : null;
+        return logicalModelService.acceptVocabConcepts(elementId, iris);
     }
 
     @Operation(summary = "Reject pending vocabulary concept recommendations",

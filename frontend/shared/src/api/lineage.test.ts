@@ -7,57 +7,74 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals(); });
 
 describe('normalizeLineageGraph', () => {
-  it('should map snake_case edge keys to camelCase', () => {
+  it('should map fromId/toId edge fields', () => {
     const raw = {
+      rootId: 'root-uuid',
       rootNamespace: 'ns',
       rootName: 'ds',
       direction: 'downstream',
       depth: 3,
       nodes: [],
-      edges: [{ from_ns: 'ns1', from_name: 'a', to_ns: 'ns2', to_name: 'b' }],
+      edges: [{ fromId: 'uuid-a', toId: 'uuid-b' }],
     };
     const result = normalizeLineageGraph(raw);
     expect(result.edges[0]).toEqual({
-      fromNamespace: 'ns1',
-      fromName: 'a',
-      toNamespace: 'ns2',
-      toName: 'b',
+      fromId: 'uuid-a',
+      toId: 'uuid-b',
       edgeType: 'DERIVED_FROM',
     });
   });
 
-  it('should add type: Dataset to all nodes', () => {
+  it('should map node id and catalogId fields', () => {
     const raw = {
+      rootId: 'root-uuid',
       rootNamespace: 'ns',
       rootName: 'ds',
       direction: 'upstream',
       depth: 2,
-      nodes: [{ namespace: 'ns1', name: 'table_a', depth: 1 }],
+      nodes: [{ id: 'node-uuid', namespace: 'ns1', name: 'table_a', depth: 1, catalogId: 'cat-uuid' }],
       edges: [],
     };
     const result = normalizeLineageGraph(raw);
+    expect(result.nodes[0].id).toBe('node-uuid');
     expect(result.nodes[0].type).toBe('Dataset');
     expect(result.nodes[0].namespace).toBe('ns1');
     expect(result.nodes[0].depth).toBe(1);
+    expect(result.nodes[0].catalogId).toBe('cat-uuid');
+  });
+
+  it('should handle missing catalogId on nodes', () => {
+    const raw = {
+      rootId: 'root-uuid',
+      rootNamespace: 'ns',
+      rootName: 'ds',
+      direction: 'upstream',
+      depth: 2,
+      nodes: [{ id: 'node-uuid', namespace: 'ns1', name: 'table_a', depth: 1 }],
+      edges: [],
+    };
+    const result = normalizeLineageGraph(raw);
+    expect(result.nodes[0].catalogId).toBeUndefined();
   });
 
   it('should handle empty nodes and edges', () => {
-    const raw = { rootNamespace: 'ns', rootName: 'ds', direction: 'downstream', depth: 1, nodes: [], edges: [] };
+    const raw = { rootId: 'r', rootNamespace: 'ns', rootName: 'ds', direction: 'downstream', depth: 1, nodes: [], edges: [] };
     const result = normalizeLineageGraph(raw);
     expect(result.nodes).toEqual([]);
     expect(result.edges).toEqual([]);
   });
 
   it('should handle missing edges/nodes (null coalesce to [])', () => {
-    const raw = { rootNamespace: 'ns', rootName: 'ds', direction: 'downstream', depth: 1 };
+    const raw = { rootId: 'r', rootNamespace: 'ns', rootName: 'ds', direction: 'downstream', depth: 1 };
     const result = normalizeLineageGraph(raw);
     expect(result.nodes).toEqual([]);
     expect(result.edges).toEqual([]);
   });
 
-  it('should preserve root metadata', () => {
-    const raw = { rootNamespace: 'myNs', rootName: 'myDs', direction: 'upstream', depth: 5, nodes: [], edges: [] };
+  it('should preserve root metadata including rootId', () => {
+    const raw = { rootId: 'root-uuid', rootNamespace: 'myNs', rootName: 'myDs', direction: 'upstream', depth: 5, nodes: [], edges: [] };
     const result = normalizeLineageGraph(raw);
+    expect(result.rootId).toBe('root-uuid');
     expect(result.rootNamespace).toBe('myNs');
     expect(result.rootName).toBe('myDs');
     expect(result.direction).toBe('upstream');
@@ -66,29 +83,28 @@ describe('normalizeLineageGraph', () => {
 });
 
 describe('lineageApi.getDatasetLineage', () => {
-  it('should URL-encode namespace and name', async () => {
+  it('should URL-encode the dataset UUID in the path', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: () => Promise.resolve({ rootNamespace: 'a', rootName: 'b', direction: 'downstream', depth: 5, nodes: [], edges: [] }),
+      json: () => Promise.resolve({ rootId: 'r', rootNamespace: 'a', rootName: 'b', direction: 'downstream', depth: 5, nodes: [], edges: [] }),
     });
     vi.stubGlobal('fetch', mockFetch);
 
-    await lineageApi.getDatasetLineage('my ns', 'my/ds');
+    await lineageApi.getDatasetLineage('some-uuid');
 
     const url: string = mockFetch.mock.calls[0][0];
-    expect(url).toContain('my%20ns');
-    expect(url).toContain('my%2Fds');
+    expect(url).toContain('/api/v1/datasets/some-uuid/lineage');
   });
 
   it('should default to downstream direction and depth 5', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true, status: 200,
-      json: () => Promise.resolve({ rootNamespace: '', rootName: '', direction: 'downstream', depth: 5, nodes: [], edges: [] }),
+      json: () => Promise.resolve({ rootId: 'r', rootNamespace: '', rootName: '', direction: 'downstream', depth: 5, nodes: [], edges: [] }),
     });
     vi.stubGlobal('fetch', mockFetch);
 
-    await lineageApi.getDatasetLineage('ns', 'ds');
+    await lineageApi.getDatasetLineage('some-uuid');
 
     const url: string = mockFetch.mock.calls[0][0];
     expect(url).toContain('direction=downstream');

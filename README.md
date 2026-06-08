@@ -26,7 +26,7 @@ Lineage is tracked using the OpenLineage standard via an Apache AGE graph databa
 
 - **Role-based access** — the producer UI is protected by Keycloak OIDC login with four defined roles (Administrator, Data Governance, Data Owner, Data Steward) that gate both UI navigation and backend permissions.
 - **Ownership governance** — datasets carry an owner, an ownership-transfer proposal workflow (propose → approve/reject), and an immutable audit history of every change.
-- **AI-assisted semantics** — RAG chat over your metadata, AI element classification (suggests vocabulary concepts for logical elements), and dataset-level semantic-context recommendations.
+- **AI-assisted semantics** — RAG chat over your metadata, AI element classification, description, and vocabulary concept recommendations. Each AI-suggested concept is individually selectable — owners cherry-pick relevant ones before accepting.
 - **Dataset semantic types** — domain types (e.g. `Customer`, `DebitCardAccount`) are derived from FIBO/schema.org vocabulary mappings, exposed as search facets and surfaced as badges in the consumer UI.
 - **Human-readable metadata** — an IRI→label translation API renders controlled-vocabulary IRIs as friendly labels throughout the UI.
 

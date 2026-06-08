@@ -169,8 +169,8 @@ export const logicalElementApi = {
     get<BulkRecommendationJob>(`${BASE}/logical-models/recommend-descriptions/jobs/${jobId}`),
   recommendVocabConcepts: (id: string) =>
     post<LogicalDataElement>(`${BASE}/logical-data-elements/${id}/recommend-vocab-concepts`, {}),
-  acceptVocabConcepts: (id: string) =>
-    post<LogicalDataElement>(`${BASE}/logical-data-elements/${id}/accept-vocab-concepts`, {}),
+  acceptVocabConcepts: (id: string, iris?: string[]) =>
+    post<LogicalDataElement>(`${BASE}/logical-data-elements/${id}/accept-vocab-concepts`, iris ? { iris } : {}),
   rejectVocabConcepts: (id: string) =>
     post<LogicalDataElement>(`${BASE}/logical-data-elements/${id}/reject-vocab-concepts`, {}),
   recommendModelVocabConcepts: (modelId: string) =>

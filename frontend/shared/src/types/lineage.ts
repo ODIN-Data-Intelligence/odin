@@ -1,20 +1,21 @@
 export interface LineageNode {
+  id: string;
   namespace: string;
   name: string;
   type: 'Dataset' | 'Job';
   depth?: number;
+  catalogId?: string;
   facets?: Record<string, unknown>;
 }
 
 export interface LineageEdge {
-  fromNamespace: string;
-  fromName: string;
-  toNamespace: string;
-  toName: string;
+  fromId: string;
+  toId: string;
   edgeType: 'DERIVED_FROM' | 'READ_BY' | 'WRITES_TO' | 'COLUMN_LINEAGE';
 }
 
 export interface LineageGraph {
+  rootId: string;
   rootNamespace: string;
   rootName: string;
   nodes: LineageNode[];
@@ -24,6 +25,7 @@ export interface LineageGraph {
 }
 
 export interface LineageIdentity {
+  id: string;
   namespace: string;
   name: string;
 }

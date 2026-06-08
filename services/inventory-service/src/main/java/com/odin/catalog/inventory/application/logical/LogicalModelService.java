@@ -428,17 +428,21 @@ public class LogicalModelService {
     }
 
     @Transactional
-    public LogicalDataElementResponse acceptVocabConcepts(UUID elementId) {
+    public LogicalDataElementResponse acceptVocabConcepts(UUID elementId, List<String> selectedIris) {
         LogicalDataElementEntity entity = findElementOrThrow(elementId);
         if (entity.getRecommendedVocabMappings() == null) {
             throw new NoSuchElementException("No pending vocabulary recommendation for element: " + elementId);
         }
         List<RecommendedVocabMapping> recommendations = parseVocabRecommendations(entity.getRecommendedVocabMappings());
+        Set<String> iriFilter = (selectedIris != null && !selectedIris.isEmpty())
+            ? new java.util.HashSet<>(selectedIris) : null;
         List<VocabularyEntity> vocabs = vocabularyRepository.findAll();
         Set<String> existingIris = entity.getVocabMappings() == null ? Set.of()
             : entity.getVocabMappings().stream().map(VocabMappingEntity::getConceptIri).collect(Collectors.toSet());
 
+        int accepted = 0;
         for (RecommendedVocabMapping rec : recommendations) {
+            if (iriFilter != null && !iriFilter.contains(rec.conceptIri())) continue;
             if (existingIris.contains(rec.conceptIri())) continue;
             VocabMappingEntity mapping = new VocabMappingEntity();
             mapping.setLogicalElementId(elementId);
@@ -453,11 +457,12 @@ public class LogicalModelService {
             }
             mapping.setVocabularyId(vocabId);
             mappingRepository.save(mapping);
+            accepted++;
         }
         entity.setRecommendedVocabMappings(null);
         entity.setVocabMappingReasoning(null);
         entity.setVocabMappingRecommendedAt(null);
-        log.info("action=VOCAB_CONCEPTS_ACCEPTED elementId={} count={}", elementId, recommendations.size());
+        log.info("action=VOCAB_CONCEPTS_ACCEPTED elementId={} accepted={} of={}", elementId, accepted, recommendations.size());
         return toElementResponse(elementRepository.save(entity));
     }
 
