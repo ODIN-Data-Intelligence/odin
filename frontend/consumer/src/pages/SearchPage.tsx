@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { searchApi } from '@datacatalog/shared';
 import SearchBar from '../components/SearchBar';
@@ -12,15 +12,16 @@ import { useDrawerStore } from '../store/drawerStore';
 export default function SearchPage() {
   const searchBarRef = useRef<HTMLInputElement>(null);
   const [searchParams] = useSearchParams();
+  const { id: pathDatasetId } = useParams<{ id: string }>();
   const { query, filters, page, setQuery } = useSearchStore();
   const { openDatasetId, openDataset } = useDrawerStore();
 
-  // Sync URL query param → store on mount
+  // Sync URL query param → store on mount; also handle /datasets/:id path
   useEffect(() => {
     const urlQ = searchParams.get('q');
     if (urlQ && urlQ !== query) setQuery(urlQ);
 
-    const dsId = searchParams.get('ds');
+    const dsId = pathDatasetId ?? searchParams.get('ds');
     if (dsId) openDataset(dsId);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

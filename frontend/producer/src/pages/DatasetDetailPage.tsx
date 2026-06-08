@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { datasetApi, logicalModelApi, lineageApi, useIriTranslations, iriFragment } from '@datacatalog/shared';
+import { datasetApi, logicalModelApi, logicalElementApi, lineageApi, useIriTranslations, iriFragment } from '@datacatalog/shared';
 import type { Dataset, Distribution, OwnershipProposal, LineageGraph as LineageGraphData, LineageNode, LineageEdge } from '@datacatalog/shared';
 import { PageHeader } from '@datacatalog/shared';
 import { Button } from '@datacatalog/shared';
@@ -10,7 +10,7 @@ import DatasetForm from '../components/catalog/DatasetForm';
 import LogicalModelEditor from '../components/catalog/LogicalModelEditor';
 import PhysicalSchemaSection from '../components/catalog/PhysicalSchemaSection';
 import LineageGraph from '../components/lineage/LineageGraph';
-import ReactFlow, { Background, Controls, MiniMap, Position, type Node, type Edge, type NodeMouseHandler } from 'reactflow';
+import ReactFlow, { Background, Controls, MiniMap, Handle, Position, type Node, type Edge, type NodeMouseHandler, type NodeProps } from 'reactflow';
 import OwnershipPanel from '../components/catalog/OwnershipPanel';
 import TermsOfUsePanel from '../components/catalog/TermsOfUsePanel';
 import DatasetHistoryTab from '../components/catalog/DatasetHistoryTab';
@@ -503,6 +503,89 @@ function DistributionsTab({ datasetId, tenant, canOwnerAction }: { datasetId: st
 
 // ─── Lineage tab ──────────────────────────────────────────────────────────────
 
+function DatasetNode({ id, data, sourcePosition = Position.Right, targetPosition = Position.Left }: NodeProps) {
+  const expanded = !!(data.expanded as boolean);
+
+  const { data: models } = useQuery({
+    queryKey: ['lineage-node-models', data.catalogId],
+    queryFn: () => logicalModelApi.list(data.catalogId as string),
+    enabled: expanded && !!(data.catalogId),
+  });
+
+  const publishedModel = models?.find((m: { status: string }) => m.status === 'published') ?? models?.[0];
+
+  const { data: elements = [], isLoading: elementsLoading } = useQuery({
+    queryKey: ['lineage-node-elements', publishedModel?.id],
+    queryFn: () => logicalElementApi.list(publishedModel!.id),
+    enabled: !!publishedModel,
+  });
+
+  return (
+    <>
+      <Handle type="target" position={targetPosition} />
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {data.label as string}
+          </span>
+          {data.catalogId && (
+            <>
+              <button
+                onClick={(e) => { e.stopPropagation(); (data.onToggleExpand as ((id: string) => void) | undefined)?.(id); }}
+                title={expanded ? 'Collapse' : 'Show data elements'}
+                style={{ flexShrink: 0, cursor: 'pointer', opacity: 0.5, lineHeight: 1, padding: 0, background: 'none', border: 'none', color: 'inherit' }}
+                onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.5'; }}
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                  {expanded
+                    ? <path d="M2 6.5L5 3.5L8 6.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    : <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  }
+                </svg>
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); (data.onNavigate as ((cid: string) => void) | undefined)?.(data.catalogId as string); }}
+                title="Open in catalog"
+                style={{ flexShrink: 0, cursor: 'pointer', opacity: 0.5, lineHeight: 1, padding: 0, background: 'none', border: 'none', color: 'inherit' }}
+                onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.5'; }}
+              >
+                <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                  <path d="M5 2H2a1 1 0 00-1 1v7a1 1 0 001 1h7a1 1 0 001-1V7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M8 1h3m0 0v3m0-3L6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            </>
+          )}
+        </div>
+        {expanded && (
+          <div style={{ marginTop: 5, borderTop: '1px solid rgba(0,0,0,0.1)', paddingTop: 4, maxHeight: 160, overflowY: 'auto', minWidth: 140 }}>
+            {elementsLoading && <div style={{ fontSize: 9, color: '#94a3b8', textAlign: 'center' }}>…</div>}
+            {!elementsLoading && elements.length === 0 && (
+              <div style={{ fontSize: 9, color: '#94a3b8', fontStyle: 'italic' }}>No elements</div>
+            )}
+            {(elements as { id: string; name: string; logicalType?: string }[]).map(el => (
+              <div
+                key={el.id}
+                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 9, padding: '1.5px 0', gap: 6, cursor: 'default' }}
+                onMouseEnter={() => (data.onHighlightNode as ((nid: string | null) => void) | undefined)?.(id)}
+                onMouseLeave={() => (data.onHighlightNode as ((nid: string | null) => void) | undefined)?.(null)}
+              >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{el.name}</span>
+                {el.logicalType && <span style={{ color: '#94a3b8', flexShrink: 0, fontSize: 8 }}>{el.logicalType}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <Handle type="source" position={sourcePosition} />
+    </>
+  );
+}
+
+const LINEAGE_NODE_TYPES = { dataset: DatasetNode };
+
 type LineageDirection = 'upstream' | 'downstream' | 'both';
 
 const LINEAGE_COL   = 240;
@@ -510,6 +593,7 @@ const LINEAGE_ROW   = 100;
 const DATASET_BG    = '#dbeafe';
 const JOB_BG        = '#fef3c7';
 const FOCAL_BG      = '#bfdbfe';
+const EXPANDED_EXTRA_HEIGHT = 185;
 
 function resolveHandles(nodes: Node[], edges: Edge[]): Node[] {
   const xOf = new Map(nodes.map(n => [n.id, n.position.x]));
@@ -528,10 +612,34 @@ function resolveHandles(nodes: Node[], edges: Edge[]): Node[] {
   }));
 }
 
-function makeNode(n: LineageNode, x: number, rowIdx: number, total: number, isRoot: boolean): Node {
+function applyExpansionOffsets(nodes: Node[], expandedNodeIds: Set<string>, extraHeight: number): Node[] {
+  if (expandedNodeIds.size === 0) return nodes;
+  const byX = new Map<number, Node[]>();
+  for (const n of nodes) {
+    if (!byX.has(n.position.x)) byX.set(n.position.x, []);
+    byX.get(n.position.x)!.push(n);
+  }
+  const result = [...nodes];
+  const idxOf = new Map(result.map((n, i) => [n.id, i]));
+  for (const col of byX.values()) {
+    col.sort((a, b) => a.position.y - b.position.y);
+    let offset = 0;
+    for (const node of col) {
+      if (offset > 0) {
+        const i = idxOf.get(node.id)!;
+        result[i] = { ...result[i], position: { ...result[i].position, y: result[i].position.y + offset } };
+      }
+      if (expandedNodeIds.has(node.id)) offset += extraHeight;
+    }
+  }
+  return result;
+}
+
+function makeNode(n: LineageNode, x: number, rowIdx: number, total: number, isRoot: boolean, onNavigate?: (catalogId: string) => void, onHighlightNode?: (id: string | null) => void, expandedNodeIds?: Set<string>, onToggleExpand?: (id: string) => void): Node {
   return {
-    id: `${n.namespace}/${n.name}`,
-    data: { label: n.name, namespace: n.namespace, name: n.name },
+    id: n.id,
+    type: 'dataset',
+    data: { label: n.name, namespace: n.namespace, name: n.name, catalogId: n.catalogId, onNavigate, onHighlightNode, expanded: expandedNodeIds?.has(n.id) ?? false, onToggleExpand },
     position: { x, y: (rowIdx - (total - 1) / 2) * LINEAGE_ROW },
     style: {
       background: isRoot ? FOCAL_BG : n.type === 'Job' ? JOB_BG : DATASET_BG,
@@ -542,13 +650,14 @@ function makeNode(n: LineageNode, x: number, rowIdx: number, total: number, isRo
   };
 }
 
-function makeEdge(e: LineageEdge, i: number): Edge {
+function makeEdge(e: LineageEdge, i: number, highlightedNodeId?: string | null): Edge {
+  const highlighted = !!highlightedNodeId && e.toId === highlightedNodeId;
   return {
     id: `e-${i}`,
-    source: `${e.fromNamespace}/${e.fromName}`,
-    target: `${e.toNamespace}/${e.toName}`,
+    source: e.fromId,
+    target: e.toId,
     label: e.edgeType, labelStyle: { fontSize: 10 },
-    style: { stroke: '#94a3b8' },
+    style: highlighted ? { stroke: '#3b82f6', strokeWidth: 2.5 } : { stroke: '#94a3b8', strokeWidth: 1.5 },
     animated: e.edgeType === 'DERIVED_FROM',
   };
 }
@@ -557,53 +666,69 @@ function buildLineageFlow(
   direction: LineageDirection,
   downGraph: LineageGraphData | undefined,
   upGraph: LineageGraphData | undefined,
+  onNavigate?: (catalogId: string) => void,
+  highlightedNodeId?: string | null,
+  onHighlightNode?: (id: string | null) => void,
+  expandedNodeIds?: Set<string>,
+  onToggleExpand?: (id: string) => void,
 ): { nodes: Node[]; edges: Edge[] } | null {
   if (direction === 'downstream' && downGraph) {
     const buckets = new Map<number, LineageNode[]>();
     downGraph.nodes.forEach(n => { const d = n.depth ?? 0; if (!buckets.has(d)) buckets.set(d, []); buckets.get(d)!.push(n); });
-    const rootKey = `${downGraph.rootNamespace}/${downGraph.rootName}`;
     const downNodes = downGraph.nodes.map(n => {
       const d = n.depth ?? 0; const bucket = buckets.get(d)!;
-      return makeNode(n, d * LINEAGE_COL, bucket.indexOf(n), bucket.length, `${n.namespace}/${n.name}` === rootKey);
+      return makeNode(n, d * LINEAGE_COL, bucket.indexOf(n), bucket.length, n.id === downGraph.rootId, onNavigate, onHighlightNode, expandedNodeIds, onToggleExpand);
     });
-    const downEdges = downGraph.edges.map(makeEdge);
-    return { nodes: resolveHandles(downNodes, downEdges), edges: downEdges };
+    const downEdges = downGraph.edges.map((e, i) => makeEdge(e, i, highlightedNodeId));
+    const withHandles = resolveHandles(downNodes, downEdges);
+    return { nodes: expandedNodeIds ? applyExpansionOffsets(withHandles, expandedNodeIds, EXPANDED_EXTRA_HEIGHT) : withHandles, edges: downEdges };
   }
   if (direction === 'upstream' && upGraph) {
     const buckets = new Map<number, LineageNode[]>();
     upGraph.nodes.forEach(n => { const d = n.depth ?? 0; if (!buckets.has(d)) buckets.set(d, []); buckets.get(d)!.push(n); });
-    const rootKey = `${upGraph.rootNamespace}/${upGraph.rootName}`;
     const upNodes = upGraph.nodes.map(n => {
       const d = n.depth ?? 0; const bucket = buckets.get(d)!;
-      return makeNode(n, -d * LINEAGE_COL, bucket.indexOf(n), bucket.length, `${n.namespace}/${n.name}` === rootKey);
+      return makeNode(n, -d * LINEAGE_COL, bucket.indexOf(n), bucket.length, n.id === upGraph.rootId, onNavigate, onHighlightNode, expandedNodeIds, onToggleExpand);
     });
-    const upEdges = upGraph.edges.map(makeEdge);
-    return { nodes: resolveHandles(upNodes, upEdges), edges: upEdges };
+    const upEdges = upGraph.edges.map((e, i) => makeEdge(e, i, highlightedNodeId));
+    const withHandles = resolveHandles(upNodes, upEdges);
+    return { nodes: expandedNodeIds ? applyExpansionOffsets(withHandles, expandedNodeIds, EXPANDED_EXTRA_HEIGHT) : withHandles, edges: upEdges };
   }
   if (direction === 'both' && upGraph && downGraph) {
     const signedDepths = new Map<string, number>();
-    const nodeByKey   = new Map<string, LineageNode>();
-    for (const n of downGraph.nodes) { const k = `${n.namespace}/${n.name}`; signedDepths.set(k, n.depth ?? 0); nodeByKey.set(k, n); }
-    for (const n of upGraph.nodes)   { const k = `${n.namespace}/${n.name}`; const sd = -(n.depth ?? 0); if (sd === 0) continue; signedDepths.set(k, sd); nodeByKey.set(k, n); }
+    const nodeById     = new Map<string, LineageNode>();
+    for (const n of downGraph.nodes) { signedDepths.set(n.id, n.depth ?? 0); nodeById.set(n.id, n); }
+    for (const n of upGraph.nodes)   { const sd = -(n.depth ?? 0); if (sd === 0) continue; signedDepths.set(n.id, sd); nodeById.set(n.id, n); }
     const cols = new Map<number, string[]>();
-    for (const [k, sd] of signedDepths) { if (!cols.has(sd)) cols.set(sd, []); cols.get(sd)!.push(k); }
+    for (const [id, sd] of signedDepths) { if (!cols.has(sd)) cols.set(sd, []); cols.get(sd)!.push(id); }
     const nodes: Node[] = [];
-    for (const [k, sd] of signedDepths) {
-      const n = nodeByKey.get(k)!; const col = cols.get(sd)!;
-      nodes.push(makeNode(n, sd * LINEAGE_COL, col.indexOf(k), col.length, sd === 0));
+    for (const [id, sd] of signedDepths) {
+      const n = nodeById.get(id)!; const col = cols.get(sd)!;
+      nodes.push(makeNode(n, sd * LINEAGE_COL, col.indexOf(id), col.length, sd === 0, onNavigate, onHighlightNode, expandedNodeIds, onToggleExpand));
     }
     const seen = new Set<string>(); const edges: Edge[] = [];
     for (const e of [...upGraph.edges, ...downGraph.edges]) {
-      const eid = `${e.fromNamespace}/${e.fromName}->${e.toNamespace}/${e.toName}`;
-      if (!seen.has(eid)) { seen.add(eid); edges.push(makeEdge(e, edges.length)); }
+      const eid = `${e.fromId}->${e.toId}`;
+      if (!seen.has(eid)) { seen.add(eid); edges.push(makeEdge(e, edges.length, highlightedNodeId)); }
     }
-    return { nodes: resolveHandles(nodes, edges), edges };
+    const withHandles = resolveHandles(nodes, edges);
+    return { nodes: expandedNodeIds ? applyExpansionOffsets(withHandles, expandedNodeIds, EXPANDED_EXTRA_HEIGHT) : withHandles, edges };
   }
   return null;
 }
 
 function LineageTab({ datasetId, tenant }: { datasetId: string; tenant: string }) {
   const [direction, setDirection] = useState<LineageDirection>('downstream');
+  const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null);
+  const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(new Set());
+
+  const handleToggleExpand = useCallback((nodeId: string) => {
+    setExpandedNodeIds(prev => {
+      const next = new Set(prev);
+      if (next.has(nodeId)) next.delete(nodeId); else next.add(nodeId);
+      return next;
+    });
+  }, []);
 
   const { data: identity, isLoading, isError } = useQuery({
     queryKey: ['lineage-identity', datasetId],
@@ -612,24 +737,24 @@ function LineageTab({ datasetId, tenant }: { datasetId: string; tenant: string }
   });
 
   const { data: downGraph, isLoading: downLoading } = useQuery({
-    queryKey: ['lineage-tab', identity?.namespace, identity?.name, 'downstream'],
-    queryFn: () => lineageApi.getDatasetLineage(identity!.namespace, identity!.name, 'downstream', 5),
+    queryKey: ['lineage-tab', identity?.id, 'downstream'],
+    queryFn: () => lineageApi.getDatasetLineage(identity!.id, 'downstream', 5),
     enabled: !!identity && (direction === 'downstream' || direction === 'both'),
   });
 
   const { data: upGraph, isLoading: upLoading } = useQuery({
-    queryKey: ['lineage-tab', identity?.namespace, identity?.name, 'upstream'],
-    queryFn: () => lineageApi.getDatasetLineage(identity!.namespace, identity!.name, 'upstream', 5),
+    queryKey: ['lineage-tab', identity?.id, 'upstream'],
+    queryFn: () => lineageApi.getDatasetLineage(identity!.id, 'upstream', 5),
     enabled: !!identity && (direction === 'upstream' || direction === 'both'),
   });
 
   const navigate = useNavigate();
-  const onNodeDoubleClick: NodeMouseHandler = useCallback(async (_evt, node) => {
-    const { namespace, name: nodeName } = node.data as { namespace: string; name: string };
-    try {
-      const { catalogId } = await lineageApi.getCatalogId(namespace, nodeName);
-      navigate(`/${tenant}/datasets/${catalogId}`);
-    } catch { /* no catalog link */ }
+  const handleNavigate = useCallback((catalogId: string) => {
+    navigate(`/${tenant}/datasets/${catalogId}`);
+  }, [navigate, tenant]);
+  const onNodeDoubleClick: NodeMouseHandler = useCallback((_evt, node) => {
+    const { catalogId } = node.data as { catalogId?: string };
+    if (catalogId) navigate(`/${tenant}/datasets/${catalogId}`);
   }, [navigate, tenant]);
 
   if (isLoading) return <div className="text-sm text-gray-400">Looking up lineage...</div>;
@@ -643,7 +768,7 @@ function LineageTab({ datasetId, tenant }: { datasetId: string; tenant: string }
   );
 
   const graphLoading = direction === 'both' ? (downLoading || upLoading) : direction === 'upstream' ? upLoading : downLoading;
-  const flow = buildLineageFlow(direction, downGraph, upGraph);
+  const flow = buildLineageFlow(direction, downGraph, upGraph, handleNavigate, highlightedNodeId, setHighlightedNodeId, expandedNodeIds, handleToggleExpand);
 
   const DIRS: { value: LineageDirection; label: string }[] = [
     { value: 'upstream',   label: 'Upstream'   },
@@ -677,13 +802,13 @@ function LineageTab({ datasetId, tenant }: { datasetId: string; tenant: string }
         {!graphLoading && flow && (
           direction === 'both' || direction === 'upstream'
             ? (
-              <ReactFlow nodes={flow.nodes} edges={flow.edges} fitView onNodeDoubleClick={onNodeDoubleClick} nodesDraggable={false} nodesConnectable={false} elementsSelectable={false} attributionPosition="bottom-right">
+              <ReactFlow nodes={flow.nodes} edges={flow.edges} nodeTypes={LINEAGE_NODE_TYPES} fitView onNodeDoubleClick={onNodeDoubleClick} nodesDraggable={false} nodesConnectable={false} elementsSelectable={false} attributionPosition="bottom-right">
                 <Background gap={20} color="#e2e8f0" />
                 <Controls />
                 <MiniMap nodeColor={n => n.style?.background as string ?? DATASET_BG} />
               </ReactFlow>
             )
-            : <LineageGraph graph={downGraph!} onNodeDoubleClick={onNodeDoubleClick} />
+            : <LineageGraph graph={downGraph!} onNodeDoubleClick={onNodeDoubleClick} onNavigate={handleNavigate} />
         )}
         {!graphLoading && !flow && (
           <div className="h-full flex items-center justify-center text-sm text-gray-400">No lineage data</div>

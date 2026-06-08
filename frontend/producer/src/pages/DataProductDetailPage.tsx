@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { dataProductApi, lineageApi } from '@datacatalog/shared';
 import type { Dataset } from '@datacatalog/shared';
@@ -150,6 +150,8 @@ function DataProductLineageTab({ dataProductId, tenant }: { dataProductId: strin
 }
 
 function DatasetLineagePanel({ datasetId }: { datasetId: string }) {
+  const { tenant } = useParams<{ tenant: string }>();
+  const navigate = useNavigate();
   const { data: identity, isLoading, isError } = useQuery({
     queryKey: ['lineage-identity', datasetId],
     queryFn: () => lineageApi.getCatalogLineageIdentity(datasetId),
@@ -157,8 +159,8 @@ function DatasetLineagePanel({ datasetId }: { datasetId: string }) {
   });
 
   const { data: graph } = useQuery({
-    queryKey: ['lineage-graph', identity?.namespace, identity?.name],
-    queryFn: () => lineageApi.getDatasetLineage(identity!.namespace, identity!.name, 'downstream', 5),
+    queryKey: ['lineage-graph', identity?.id],
+    queryFn: () => lineageApi.getDatasetLineage(identity!.id, 'downstream', 5),
     enabled: !!identity,
   });
 
@@ -168,7 +170,7 @@ function DatasetLineagePanel({ datasetId }: { datasetId: string }) {
   return (
     <div className="h-[calc(100vh-220px)] rounded-lg border border-gray-200 overflow-hidden">
       {graph
-        ? <LineageGraph graph={graph} />
+        ? <LineageGraph graph={graph} onNavigate={(catalogId) => navigate(`/${tenant}/datasets/${catalogId}`)} />
         : <div className="h-full flex items-center justify-center text-sm text-gray-400">Loading graph...</div>
       }
     </div>
