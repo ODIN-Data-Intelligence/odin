@@ -11,12 +11,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "PII Indicators", description = "AI-powered PII and direct identifier recommendations")
 @RestController
+@RequestMapping("/api/v1/recommend-pii")
 @RequiredArgsConstructor
 public class PiiRecommendationController {
 
@@ -33,7 +32,7 @@ public class PiiRecommendationController {
         @ApiResponse(responseCode = "400", description = "Validation error", content = @Content),
         @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
     })
-    @PostMapping("/api/v1/recommend-pii")
+    @PostMapping
     public PiiRecommendationResponse recommend(@RequestBody PiiRecommendationRequest request) {
         log.info("action=RECOMMEND_PII elementCount={}", request.elements().size());
         return piiRecommendationService.recommend(request);

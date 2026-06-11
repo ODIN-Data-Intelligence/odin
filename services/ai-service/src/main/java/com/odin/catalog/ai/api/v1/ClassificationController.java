@@ -11,12 +11,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "Classification", description = "AI-powered data element classification")
 @RestController
+@RequestMapping("/api/v1/classify")
 @RequiredArgsConstructor
 public class ClassificationController {
 
@@ -33,7 +32,7 @@ public class ClassificationController {
         @ApiResponse(responseCode = "400", description = "Validation error", content = @Content),
         @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
     })
-    @PostMapping("/api/v1/classify/elements")
+    @PostMapping("/elements")
     public ClassifyElementsResponse classify(@RequestBody ClassifyElementsRequest request) {
         log.info("action=CLASSIFY elementCount={}", request.elements().size());
         return classificationService.classify(request);

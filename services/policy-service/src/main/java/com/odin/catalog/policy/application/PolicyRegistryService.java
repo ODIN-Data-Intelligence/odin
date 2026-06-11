@@ -2,6 +2,9 @@ package com.odin.catalog.policy.application;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.odin.catalog.policy.api.v1.dto.PolicyComponentSummary;
+import com.odin.catalog.policy.api.v1.dto.PolicyComponentsResponse;
+import com.odin.catalog.policy.api.v1.dto.PolicyResponse;
 import com.odin.catalog.policy.infrastructure.jpa.DatasetPolicyLinkEntity;
 import com.odin.catalog.policy.infrastructure.jpa.DatasetPolicyLinkRepository;
 import com.odin.catalog.policy.infrastructure.jpa.PolicyPieceEntity;
@@ -129,6 +132,44 @@ public class PolicyRegistryService {
 
     public List<DatasetPolicyLinkEntity> findLinks(UUID datasetId, UUID tenantId) {
         return linkRepository.findByDatasetIdAndTenantId(datasetId, tenantId);
+    }
+
+    // ── Response assembly ─────────────────────────────────────────────────────
+
+    public PolicyResponse toResponse(PolicyRecordEntity e) {
+        Object parsed = null;
+        try {
+            parsed = objectMapper.readValue(e.getPolicyJson(), Object.class);
+        } catch (Exception ignored) {
+            parsed = e.getPolicyJson();
+        }
+        return new PolicyResponse(e.getId(), e.getDatasetId(), e.getTenantId(),
+            e.getPolicyLevel(), parsed, e.getCreatedAt(), e.getUpdatedAt());
+    }
+
+    public PolicyComponentsResponse getComponents(UUID datasetId, UUID tenantId) {
+        PolicyRecordEntity record = find(datasetId, tenantId)
+            .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.NOT_FOUND,
+                "No policy record found for dataset " + datasetId));
+
+        List<DatasetPolicyLinkEntity> links = findLinks(datasetId, tenantId);
+
+        List<PolicyComponentSummary> summaries = links.stream().map(link -> {
+            PolicyPieceEntity piece = link.getPiece();
+            Object fragment = null;
+            try { fragment = objectMapper.readValue(piece.getPolicyJson(), Object.class); }
+            catch (Exception ignored) { fragment = piece.getPolicyJson(); }
+            return new PolicyComponentSummary(
+                piece.getId(), piece.getPieceType(), piece.getDimensionKey(),
+                piece.getLabel(), piece.getPolicyLevel(), fragment, link.getAppliedAt());
+        }).toList();
+
+        Object assembled = null;
+        try { assembled = objectMapper.readValue(record.getPolicyJson(), Object.class); }
+        catch (Exception ignored) { assembled = record.getPolicyJson(); }
+
+        return new PolicyComponentsResponse(datasetId, tenantId, summaries, assembled);
     }
 
     // ── Assembly ──────────────────────────────────────────────────────────────

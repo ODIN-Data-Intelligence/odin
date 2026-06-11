@@ -33,7 +33,7 @@ export default function VocabRecommendationRow({ element, modelId, canAction }: 
   const [selected, setSelected] = useState<Set<string>>(new Set(allIris));
 
   const accept = useMutation({
-    mutationFn: (iris?: string[]) => logicalElementApi.acceptVocabConcepts(element.id, iris),
+    mutationFn: (iris: string[]) => logicalElementApi.acceptVocabConcepts(element.id, iris),
     onSuccess: applyUpdate,
   });
 
@@ -115,7 +115,7 @@ export default function VocabRecommendationRow({ element, modelId, canAction }: 
           {canAction ? (
             <div className="flex flex-col gap-1.5 shrink-0 min-w-[110px]">
               <button
-                onClick={() => accept.mutate(allSelected ? undefined : [...selected])}
+                onClick={() => accept.mutate([...selected])}
                 disabled={isPending || noneSelected}
                 className="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-center"
               >

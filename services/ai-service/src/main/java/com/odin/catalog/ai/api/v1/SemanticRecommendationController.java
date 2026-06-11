@@ -11,12 +11,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "Semantic Recommendation", description = "AI-powered dataset semantic type recommendations")
 @RestController
+@RequestMapping("/api/v1/recommend-semantic-context")
 @RequiredArgsConstructor
 public class SemanticRecommendationController {
 
@@ -33,7 +32,7 @@ public class SemanticRecommendationController {
         @ApiResponse(responseCode = "400", description = "Validation error", content = @Content),
         @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
     })
-    @PostMapping("/api/v1/recommend-semantic-context")
+    @PostMapping
     public SemanticRecommendationResponse recommend(@RequestBody SemanticRecommendationRequest request) {
         log.info("action=RECOMMEND_SEMANTIC");
         return recommendationService.recommend(request);
