@@ -42,6 +42,13 @@ export interface TermsOfUseDerivationDetails {
   readyToAccept: boolean;
 }
 
+export interface PolicyComponent {
+  pieceType: string;
+  dimensionKey: string;
+  label: string;
+  policyFragment?: Record<string, unknown>;
+}
+
 export interface TermsOfUse {
   effectiveClassification?: string;
   accessLevel?: 'OPEN' | 'INTERNAL_ONLY' | 'RESTRICTED' | 'HIGHLY_RESTRICTED';
@@ -52,6 +59,56 @@ export interface TermsOfUse {
   odrlPolicy?: Record<string, unknown>;
   policySource?: 'derived' | 'explicit' | 'fallback';
   derivationDetails?: TermsOfUseDerivationDetails;
+  policyComponents?: PolicyComponent[];
+}
+
+// policy-service types
+
+export interface PolicyRecord {
+  id: string;
+  datasetId: string;
+  tenantId: string;
+  policyLevel: string;
+  policyJson: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PolicyComponentSummary {
+  pieceId: string;
+  pieceType: string;
+  dimensionKey: string;
+  label?: string;
+  policyLevel: string;
+  policyFragment: Record<string, unknown>;
+  appliedAt: string;
+}
+
+export interface PolicyComponentsResponse {
+  datasetId: string;
+  tenantId: string;
+  components: PolicyComponentSummary[];
+  assembledPolicy: Record<string, unknown>;
+}
+
+export interface EvaluationDecision {
+  action: string;
+  result: string;
+  delegated: boolean;
+}
+
+export interface EvaluationResponse {
+  granted: boolean;
+  policyLevel: string;
+  decisions: EvaluationDecision[];
+}
+
+export interface EvaluationLogEntry {
+  id: string;
+  datasetId: string;
+  action: string;
+  granted: boolean;
+  createdAt: string;
 }
 
 export interface AcceptedSemanticTag {
@@ -249,6 +306,12 @@ export interface LogicalDataElement {
   recommendedVocabMappings?: RecommendedVocabMapping[];
   vocabMappingReasoning?: string;
   vocabMappingRecommendedAt?: string;
+  isPersonalInformation: boolean;
+  isDirectIdentifier: boolean;
+  recommendedIsPersonalInformation?: boolean;
+  recommendedIsDirectIdentifier?: boolean;
+  piiRecommendationReasoning?: string;
+  piiRecommendedAt?: string;
 }
 
 export interface LogicalElementVocabMapping {

@@ -9,6 +9,9 @@ import com.odin.catalog.shared.models.dcat.DcatDataset;
 import com.odin.catalog.shared.models.dcat.DcatResource;
 import com.odin.catalog.shared.models.events.DataProductChangedPayload;
 import com.odin.catalog.shared.models.events.DatasetChangedPayload;
+import com.odin.catalog.shared.models.policy.PolicyComponentPayload;
+
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,32 +26,37 @@ public class CatalogEventProducer {
     private final KafkaEventPublisher publisher;
 
     public void publishDatasetChanged(String changeType, DatasetEntity entity) {
-        publishDatasetChanged(changeType, entity, null);
+        publishDatasetChanged(changeType, entity, null, null);
     }
 
     public void publishDatasetChanged(String changeType, DatasetEntity entity, DatasetSemanticContext ctx) {
+        publishDatasetChanged(changeType, entity, ctx, null);
+    }
+
+    public void publishDatasetChanged(String changeType, DatasetEntity entity,
+                                      List<PolicyComponentPayload> components) {
+        publishDatasetChanged(changeType, entity, null, components);
+    }
+
+    public void publishDatasetChanged(String changeType, DatasetEntity entity,
+                                      DatasetSemanticContext ctx,
+                                      List<PolicyComponentPayload> components) {
         DcatDataset dataset = buildDcatDataset(entity);
-        DatasetChangedPayload payload = ctx != null
-            ? new DatasetChangedPayload(
+        DatasetChangedPayload payload = new DatasetChangedPayload(
                 changeType,
                 entity.getId().toString(),
                 entity.getCatalogId() != null ? entity.getCatalogId().toString() : null,
                 entity.getDomainId() != null ? entity.getDomainId().toString() : null,
                 entity.getTenantId().toString(),
                 dataset,
-                ctx.semanticTypes(),
-                ctx.vocabConceptLabels(),
-                ctx.vocabConceptIris(),
-                ctx.fiboConcepts(),
-                ctx.logicalElementNames(),
-                ctx.logicalTypes())
-            : DatasetChangedPayload.ofBasic(
-                changeType,
-                entity.getId().toString(),
-                entity.getCatalogId() != null ? entity.getCatalogId().toString() : null,
-                entity.getDomainId() != null ? entity.getDomainId().toString() : null,
-                entity.getTenantId().toString(),
-                dataset);
+                ctx != null ? ctx.semanticTypes() : null,
+                ctx != null ? ctx.vocabConceptLabels() : null,
+                ctx != null ? ctx.vocabConceptIris() : null,
+                ctx != null ? ctx.fiboConcepts() : null,
+                ctx != null ? ctx.logicalElementNames() : null,
+                ctx != null ? ctx.logicalTypes() : null,
+                entity.getHasPolicy(),
+                components);
         publisher.publishAsync(
             CatalogTopics.DATASETS_CHANGES,
             entity.getId().toString(),

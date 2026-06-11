@@ -416,6 +416,228 @@ class TermsPolicyServiceTest {
             .isInstanceOf(ResponseStatusException.class);
     }
 
+    // ── listPolicySets ────────────────────────────────────────────────────────
+
+    @Test
+    void listPolicySets_returnsMappedResponses() {
+        TermsPolicySetEntity s1 = policySet("Policy A", "ACTIVE");
+        TermsPolicySetEntity s2 = policySet("Policy B", "DRAFT");
+        when(policySetRepo.findAllByOrderByCreatedAtDesc()).thenReturn(List.of(s1, s2));
+
+        List<TermsPolicySetResponse> result = service.listPolicySets();
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).name()).isEqualTo("Policy A");
+        assertThat(result.get(1).name()).isEqualTo("Policy B");
+    }
+
+    // ── getPolicySet ──────────────────────────────────────────────────────────
+
+    @Test
+    void getPolicySet_found_returnsDetailWithChildRules() {
+        TermsPolicySetEntity set = policySet("Detail Policy", "DRAFT");
+        when(policySetRepo.findById(set.getId())).thenReturn(Optional.of(set));
+        when(classRuleRepo.findByPolicySetId(set.getId())).thenReturn(List.of());
+        when(regRuleRepo.findByPolicySetId(set.getId())).thenReturn(List.of());
+        when(regObligRepo.findByPolicySetId(set.getId())).thenReturn(List.of());
+
+        TermsPolicyDetailResponse result = service.getPolicySet(set.getId());
+
+        assertThat(result.name()).isEqualTo("Detail Policy");
+        assertThat(result.classificationRules()).isEmpty();
+        assertThat(result.regulationRules()).isEmpty();
+    }
+
+    // ── deleteClassificationRule ──────────────────────────────────────────────
+
+    @Test
+    void deleteClassificationRule_draft_deletesRule() {
+        TermsPolicySetEntity set = policySet("Draft", "DRAFT");
+        when(policySetRepo.findById(set.getId())).thenReturn(Optional.of(set));
+
+        service.deleteClassificationRule(set.getId(), "PUBLIC");
+
+        verify(classRuleRepo).deleteByPolicySetIdAndClassification(set.getId(), "PUBLIC");
+    }
+
+    // ── updateRegulationRule ──────────────────────────────────────────────────
+
+    @Test
+    void updateRegulationRule_found_updatesAndReturns() {
+        TermsPolicySetEntity set = policySet("Draft", "DRAFT");
+        TermsRegulationRuleEntity rule = new TermsRegulationRuleEntity();
+        rule.setId(UUID.randomUUID());
+        rule.setPolicySetId(set.getId());
+        rule.setSignalType("KEYWORD");
+        rule.setPattern("gdpr");
+        rule.setRegulationName("GDPR");
+        rule.setSignalLabel("GDPR keyword");
+
+        TermsRegulationRuleEntity saved = new TermsRegulationRuleEntity();
+        saved.setId(rule.getId());
+        saved.setPolicySetId(set.getId());
+        saved.setSignalType("KEYWORD");
+        saved.setPattern("pci");
+        saved.setRegulationName("PCI-DSS");
+        saved.setSignalLabel("PCI keyword");
+
+        when(policySetRepo.findById(set.getId())).thenReturn(Optional.of(set));
+        when(regRuleRepo.findById(rule.getId())).thenReturn(Optional.of(rule));
+        when(regRuleRepo.save(any())).thenReturn(saved);
+
+        TermsRegulationRuleResponse result = service.updateRegulationRule(set.getId(), rule.getId(),
+            new RegulationRuleRequest("KEYWORD", "pci", "PCI-DSS", "PCI keyword"));
+
+        assertThat(rule.getPattern()).isEqualTo("pci");
+        assertThat(rule.getRegulationName()).isEqualTo("PCI-DSS");
+        assertThat(result.regulationName()).isEqualTo("PCI-DSS");
+    }
+
+    // ── deleteRegulationRule ──────────────────────────────────────────────────
+
+    @Test
+    void deleteRegulationRule_draft_deletesById() {
+        TermsPolicySetEntity set = policySet("Draft", "DRAFT");
+        UUID ruleId = UUID.randomUUID();
+        when(policySetRepo.findById(set.getId())).thenReturn(Optional.of(set));
+
+        service.deleteRegulationRule(set.getId(), ruleId);
+
+        verify(regRuleRepo).deleteById(ruleId);
+    }
+
+    // ── deleteRegulationObligation (happy path) ───────────────────────────────
+
+    @Test
+    void deleteRegulationObligation_draft_deletesById() {
+        TermsPolicySetEntity set = policySet("Draft", "DRAFT");
+        UUID oblId = UUID.randomUUID();
+        when(policySetRepo.findById(set.getId())).thenReturn(Optional.of(set));
+
+        service.deleteRegulationObligation(set.getId(), oblId);
+
+        verify(regObligRepo).deleteById(oblId);
+    }
+
+    // ── parseList (exception path) ────────────────────────────────────────────
+
+    @Test
+    void getActivePolicy_classificationRuleWithInvalidJson_returnsEmptyListForThatField() {
+        TermsPolicySetEntity set = policySet("Default", "ACTIVE");
+
+        TermsClassificationRuleEntity rule = new TermsClassificationRuleEntity();
+        rule.setId(UUID.randomUUID());
+        rule.setPolicySetId(set.getId());
+        rule.setClassification("PUBLIC");
+        rule.setRank(0);
+        rule.setAccessLevel("OPEN");
+        // Deliberately invalid JSON → parseList catch block fires
+        rule.setPermissions("{not-valid-json");
+        rule.setProhibitions("[]");
+        rule.setObligations("[]");
+        rule.setOdrlPermissions("[]");
+        rule.setOdrlProhibitions("[]");
+        rule.setOdrlDuties("[]");
+
+        when(policySetRepo.findFirstByStatus("ACTIVE")).thenReturn(Optional.of(set));
+        when(classRuleRepo.findByPolicySetId(set.getId())).thenReturn(List.of(rule));
+        when(regRuleRepo.findByPolicySetId(set.getId())).thenReturn(List.of());
+        when(regObligRepo.findByPolicySetId(set.getId())).thenReturn(List.of());
+
+        ActiveTermsPolicy policy = service.getActivePolicy();
+
+        // Should not throw; the bad field returns empty list from catch
+        assertThat(policy.classificationRules().get("PUBLIC").permissions()).isEmpty();
+    }
+
+    // ── parseList — null and blank inputs ────────────────────────────────────
+
+    @Test
+    void getActivePolicy_classificationRuleWithNullPermissions_returnsEmptyList() {
+        TermsPolicySetEntity set = policySet("Default", "ACTIVE");
+        TermsClassificationRuleEntity rule = new TermsClassificationRuleEntity();
+        rule.setId(UUID.randomUUID());
+        rule.setPolicySetId(set.getId());
+        rule.setClassification("INTERNAL");
+        rule.setRank(1);
+        rule.setAccessLevel("RESTRICTED");
+        rule.setPermissions(null);
+        rule.setProhibitions("[]");
+        rule.setObligations("[]");
+        rule.setOdrlPermissions("[]");
+        rule.setOdrlProhibitions("[]");
+        rule.setOdrlDuties("[]");
+
+        when(policySetRepo.findFirstByStatus("ACTIVE")).thenReturn(Optional.of(set));
+        when(classRuleRepo.findByPolicySetId(set.getId())).thenReturn(List.of(rule));
+        when(regRuleRepo.findByPolicySetId(set.getId())).thenReturn(List.of());
+        when(regObligRepo.findByPolicySetId(set.getId())).thenReturn(List.of());
+
+        ActiveTermsPolicy policy = service.getActivePolicy();
+
+        assertThat(policy.classificationRules().get("INTERNAL").permissions()).isEmpty();
+    }
+
+    @Test
+    void getActivePolicy_classificationRuleWithBlankPermissions_returnsEmptyList() {
+        TermsPolicySetEntity set = policySet("Default", "ACTIVE");
+        TermsClassificationRuleEntity rule = new TermsClassificationRuleEntity();
+        rule.setId(UUID.randomUUID());
+        rule.setPolicySetId(set.getId());
+        rule.setClassification("CONFIDENTIAL");
+        rule.setRank(2);
+        rule.setAccessLevel("RESTRICTED");
+        rule.setPermissions("   ");
+        rule.setProhibitions("[]");
+        rule.setObligations("[]");
+        rule.setOdrlPermissions("[]");
+        rule.setOdrlProhibitions("[]");
+        rule.setOdrlDuties("[]");
+
+        when(policySetRepo.findFirstByStatus("ACTIVE")).thenReturn(Optional.of(set));
+        when(classRuleRepo.findByPolicySetId(set.getId())).thenReturn(List.of(rule));
+        when(regRuleRepo.findByPolicySetId(set.getId())).thenReturn(List.of());
+        when(regObligRepo.findByPolicySetId(set.getId())).thenReturn(List.of());
+
+        ActiveTermsPolicy policy = service.getActivePolicy();
+
+        assertThat(policy.classificationRules().get("CONFIDENTIAL").permissions()).isEmpty();
+    }
+
+    // ── toJson — null list input ──────────────────────────────────────────────
+
+    @Test
+    void upsertClassificationRule_nullPermissionsList_handledByToJson() {
+        TermsPolicySetEntity set = policySet("Draft", "DRAFT");
+        when(policySetRepo.findById(set.getId())).thenReturn(Optional.of(set));
+        when(classRuleRepo.findByPolicySetIdAndClassification(set.getId(), "PUBLIC"))
+            .thenReturn(Optional.empty());
+
+        TermsClassificationRuleEntity saved = new TermsClassificationRuleEntity();
+        saved.setId(UUID.randomUUID());
+        saved.setPolicySetId(set.getId());
+        saved.setClassification("PUBLIC");
+        saved.setRank(0);
+        saved.setAccessLevel("OPEN");
+        saved.setPermissions("[]");
+        saved.setProhibitions("[]");
+        saved.setObligations("[]");
+        saved.setOdrlPermissions("[]");
+        saved.setOdrlProhibitions("[]");
+        saved.setOdrlDuties("[]");
+        when(classRuleRepo.save(any())).thenReturn(saved);
+
+        // null list → toJson(null) → ternary null-branch → List.of() → "[]"
+        TermsClassificationRuleResponse result = service.upsertClassificationRule(set.getId(), "PUBLIC",
+            new UpsertClassificationRuleRequest(0, "OPEN", null, null, null, null, null, null));
+
+        assertThat(result.classification()).isEqualTo("PUBLIC");
+        ArgumentCaptor<TermsClassificationRuleEntity> captor =
+            ArgumentCaptor.forClass(TermsClassificationRuleEntity.class);
+        verify(classRuleRepo).save(captor.capture());
+        assertThat(captor.getValue().getPermissions()).isEqualTo("[]");
+    }
+
     // ── fixtures ──────────────────────────────────────────────────────────────
 
     private TermsPolicySetEntity policySet(String name, String status) {

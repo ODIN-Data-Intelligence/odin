@@ -437,8 +437,8 @@ public class LogicalModelService {
         Set<String> iriFilter = (selectedIris != null && !selectedIris.isEmpty())
             ? new java.util.HashSet<>(selectedIris) : null;
         List<VocabularyEntity> vocabs = vocabularyRepository.findAll();
-        Set<String> existingIris = entity.getVocabMappings() == null ? Set.of()
-            : entity.getVocabMappings().stream().map(VocabMappingEntity::getConceptIri).collect(Collectors.toSet());
+        Set<String> existingIris = mappingRepository.findByLogicalElementId(elementId)
+            .stream().map(VocabMappingEntity::getConceptIri).collect(Collectors.toSet());
 
         int accepted = 0;
         for (RecommendedVocabMapping rec : recommendations) {
@@ -477,6 +477,49 @@ public class LogicalModelService {
     }
 
     @Async
+    public void recommendModelPii(UUID modelId, UUID jobId) {
+        log.info("action=BULK_PII_START modelId={} jobId={}", modelId, jobId);
+        try {
+            jobRegistry.markRunning(jobId);
+
+            TransactionTemplate readTx = new TransactionTemplate(transactionManager);
+            readTx.setReadOnly(true);
+            List<AiServiceClient.ElementPiiInput> inputs = readTx.execute(s -> {
+                findModelOrThrow(modelId);
+                return elementRepository.findByLogicalModelIdOrderByOrdinalAsc(modelId)
+                    .stream().map(this::toPiiInput).toList();
+            });
+            if (inputs == null || inputs.isEmpty()) { jobRegistry.markCompleted(jobId); return; }
+
+            List<AiServiceClient.ElementPiiResult> results = aiServiceClient.recommendPii(inputs);
+            Map<String, AiServiceClient.ElementPiiResult> byId = results.stream()
+                .collect(Collectors.toMap(AiServiceClient.ElementPiiResult::elementId, r -> r, (a, b) -> a));
+
+            new TransactionTemplate(transactionManager).execute(s -> {
+                List<UUID> ids = inputs.stream().map(i -> UUID.fromString(i.elementId())).toList();
+                List<LogicalDataElementEntity> entities = elementRepository.findAllById(ids);
+                entities.forEach(e -> {
+                    AiServiceClient.ElementPiiResult r = byId.get(e.getId().toString());
+                    if (r != null) {
+                        e.setRecommendedIsPersonalInformation(r.isPersonalInformation());
+                        e.setRecommendedIsDirectIdentifier(r.isDirectIdentifier());
+                        e.setPiiRecommendationReasoning(r.reasoning());
+                        e.setPiiRecommendedAt(OffsetDateTime.now());
+                    }
+                });
+                elementRepository.saveAll(entities);
+                return null;
+            });
+
+            log.info("action=BULK_PII_COMPLETE modelId={} jobId={} resultCount={}", modelId, jobId, results.size());
+            jobRegistry.markCompleted(jobId);
+        } catch (Exception e) {
+            log.error("action=BULK_PII_FAILED modelId={} jobId={} error={}", modelId, jobId, e.getMessage(), e);
+            jobRegistry.markFailed(jobId, e.getMessage());
+        }
+    }
+
+    @Async
     public void recommendModelVocabConcepts(UUID modelId, UUID jobId) {
         log.info("action=BULK_VOCAB_START modelId={} jobId={}", modelId, jobId);
         try {
@@ -512,6 +555,61 @@ public class LogicalModelService {
             log.error("action=BULK_VOCAB_FAILED modelId={} jobId={} error={}", modelId, jobId, e.getMessage(), e);
             jobRegistry.markFailed(jobId, e.getMessage());
         }
+    }
+
+    // ── PII indicator recommendations ────────────────────────────────────────
+
+    public LogicalDataElementResponse recommendPii(UUID elementId) {
+        log.info("action=PII_RECOMMEND_START elementId={}", elementId);
+        TransactionTemplate readTx = new TransactionTemplate(transactionManager);
+        readTx.setReadOnly(true);
+        AiServiceClient.ElementPiiInput input = readTx.execute(s -> toPiiInput(findElementOrThrow(elementId)));
+
+        List<AiServiceClient.ElementPiiResult> results = aiServiceClient.recommendPii(List.of(input));
+
+        return new TransactionTemplate(transactionManager).execute(s -> {
+            LogicalDataElementEntity entity = findElementOrThrow(elementId);
+            results.stream().filter(r -> elementId.toString().equals(r.elementId())).findFirst()
+                .ifPresent(r -> {
+                    entity.setRecommendedIsPersonalInformation(r.isPersonalInformation());
+                    entity.setRecommendedIsDirectIdentifier(r.isDirectIdentifier());
+                    entity.setPiiRecommendationReasoning(r.reasoning());
+                    entity.setPiiRecommendedAt(OffsetDateTime.now());
+                    log.info("action=PII_RECOMMENDED elementId={} personalInfo={} directId={}",
+                        elementId, r.isPersonalInformation(), r.isDirectIdentifier());
+                });
+            return toElementResponse(elementRepository.save(entity));
+        });
+    }
+
+    @Transactional
+    public LogicalDataElementResponse acceptPii(UUID elementId) {
+        LogicalDataElementEntity entity = findElementOrThrow(elementId);
+        if (entity.getRecommendedIsPersonalInformation() == null && entity.getRecommendedIsDirectIdentifier() == null) {
+            throw new NoSuchElementException("No pending PII recommendation for element: " + elementId);
+        }
+        if (entity.getRecommendedIsPersonalInformation() != null)
+            entity.setPersonalInformation(entity.getRecommendedIsPersonalInformation());
+        if (entity.getRecommendedIsDirectIdentifier() != null)
+            entity.setDirectIdentifier(entity.getRecommendedIsDirectIdentifier());
+        entity.setRecommendedIsPersonalInformation(null);
+        entity.setRecommendedIsDirectIdentifier(null);
+        entity.setPiiRecommendationReasoning(null);
+        entity.setPiiRecommendedAt(null);
+        log.info("action=PII_ACCEPTED elementId={} personalInfo={} directId={}",
+            elementId, entity.isPersonalInformation(), entity.isDirectIdentifier());
+        return toElementResponse(elementRepository.save(entity));
+    }
+
+    @Transactional
+    public LogicalDataElementResponse rejectPii(UUID elementId) {
+        LogicalDataElementEntity entity = findElementOrThrow(elementId);
+        entity.setRecommendedIsPersonalInformation(null);
+        entity.setRecommendedIsDirectIdentifier(null);
+        entity.setPiiRecommendationReasoning(null);
+        entity.setPiiRecommendedAt(null);
+        log.info("action=PII_REJECTED elementId={}", elementId);
+        return toElementResponse(elementRepository.save(entity));
     }
 
     @Transactional(readOnly = true)
@@ -631,7 +729,7 @@ public class LogicalModelService {
     private ElementVocabInput toVocabInput(LogicalDataElementEntity e) {
         List<VocabularyEntity> vocabs = vocabularyRepository.findAll();
         List<VocabInfo> vocabInfos = vocabs.stream()
-            .map(v -> new VocabInfo(v.getPrefix(), v.getBaseIri(), v.getName()))
+            .map(v -> new VocabInfo(v.getPrefix(), v.getBaseIri(), v.getName(), v.getConceptHints()))
             .toList();
         List<String> existingIris = e.getVocabMappings() == null ? List.of()
             : e.getVocabMappings().stream().map(VocabMappingEntity::getConceptIri).filter(Objects::nonNull).toList();
@@ -678,6 +776,32 @@ public class LogicalModelService {
             .orElse(null);
     }
 
+    private AiServiceClient.ElementPiiInput toPiiInput(LogicalDataElementEntity e) {
+        List<String> iris = e.getVocabMappings() == null ? List.of()
+            : e.getVocabMappings().stream().map(VocabMappingEntity::getConceptIri).filter(Objects::nonNull).toList();
+        List<String> labels = e.getVocabMappings() == null ? List.of()
+            : e.getVocabMappings().stream().map(VocabMappingEntity::getConceptLabel).filter(Objects::nonNull).toList();
+        // Fetch dataset context for richer PII inference
+        LogicalModelEntity model = modelRepository.findById(e.getLogicalModelId()).orElse(null);
+        String datasetTitle = null;
+        List<String> datasetKeywords = List.of();
+        if (model != null) {
+            datasetRepository.findById(model.getDatasetId()).ifPresent(ds -> {
+                // captured below — need effectively-final workaround via array
+            });
+            var ds = datasetRepository.findById(model.getDatasetId()).orElse(null);
+            if (ds != null) {
+                datasetTitle = ds.getTitle();
+                datasetKeywords = ds.getKeywords() != null ? ds.getKeywords() : List.of();
+            }
+        }
+        return new AiServiceClient.ElementPiiInput(
+            e.getId().toString(), e.getName(), e.getLabel(),
+            e.getLogicalType(), e.getDescription(), iris, labels,
+            datasetTitle, datasetKeywords
+        );
+    }
+
     private ElementClassificationInput toClassificationInput(LogicalDataElementEntity e) {
         List<String> iris = e.getVocabMappings() == null ? List.of()
             : e.getVocabMappings().stream().map(VocabMappingEntity::getConceptIri).filter(Objects::nonNull).toList();
@@ -705,6 +829,8 @@ public class LogicalModelService {
         entity.setIdentifier(req.isIdentifier());
         entity.setNullable(req.isNullable());
         if (req.classification() != null) entity.setClassification(req.classification());
+        entity.setPersonalInformation(req.isPersonalInformation());
+        entity.setDirectIdentifier(req.isDirectIdentifier());
     }
 
     private LogicalModelEntity findModelOrThrow(UUID id) {
@@ -727,8 +853,8 @@ public class LogicalModelService {
     }
 
     LogicalDataElementResponse toElementResponse(LogicalDataElementEntity e) {
-        List<VocabMappingResponse> mappings = e.getVocabMappings() == null ? List.of()
-            : e.getVocabMappings().stream().map(this::toMappingResponse).toList();
+        List<VocabMappingResponse> mappings = mappingRepository.findByLogicalElementId(e.getId())
+            .stream().map(this::toMappingResponse).toList();
         List<UUID> physicalColumnIds = columnRepository.findByLogicalDataElementId(e.getId())
             .stream().map(CsvwColumnEntity::getId).toList();
         List<RecommendedVocabMapping> recommendedVocab = parseVocabRecommendations(e.getRecommendedVocabMappings());
@@ -741,7 +867,10 @@ public class LogicalModelService {
             e.getClassificationReasoning(), e.getClassificationRecommendedAt(),
             e.getRecommendedDescription(), e.getDescriptionReasoning(), e.getDescriptionRecommendedAt(),
             recommendedVocab.isEmpty() ? null : recommendedVocab,
-            e.getVocabMappingReasoning(), e.getVocabMappingRecommendedAt()
+            e.getVocabMappingReasoning(), e.getVocabMappingRecommendedAt(),
+            e.isPersonalInformation(), e.isDirectIdentifier(),
+            e.getRecommendedIsPersonalInformation(), e.getRecommendedIsDirectIdentifier(),
+            e.getPiiRecommendationReasoning(), e.getPiiRecommendedAt()
         );
     }
 

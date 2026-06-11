@@ -18,6 +18,7 @@ public record VocabConceptRecommendationRequest(List<ElementVocabInput> elements
     public record VocabInfo(
         String prefix,
         String baseIri,
-        String name
+        String name,
+        String conceptHints
     ) {}
 }

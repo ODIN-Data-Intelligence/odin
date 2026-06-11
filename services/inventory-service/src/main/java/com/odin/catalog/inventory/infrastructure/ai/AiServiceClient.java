@@ -131,7 +131,7 @@ public class AiServiceClient {
         }
     }
 
-    public record VocabInfo(String prefix, String baseIri, String name) {}
+    public record VocabInfo(String prefix, String baseIri, String name, String conceptHints) {}
 
     public record ElementVocabInput(
         String elementId,
@@ -205,4 +205,49 @@ public class AiServiceClient {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     private record ClassifyResponse(List<ElementClassificationResult> results) {}
+
+    public List<ElementPiiResult> recommendPii(List<ElementPiiInput> elements) {
+        log.info("action=AI_REQUEST_START operation=recommendPii elementCount={}", elements.size());
+        long t = System.currentTimeMillis();
+        try {
+            PiiRecommendationResponse response = restClient.post()
+                .uri("/api/v1/recommend-pii")
+                .body(new PiiRecommendationRequest(elements))
+                .retrieve()
+                .body(PiiRecommendationResponse.class);
+            List<ElementPiiResult> results = response != null ? response.results() : List.of();
+            log.info("action=AI_REQUEST_COMPLETE operation=recommendPii elementCount={} resultCount={} elapsed={}ms",
+                elements.size(), results.size(), System.currentTimeMillis() - t);
+            return results;
+        } catch (Exception e) {
+            log.warn("action=AI_REQUEST_FAILED operation=recommendPii elementCount={} elapsed={}ms error={}",
+                elements.size(), System.currentTimeMillis() - t, e.getMessage());
+            throw new AiServiceUnavailableException("PII recommendation service is unavailable", e);
+        }
+    }
+
+    public record ElementPiiInput(
+        String elementId,
+        String name,
+        String label,
+        String logicalType,
+        String description,
+        List<String> vocabConceptIris,
+        List<String> vocabConceptLabels,
+        String datasetTitle,
+        List<String> datasetKeywords
+    ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ElementPiiResult(
+        String elementId,
+        boolean isPersonalInformation,
+        boolean isDirectIdentifier,
+        String reasoning
+    ) {}
+
+    private record PiiRecommendationRequest(List<ElementPiiInput> elements) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record PiiRecommendationResponse(List<ElementPiiResult> results) {}
 }

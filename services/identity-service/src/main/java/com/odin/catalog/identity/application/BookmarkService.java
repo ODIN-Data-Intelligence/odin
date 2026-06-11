@@ -7,6 +7,8 @@ import com.odin.catalog.identity.infrastructure.jpa.repository.BookmarkCollectio
 import com.odin.catalog.identity.infrastructure.jpa.repository.BookmarkRepository;
 import com.odin.catalog.shared.auth.filter.TenantContextHolder;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -21,6 +23,8 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class BookmarkService {
+
+    private static final Logger log = LoggerFactory.getLogger(BookmarkService.class);
 
     private final BookmarkRepository           bookmarkRepository;
     private final BookmarkCollectionRepository collectionRepository;
@@ -40,6 +44,7 @@ public class BookmarkService {
     public BookmarkCollectionResponse createCollection(BookmarkCollectionRequest req) {
         UUID userId   = currentUserId();
         UUID tenantId = tenantId();
+        log.info("action=CREATE_COLLECTION userId={} name={}", userId, req.name());
 
         BookmarkCollectionEntity entity = new BookmarkCollectionEntity();
         entity.setUserId(userId);
@@ -51,6 +56,7 @@ public class BookmarkService {
 
     @Transactional
     public BookmarkCollectionResponse updateCollection(UUID id, BookmarkCollectionRequest req) {
+        log.info("action=UPDATE_COLLECTION id={}", id);
         BookmarkCollectionEntity entity = findCollectionOrThrow(id);
         entity.setName(req.name());
         entity.setDescription(req.description());
@@ -59,6 +65,7 @@ public class BookmarkService {
 
     @Transactional
     public void deleteCollection(UUID id) {
+        log.info("action=DELETE_COLLECTION id={}", id);
         BookmarkCollectionEntity entity = findCollectionOrThrow(id);
         // ON DELETE SET NULL handles nulling bookmarks.collection_id in the DB
         collectionRepository.delete(entity);
@@ -80,6 +87,7 @@ public class BookmarkService {
     public BookmarkResponse createBookmark(BookmarkRequest req) {
         UUID userId   = currentUserId();
         UUID tenantId = tenantId();
+        log.info("action=CREATE_BOOKMARK userId={} datasetId={}", userId, req.datasetId());
 
         // Idempotent — return existing bookmark if dataset already bookmarked
         Optional<BookmarkEntity> existing = bookmarkRepository.findByUserIdAndDatasetId(userId, req.datasetId());
@@ -101,6 +109,7 @@ public class BookmarkService {
 
     @Transactional
     public BookmarkResponse patchBookmark(UUID id, BookmarkPatchRequest req) {
+        log.info("action=PATCH_BOOKMARK id={}", id);
         BookmarkEntity entity = findBookmarkOrThrow(id);
 
         if (req.collectionId() != null) {
@@ -113,6 +122,7 @@ public class BookmarkService {
 
     @Transactional
     public void deleteBookmark(UUID id) {
+        log.info("action=DELETE_BOOKMARK id={}", id);
         BookmarkEntity entity = findBookmarkOrThrow(id);
         bookmarkRepository.delete(entity);
     }

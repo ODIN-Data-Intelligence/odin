@@ -95,6 +95,10 @@ public class ClassificationService {
             - Credential, password, biometric, SSN, card number → HIGH_CONFIDENTIAL
             - Public market prices, public company names → PUBLIC
             - Aggregate statistics, operational metrics, reference codes → INTERNAL
+            - DPV personal data (any dpv-pd: IRI in vocabIris) → CONFIDENTIAL minimum
+            - DPV special category personal data (dpv-pd:HealthData, dpv-pd:Biometric, dpv-pd:GeneticData,
+              dpv-pd:PoliticalOpinion, dpv-pd:SexualLifeData, dpv-pd:ReligiousBelief,
+              dpv-pd:RacialEthnicOrigin, dpv-pd:TradeUnionMembership) → HIGH_CONFIDENTIAL
             - When uncertain, omit the element from the response entirely
 
             Output rules (strictly follow these):

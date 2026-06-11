@@ -34,4 +34,9 @@ public class HarvestJobEntity {
         createdAt = OffsetDateTime.now();
         updatedAt = OffsetDateTime.now();
     }
+
+    @PreUpdate
+    void preUpdate() {
+        updatedAt = OffsetDateTime.now();
+    }
 }

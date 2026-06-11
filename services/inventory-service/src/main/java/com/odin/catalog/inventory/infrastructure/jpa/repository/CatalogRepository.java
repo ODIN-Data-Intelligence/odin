@@ -4,8 +4,10 @@ import com.odin.catalog.inventory.infrastructure.jpa.entity.CatalogEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface CatalogRepository extends JpaRepository<CatalogEntity, UUID> {
     List<CatalogEntity> findByTenantIdAndIsDeletedFalse(UUID tenantId);
+    Optional<CatalogEntity> findByIdAndTenantIdAndIsDeletedFalse(UUID id, UUID tenantId);
 }

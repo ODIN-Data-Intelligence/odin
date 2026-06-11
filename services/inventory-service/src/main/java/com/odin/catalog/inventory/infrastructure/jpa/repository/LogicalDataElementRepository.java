@@ -42,4 +42,13 @@ public interface LogicalDataElementRepository extends JpaRepository<LogicalDataE
           AND lde.classification IS NOT NULL
         """)
     long countClassifiedPublishedByDatasetId(@Param("datasetId") UUID datasetId);
+
+    @Query(nativeQuery = true, value = """
+        SELECT COUNT(*)
+        FROM logical_data_elements lde
+        JOIN logical_models lm ON lm.id = lde.logical_model_id
+        WHERE lm.dataset_id = :datasetId
+          AND lde.is_personal_information = true
+        """)
+    long countPiiElementsByDatasetId(@Param("datasetId") UUID datasetId);
 }

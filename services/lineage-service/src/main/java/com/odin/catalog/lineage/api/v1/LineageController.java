@@ -14,6 +14,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -31,6 +33,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class LineageController {
 
+    private static final Logger log = LoggerFactory.getLogger(LineageController.class);
+
     private final OpenLineageHandler openLineageHandler;
     private final AgeGraphRepository ageGraph;
     private final LineageDatasetRepository lineageDatasetRepository;
@@ -47,6 +51,7 @@ public class LineageController {
     @PostMapping("/lineage")
     @ResponseStatus(HttpStatus.CREATED)
     public void ingestRunEvent(@RequestBody RunEvent event) {
+        log.info("action=INGEST_RUN_EVENT eventType={}", event.eventType());
         openLineageHandler.handle(event);
     }
 
@@ -178,6 +183,7 @@ public class LineageController {
             @Parameter(description = "OpenLineage dataset name", example = "PUBLIC.TRADE_POSITIONS")
             @PathVariable String name,
             @RequestBody Map<String, String> body) {
+        log.info("action=LINK_CATALOG_RESOURCE namespace={} name={}", namespace, name);
         lineageDatasetRepository.findByNamespaceAndName(namespace, name).ifPresent(ds -> {
             ds.setCatalogResourceId(UUID.fromString(body.get("catalogResourceId")));
             lineageDatasetRepository.save(ds);

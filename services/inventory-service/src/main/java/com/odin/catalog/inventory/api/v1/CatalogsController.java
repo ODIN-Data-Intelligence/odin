@@ -1,12 +1,9 @@
 package com.odin.catalog.inventory.api.v1;
 
-import com.odin.catalog.inventory.infrastructure.jpa.entity.CatalogEntity;
-import com.odin.catalog.inventory.infrastructure.jpa.repository.CatalogRepository;
-import com.odin.catalog.inventory.infrastructure.jpa.repository.DatasetRepository;
-import com.odin.catalog.shared.auth.filter.TenantContextHolder;
+import com.odin.catalog.inventory.api.v1.dto.CatalogRequest;
+import com.odin.catalog.inventory.api.v1.dto.CatalogResponse;
+import com.odin.catalog.inventory.application.catalog.CatalogService;
 import com.odin.catalog.shared.models.dcat.DcatCatalog;
-import com.odin.catalog.shared.models.dcat.DcatDataset;
-import com.odin.catalog.shared.models.dcat.DcatResource;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -14,14 +11,12 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 @Tag(name = "Catalogs", description = "DCAT Catalog registry — top-level containers that group datasets")
@@ -30,8 +25,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class CatalogsController {
 
-    private final CatalogRepository catalogRepository;
-    private final DatasetRepository datasetRepository;
+    private final CatalogService catalogService;
 
     @Operation(summary = "List catalogs", description = "Returns all catalogs visible to the authenticated tenant.")
     @ApiResponses({
@@ -39,9 +33,8 @@ public class CatalogsController {
         @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
     })
     @GetMapping
-    public List<CatalogEntity> list() {
-        UUID tenantId = UUID.fromString(TenantContextHolder.get());
-        return catalogRepository.findByTenantIdAndIsDeletedFalse(tenantId);
+    public List<CatalogResponse> list() {
+        return catalogService.list();
     }
 
     @Operation(summary = "Get catalog", description = "Returns a single catalog by UUID.")
@@ -51,39 +44,57 @@ public class CatalogsController {
         @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
     })
     @GetMapping("/{id}")
-    public CatalogEntity get(
+    public CatalogResponse get(
             @Parameter(description = "Catalog UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
             @PathVariable UUID id) {
-        return catalogRepository.findById(id)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        return catalogService.get(id);
     }
 
     @Operation(summary = "Create catalog", description = "Creates a new DCAT catalog for the authenticated tenant.")
     @ApiResponses({
         @ApiResponse(responseCode = "201", description = "Catalog created"),
-        @ApiResponse(responseCode = "400", description = "Missing required fields", content = @Content),
+        @ApiResponse(responseCode = "400", description = "Validation error", content = @Content),
         @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
     })
-    @io.swagger.v3.oas.annotations.parameters.RequestBody(
-        description = "Catalog fields",
-        content = @Content(schema = @Schema(
-            example = "{\"title\": \"Enterprise Data Catalog\", \"description\": \"Main catalog\", \"homepage\": \"https://example.com\"}")))
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public CatalogEntity create(@RequestBody Map<String, Object> body) {
-        UUID tenantId = UUID.fromString(TenantContextHolder.get());
-        CatalogEntity catalog = new CatalogEntity();
-        catalog.setTenantId(tenantId);
-        catalog.setTitle((String) body.getOrDefault("title", "Unnamed Catalog"));
-        catalog.setDescription((String) body.get("description"));
-        catalog.setHomepage((String) body.get("homepage"));
-        return catalogRepository.save(catalog);
+    public CatalogResponse create(@Valid @RequestBody CatalogRequest request) {
+        return catalogService.create(request);
+    }
+
+    @Operation(summary = "Update catalog", description = "Replaces all fields of an existing catalog.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Catalog updated"),
+        @ApiResponse(responseCode = "400", description = "Validation error", content = @Content),
+        @ApiResponse(responseCode = "404", description = "Catalog not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @PutMapping("/{id}")
+    public CatalogResponse update(
+            @Parameter(description = "Catalog UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
+            @PathVariable UUID id,
+            @Valid @RequestBody CatalogRequest request) {
+        return catalogService.update(id, request);
+    }
+
+    @Operation(summary = "Delete catalog",
+        description = "Soft-deletes a catalog. Member datasets are not deleted.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "204", description = "Deleted"),
+        @ApiResponse(responseCode = "404", description = "Catalog not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(
+            @Parameter(description = "Catalog UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
+            @PathVariable UUID id) {
+        catalogService.delete(id);
     }
 
     @Operation(summary = "Export catalog as DCAT JSON-LD",
         description = "Returns the catalog and all its member datasets serialised as a DCAT 3.0 JSON-LD document "
-            + "conforming to https://www.w3.org/TR/vocab-dcat-3/. "
-            + "Send `Accept: application/ld+json` to receive the JSON-LD representation.")
+            + "conforming to https://www.w3.org/TR/vocab-dcat-3/.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "DCAT 3.0 JSON-LD catalog document",
             content = @Content(mediaType = "application/ld+json",
@@ -95,40 +106,6 @@ public class CatalogsController {
     public DcatCatalog export(
             @Parameter(description = "Catalog UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
             @PathVariable UUID id) {
-        CatalogEntity catalog = catalogRepository.findById(id)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-
-        DcatResource resource = new DcatResource(
-            catalog.getId().toString(), "CATALOG", catalog.getIri(),
-            catalog.getTenantId().toString(), null,
-            catalog.getTitle(), catalog.getDescription(),
-            catalog.getLanguage(), catalog.getKeywords(), catalog.getThemes(),
-            catalog.getIssued() != null ? catalog.getIssued().toString() : null,
-            catalog.getModified() != null ? catalog.getModified().toString() : null,
-            catalog.getLicense(), null, null, null, null, null, null,
-            catalog.getSourceUri(), null
-        );
-
-        List<DcatDataset> datasets = datasetRepository
-            .findByCatalogIdAndTenantIdAndIsDeletedFalse(id, catalog.getTenantId())
-            .stream()
-            .map(ds -> {
-                DcatResource dsResource = new DcatResource(
-                    ds.getId().toString(), "DATASET", ds.getIri(),
-                    ds.getTenantId().toString(),
-                    ds.getDomainId() != null ? ds.getDomainId().toString() : null,
-                    ds.getTitle(), ds.getDescription(),
-                    ds.getLanguage(), ds.getKeywords(), ds.getThemes(),
-                    ds.getIssued() != null ? ds.getIssued().toString() : null,
-                    ds.getModified() != null ? ds.getModified().toString() : null,
-                    ds.getLicense(), null, null, null, null, null, null,
-                    ds.getSourceUri(), null
-                );
-                return new DcatDataset(dsResource, ds.getAccrualPeriodicity(), null,
-                    null, null, ds.getVersion(), null, null, null, null);
-            })
-            .toList();
-
-        return new DcatCatalog(resource, catalog.getHomepage(), null, datasets);
+        return catalogService.export(id);
     }
 }

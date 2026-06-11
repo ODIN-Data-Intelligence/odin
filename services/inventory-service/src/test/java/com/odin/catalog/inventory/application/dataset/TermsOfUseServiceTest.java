@@ -6,6 +6,7 @@ import com.odin.catalog.inventory.infrastructure.jpa.entity.DatasetEntity;
 import com.odin.catalog.inventory.infrastructure.jpa.repository.DatasetRepository;
 import com.odin.catalog.inventory.infrastructure.jpa.repository.LogicalDataElementRepository;
 import com.odin.catalog.inventory.infrastructure.jpa.repository.VocabMappingRepository;
+import com.odin.catalog.inventory.infrastructure.kafka.CatalogEventProducer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,6 +28,7 @@ class TermsOfUseServiceTest {
     @Mock LogicalDataElementRepository   elementRepository;
     @Mock VocabMappingRepository         vocabMappingRepository;
     @Mock TermsPolicyService             termsPolicyService;
+    @Mock CatalogEventProducer           eventProducer;
     @Spy  ObjectMapper objectMapper = new ObjectMapper();
 
     @InjectMocks TermsOfUseService service;
@@ -218,6 +220,104 @@ class TermsOfUseServiceTest {
     }
 
     @Test
+    void derive_hasPiiElements_detectsPiiRegulation() {
+        DatasetEntity ds = dataset();
+        when(datasetRepository.findById(DATASET_ID)).thenReturn(Optional.of(ds));
+        when(elementRepository.findClassificationsByDatasetId(DATASET_ID)).thenReturn(List.of("PUBLIC"));
+        when(elementRepository.countPiiElementsByDatasetId(DATASET_ID)).thenReturn(1L);
+        when(termsPolicyService.getActivePolicy()).thenReturn(policyWithHasPiiRule());
+
+        TermsOfUseResponse result = service.derive(DATASET_ID);
+
+        assertThat(result.applicableRegulations()).contains("GDPR");
+    }
+
+    @Test
+    void derive_fallbackWithAccessRights_usesAccessRightsNote() {
+        DatasetEntity ds = dataset();
+        ds.setAccessRights("Internal Use Only");
+        when(datasetRepository.findById(DATASET_ID)).thenReturn(Optional.of(ds));
+        when(elementRepository.findClassificationsByDatasetId(DATASET_ID)).thenReturn(List.of());
+        when(termsPolicyService.getActivePolicy()).thenReturn(policyWithClassifications());
+
+        TermsOfUseResponse result = service.derive(DATASET_ID);
+
+        assertThat(result.policySource()).isEqualTo("fallback");
+        assertThat(result.permissions()).anyMatch(p -> p.contains("Internal Use Only"));
+    }
+
+    @Test
+    void derive_classificationWithOdrlDuties_includesObligationInPolicy() {
+        DatasetEntity ds = dataset();
+        when(datasetRepository.findById(DATASET_ID)).thenReturn(Optional.of(ds));
+        when(elementRepository.findClassificationsByDatasetId(DATASET_ID)).thenReturn(List.of("CLASSIFIED_WITH_DUTY"));
+        when(termsPolicyService.getActivePolicy()).thenReturn(policyWithOdrlDuties());
+
+        TermsOfUseResponse result = service.derive(DATASET_ID);
+
+        assertThat(result.odrlPolicy()).containsKey("obligation");
+    }
+
+    @Test
+    void derive_fallbackWithRightsStatement_usesRightsStatementNote() {
+        DatasetEntity ds = dataset();
+        ds.setRightsStatement("Proprietary — no redistribution");
+        when(datasetRepository.findById(DATASET_ID)).thenReturn(Optional.of(ds));
+        when(elementRepository.findClassificationsByDatasetId(DATASET_ID)).thenReturn(List.of());
+        when(termsPolicyService.getActivePolicy()).thenReturn(policyWithClassifications());
+
+        TermsOfUseResponse result = service.derive(DATASET_ID);
+
+        assertThat(result.policySource()).isEqualTo("fallback");
+        assertThat(result.permissions()).anyMatch(p -> p.contains("Proprietary"));
+    }
+
+    @Test
+    void derive_keywordRuleWithNullKeywords_noRegulationDetected() {
+        DatasetEntity ds = dataset();
+        // keywords is null — KEYWORD rule should be skipped
+        when(datasetRepository.findById(DATASET_ID)).thenReturn(Optional.of(ds));
+        when(elementRepository.findClassificationsByDatasetId(DATASET_ID)).thenReturn(List.of("PUBLIC"));
+        when(termsPolicyService.getActivePolicy()).thenReturn(policyWithRegulationRules());
+
+        TermsOfUseResponse result = service.derive(DATASET_ID);
+
+        assertThat(result.applicableRegulations()).doesNotContain("GDPR");
+    }
+
+    @Test
+    void derive_obligationWithNullOdrlDuty_isFilteredFromRegulationPieces() {
+        DatasetEntity ds = dataset();
+        when(datasetRepository.findById(DATASET_ID)).thenReturn(Optional.of(ds));
+        when(elementRepository.findClassificationsByDatasetId(DATASET_ID)).thenReturn(List.of("CONFIDENTIAL"));
+        when(vocabMappingRepository.findConceptIrisByDatasetId(DATASET_ID))
+            .thenReturn(List.of("https://spec.edmcouncil.org/fibo/ontology/fibo-fbc/something"));
+        when(termsPolicyService.getActivePolicy()).thenReturn(policyWithNullDutyObligation());
+
+        TermsOfUseResponse result = service.derive(DATASET_ID);
+
+        // The obligation is matched by IRI but filtered because odrlDuty is null
+        assertThat(result.applicableRegulations()).contains("MiFID II");
+        // No ODRL obligation piece should appear since duty was null
+        if (result.odrlPolicy() != null) {
+            assertThat(result.odrlPolicy()).doesNotContainKey("obligation");
+        }
+    }
+
+    @Test
+    void accept_withExplicitPolicy_nullComponents_storesPolicy() {
+        DatasetEntity ds = dataset();
+        ds.setHasPolicy("{\"@context\":\"http://www.w3.org/ns/odrl.jsonld\",\"@type\":\"Set\"}");
+        when(datasetRepository.findById(DATASET_ID)).thenReturn(Optional.of(ds));
+        when(datasetRepository.save(ds)).thenReturn(ds);
+
+        // buildResponse returns components=null for explicit path (passes null payloads to publishDatasetChanged)
+        service.accept(DATASET_ID);
+
+        verify(datasetRepository).save(ds);
+    }
+
+    @Test
     void derive_noClassificationsNoLicense_fallbackWithEmptyPermissions() {
         DatasetEntity ds = dataset();
         when(datasetRepository.findById(DATASET_ID)).thenReturn(Optional.of(ds));
@@ -310,6 +410,43 @@ class TermsOfUseServiceTest {
             new ActiveTermsPolicy.RegulationDetectionRule("KEYWORD", "gdpr", "GDPR", "GDPR keyword")
         );
         return new ActiveTermsPolicy(UUID.randomUUID(), "Test Policy", classRules, regRules, List.of());
+    }
+
+    private ActiveTermsPolicy policyWithHasPiiRule() {
+        var classRules = Map.of(
+            "PUBLIC", new ActiveTermsPolicy.ClassificationRule(0, "OPEN",
+                List.of(), List.of(), List.of(), List.of("odrl:read"), List.of(), List.of())
+        );
+        var regRules = List.of(
+            new ActiveTermsPolicy.RegulationDetectionRule("HAS_PII_ELEMENTS", "", "GDPR", "Contains PII elements")
+        );
+        return new ActiveTermsPolicy(UUID.randomUUID(), "PII Policy", classRules, regRules, List.of());
+    }
+
+    private ActiveTermsPolicy policyWithOdrlDuties() {
+        var classRules = Map.of(
+            "CLASSIFIED_WITH_DUTY", new ActiveTermsPolicy.ClassificationRule(
+                1, "CONTROLLED",
+                List.of(), List.of(), List.of(),
+                List.of(), List.of("odrl:distribute"), List.of("odrl:attribute")  // non-empty odrlDuties
+            )
+        );
+        return new ActiveTermsPolicy(UUID.randomUUID(), "Duty Policy", classRules, List.of(), List.of());
+    }
+
+    private ActiveTermsPolicy policyWithNullDutyObligation() {
+        var classRules = Map.of(
+            "PUBLIC",       new ActiveTermsPolicy.ClassificationRule(0, "OPEN",       List.of(), List.of(), List.of(), List.of(), List.of(), List.of()),
+            "CONFIDENTIAL", new ActiveTermsPolicy.ClassificationRule(2, "RESTRICTED", List.of(), List.of(), List.of(), List.of(), List.of(), List.of())
+        );
+        var regRules = List.of(
+            new ActiveTermsPolicy.RegulationDetectionRule("IRI_CONTAINS", "fibo-fbc", "MiFID II", "FIBO IRI")
+        );
+        // Obligation with null odrlDuty → filtered by buildRegulationPieces
+        var obligations = List.of(
+            new ActiveTermsPolicy.RegulationObligation("MiFID II", "Some obligation text", null)
+        );
+        return new ActiveTermsPolicy(UUID.randomUUID(), "Test Policy", classRules, regRules, obligations);
     }
 
     private ActiveTermsPolicy policyWithRegulationAndObligation() {

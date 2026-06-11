@@ -91,6 +91,7 @@ export default function LogicalSchemaTable({ datasetId }: LogicalSchemaTableProp
               <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
               <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Logical Type</th>
               <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Classification</th>
+              <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">PII</th>
               <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Vocabulary Concept</th>
               <th className="px-3 py-2.5" />
             </tr>
@@ -123,6 +124,19 @@ export default function LogicalSchemaTable({ datasetId }: LogicalSchemaTableProp
                     <ClassificationBadge level={el.classification} reasoning={el.classificationReasoning} />
                   </td>
                   <td className="px-3 py-2.5">
+                    <div className="flex gap-1">
+                      {el.isPersonalInformation && (
+                        <span title="Personal Information" className="px-1.5 py-0.5 rounded text-xs font-semibold bg-rose-600 text-white">PII</span>
+                      )}
+                      {el.isDirectIdentifier && (
+                        <span title="Direct Identifier" className="px-1.5 py-0.5 rounded text-xs font-semibold bg-amber-500 text-white">ID</span>
+                      )}
+                      {!el.isPersonalInformation && !el.isDirectIdentifier && (
+                        <span className="text-gray-400 text-xs">—</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5">
                     <div className="flex flex-wrap gap-1">
                       {el.vocabMappings?.slice(0, 2).map(m => (
                         <VocabConceptBadge
@@ -150,7 +164,7 @@ export default function LogicalSchemaTable({ datasetId }: LogicalSchemaTableProp
                 </tr>
                 {expandedIds.has(el.id) && (
                   <tr key={`${el.id}-physical`} className="bg-blue-50">
-                    <td colSpan={6} className="px-4 py-2">
+                    <td colSpan={7} className="px-4 py-2">
                       <div className="flex items-center gap-4 text-xs text-gray-600">
                         <span className="font-mono font-medium">
                           {el.physicalColumn?.name ?? el.physicalColumnRef?.column ?? '—'}
@@ -171,7 +185,7 @@ export default function LogicalSchemaTable({ datasetId }: LogicalSchemaTableProp
               </>
             ))}
             {elements.length === 0 && (
-              <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-400 text-xs">No elements defined</td></tr>
+              <tr><td colSpan={7} className="px-3 py-6 text-center text-gray-400 text-xs">No elements defined</td></tr>
             )}
           </tbody>
         </table>

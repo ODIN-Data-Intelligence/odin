@@ -11,6 +11,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
@@ -22,6 +24,8 @@ import java.util.UUID;
 @RequestMapping("/api/v1/bookmark-collections")
 @RequiredArgsConstructor
 public class BookmarkCollectionsController {
+
+    private static final Logger log = LoggerFactory.getLogger(BookmarkCollectionsController.class);
 
     private final BookmarkService bookmarkService;
 
@@ -40,6 +44,7 @@ public class BookmarkCollectionsController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public BookmarkCollectionResponse create(@Valid @RequestBody BookmarkCollectionRequest request) {
+        log.info("action=CREATE_COLLECTION name={}", request.name());
         return bookmarkService.createCollection(request);
     }
 
@@ -52,6 +57,7 @@ public class BookmarkCollectionsController {
     public BookmarkCollectionResponse update(
             @Parameter(description = "Collection UUID") @PathVariable UUID id,
             @Valid @RequestBody BookmarkCollectionRequest request) {
+        log.info("action=UPDATE_COLLECTION id={}", id);
         return bookmarkService.updateCollection(id, request);
     }
 
@@ -65,6 +71,7 @@ public class BookmarkCollectionsController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(
             @Parameter(description = "Collection UUID") @PathVariable UUID id) {
+        log.info("action=DELETE_COLLECTION id={}", id);
         bookmarkService.deleteCollection(id);
     }
 }

@@ -38,6 +38,12 @@ public record LogicalDataElementRequest(
 
     @Schema(description = "Data classification override set by the data owner",
         allowableValues = {"PUBLIC", "INTERNAL", "CONFIDENTIAL", "HIGH_CONFIDENTIAL"})
-    String classification
+    String classification,
+
+    @Schema(description = "Whether this element contains personal information about a natural person")
+    boolean isPersonalInformation,
+
+    @Schema(description = "Whether this element is a direct identifier (name, email, SSN, passport, etc.)")
+    boolean isDirectIdentifier
 
 ) {}

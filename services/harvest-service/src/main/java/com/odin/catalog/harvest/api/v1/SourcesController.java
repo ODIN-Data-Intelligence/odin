@@ -3,6 +3,7 @@ package com.odin.catalog.harvest.api.v1;
 import com.odin.catalog.harvest.application.HarvestSourceService;
 import com.odin.catalog.harvest.api.v1.dto.HarvestSourceRequest;
 import com.odin.catalog.harvest.api.v1.dto.HarvestSourceResponse;
+import com.odin.catalog.harvest.api.v1.dto.SourceConnectionTestResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -12,11 +13,12 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 @Tag(name = "Sources", description = "Harvest source configurations — connection details for external data systems (DCAT HTTP, AWS Glue, Snowflake, Teradata)")
@@ -24,6 +26,8 @@ import java.util.UUID;
 @RequestMapping("/api/v1/sources")
 @RequiredArgsConstructor
 public class SourcesController {
+
+    private static final Logger log = LoggerFactory.getLogger(SourcesController.class);
 
     private final HarvestSourceService sourceService;
 
@@ -64,6 +68,7 @@ public class SourcesController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public HarvestSourceResponse create(@Valid @RequestBody HarvestSourceRequest request) {
+        log.info("action=CREATE_SOURCE name={}", request.name());
         return sourceService.create(request);
     }
 
@@ -79,6 +84,7 @@ public class SourcesController {
             @Parameter(description = "Harvest source UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
             @PathVariable UUID id,
             @Valid @RequestBody HarvestSourceRequest request) {
+        log.info("action=UPDATE_SOURCE id={}", id);
         return sourceService.update(id, request);
     }
 
@@ -94,6 +100,7 @@ public class SourcesController {
     public void delete(
             @Parameter(description = "Harvest source UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
             @PathVariable UUID id) {
+        log.info("action=DELETE_SOURCE id={}", id);
         sourceService.delete(id);
     }
 
@@ -106,10 +113,11 @@ public class SourcesController {
         @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
     })
     @PostMapping("/{id}/test")
-    public Map<String, Object> testConnection(
+    public SourceConnectionTestResponse testConnection(
             @Parameter(description = "Harvest source UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
             @PathVariable UUID id) {
         boolean ok = sourceService.testConnection(id);
-        return Map.of("success", ok, "message", ok ? "Connection successful" : "Connection failed");
+        log.info("action=TEST_SOURCE_CONNECTION id={} success={}", id, ok);
+        return new SourceConnectionTestResponse(ok, ok ? "Connection successful" : "Connection failed");
     }
 }

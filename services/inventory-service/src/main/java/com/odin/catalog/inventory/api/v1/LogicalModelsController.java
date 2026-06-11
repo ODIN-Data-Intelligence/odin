@@ -1,6 +1,7 @@
 package com.odin.catalog.inventory.api.v1;
 
 import com.odin.catalog.inventory.api.v1.dto.*;
+import jakarta.validation.Valid;
 import com.odin.catalog.inventory.application.logical.BulkRecommendationJobRegistry;
 import com.odin.catalog.inventory.application.logical.LogicalModelService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -17,7 +18,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.UUID;
 
@@ -83,15 +83,12 @@ public class LogicalModelsController {
         @ApiResponse(responseCode = "404", description = "Logical model not found", content = @Content),
         @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
     })
-    @io.swagger.v3.oas.annotations.parameters.RequestBody(
-        description = "New model status",
-        content = @Content(schema = @Schema(example = "{\"status\": \"published\"}")))
     @PatchMapping("/api/v1/logical-models/{id}/status")
     public LogicalModelResponse updateStatus(
             @Parameter(description = "Logical model UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
             @PathVariable UUID id,
-            @RequestBody Map<String, String> body) {
-        return logicalModelService.updateStatus(id, body.get("status"));
+            @Valid @RequestBody UpdateModelStatusRequest request) {
+        return logicalModelService.updateStatus(id, request.status());
     }
 
     @Operation(summary = "Delete logical model", description = "Permanently deletes a logical model and all its elements.")
@@ -164,15 +161,12 @@ public class LogicalModelsController {
         @ApiResponse(responseCode = "404", description = "Element or column not found", content = @Content),
         @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
     })
-    @io.swagger.v3.oas.annotations.parameters.RequestBody(
-        description = "Physical column to bind",
-        content = @Content(schema = @Schema(example = "{\"physicalColumnId\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\"}")))
     @PostMapping("/api/v1/logical-data-elements/{elementId}/bind")
     public LogicalDataElementResponse bindPhysicalColumn(
             @Parameter(description = "Logical data element UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
             @PathVariable UUID elementId,
-            @RequestBody Map<String, UUID> body) {
-        return logicalModelService.bindPhysicalColumn(elementId, body.get("physicalColumnId"));
+            @Valid @RequestBody BindPhysicalColumnRequest request) {
+        return logicalModelService.bindPhysicalColumn(elementId, request.physicalColumnId());
     }
 
     @Operation(summary = "Unbind physical column from element",
@@ -447,6 +441,44 @@ public class LogicalModelsController {
         return logicalModelService.rejectVocabConcepts(elementId);
     }
 
+    // ── PII indicator recommendations ────────────────────────────────────────
+
+    @Operation(summary = "AI-recommend PII indicators for a data element",
+        description = "Uses vocabulary mappings (DPV-PD, schema.org, FIBO), field name, and dataset context "
+            + "to recommend isPersonalInformation and isDirectIdentifier values.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Recommendation stored as pending"),
+        @ApiResponse(responseCode = "404", description = "Element not found", content = @Content),
+        @ApiResponse(responseCode = "503", description = "AI service unavailable", content = @Content)
+    })
+    @PostMapping("/api/v1/logical-data-elements/{elementId}/recommend-pii")
+    public LogicalDataElementResponse recommendPii(
+            @Parameter(description = "Logical data element UUID") @PathVariable UUID elementId) {
+        return logicalModelService.recommendPii(elementId);
+    }
+
+    @Operation(summary = "Accept the pending PII indicator recommendation")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Indicators updated"),
+        @ApiResponse(responseCode = "404", description = "Element not found or no pending recommendation", content = @Content)
+    })
+    @PostMapping("/api/v1/logical-data-elements/{elementId}/accept-pii")
+    public LogicalDataElementResponse acceptPii(
+            @Parameter(description = "Logical data element UUID") @PathVariable UUID elementId) {
+        return logicalModelService.acceptPii(elementId);
+    }
+
+    @Operation(summary = "Reject the pending PII indicator recommendation")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Pending recommendation cleared"),
+        @ApiResponse(responseCode = "404", description = "Element not found", content = @Content)
+    })
+    @PostMapping("/api/v1/logical-data-elements/{elementId}/reject-pii")
+    public LogicalDataElementResponse rejectPii(
+            @Parameter(description = "Logical data element UUID") @PathVariable UUID elementId) {
+        return logicalModelService.rejectPii(elementId);
+    }
+
     @Operation(summary = "Batch-recommend vocabulary concepts for all elements in a model",
         description = "Asynchronously generates vocabulary concept recommendations for every element in the model. "
             + "Returns a job ID that can be polled for status.")
@@ -475,6 +507,36 @@ public class LogicalModelsController {
         return jobRegistry.get(jobId)
             .map(this::toJobResponse)
             .orElseThrow(() -> new NoSuchElementException("Vocabulary recommendation job not found: " + jobId));
+    }
+
+    @Operation(summary = "Batch-recommend PII indicators for all elements in a model",
+        description = "Enqueues an AI PII/ID job for every element in the model. "
+            + "Returns 202 Accepted with a jobId — poll GET .../jobs/{jobId} for status.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "202", description = "Job accepted"),
+        @ApiResponse(responseCode = "404", description = "Model not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @PostMapping("/api/v1/logical-models/{modelId}/recommend-pii")
+    public ResponseEntity<BulkRecommendationJobResponse> recommendModelPii(
+            @Parameter(description = "Logical model UUID") @PathVariable UUID modelId) {
+        UUID jobId = jobRegistry.register(modelId);
+        logicalModelService.recommendModelPii(modelId, jobId);
+        return ResponseEntity.accepted().body(toJobResponse(jobRegistry.get(jobId).orElseThrow()));
+    }
+
+    @Operation(summary = "Get bulk PII recommendation job status")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Job status"),
+        @ApiResponse(responseCode = "404", description = "Job not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @GetMapping("/api/v1/logical-models/recommend-pii/jobs/{jobId}")
+    public BulkRecommendationJobResponse getPiiRecommendationJob(
+            @Parameter(description = "Job UUID returned by the POST endpoint") @PathVariable UUID jobId) {
+        return jobRegistry.get(jobId)
+            .map(this::toJobResponse)
+            .orElseThrow(() -> new NoSuchElementException("PII recommendation job not found: " + jobId));
     }
 
     private BulkRecommendationJobResponse toJobResponse(BulkRecommendationJobRegistry.Job job) {
