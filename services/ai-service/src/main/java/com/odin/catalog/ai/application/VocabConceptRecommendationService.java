@@ -72,7 +72,12 @@ public class VocabConceptRecommendationService {
             .flatMap(e -> e.availableVocabularies() == null ? java.util.stream.Stream.empty()
                 : e.availableVocabularies().stream())
             .distinct()
-            .map(v -> "  - prefix: " + v.prefix() + "  baseIri: " + v.baseIri() + "  name: " + v.name())
+            .map(v -> {
+                String line = "  - prefix: " + v.prefix() + "  baseIri: " + v.baseIri() + "  name: " + v.name();
+                if (v.conceptHints() != null && !v.conceptHints().isBlank())
+                    line += "\n    knownConcepts: " + v.conceptHints();
+                return line;
+            })
             .distinct()
             .collect(Collectors.joining("\n"));
 
@@ -100,9 +105,13 @@ public class VocabConceptRecommendationService {
             - Use "relatedMatch" when the concept is conceptually relevant but broader or narrower.
             - Do NOT suggest concepts that are already mapped (see "alreadyMapped" and "existingIris").
             - Only suggest IRIs from the available vocabularies listed below.
-            - Construct full IRIs by appending the concept path to the baseIri. Example: \
-              baseIri "https://spec.edmcouncil.org/fibo/ontology/FND/" + "Accounting/CurrencyAmount/MonetaryAmount"
-            - Use your knowledge of FIBO, schema.org, SKOS, and Dublin Core to select appropriate concepts.
+            - Construct full IRIs by appending the concept name to the baseIri exactly as shown. \
+              For path-style bases (ending in /): baseIri + concept/path. \
+              For fragment-style bases (ending in #): baseIri + ConceptName. \
+              Examples: "https://spec.edmcouncil.org/fibo/ontology/FND/" + "Accounting/CurrencyAmount/MonetaryAmount" \
+                        "https://w3id.org/dpv/dpv-pd#" + "EmailAddress" → "https://w3id.org/dpv/dpv-pd#EmailAddress"
+            - When a vocabulary lists knownConcepts, prefer those exact IRIs over guessing new ones.
+            - Use your knowledge of FIBO, schema.org, DPV, SKOS, and Dublin Core to select appropriate concepts.
             - Omit elements for which you have no confident suggestions rather than guessing.
 
             Available vocabularies:

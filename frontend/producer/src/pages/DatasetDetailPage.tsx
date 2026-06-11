@@ -13,6 +13,7 @@ import LineageGraph from '../components/lineage/LineageGraph';
 import ReactFlow, { Background, Controls, MiniMap, Handle, Position, type Node, type Edge, type NodeMouseHandler, type NodeProps } from 'reactflow';
 import OwnershipPanel from '../components/catalog/OwnershipPanel';
 import TermsOfUsePanel from '../components/catalog/TermsOfUsePanel';
+import PolicyPanel from '../components/catalog/PolicyPanel';
 import DatasetHistoryTab from '../components/catalog/DatasetHistoryTab';
 import SemanticContextPanel from '../components/catalog/SemanticContextPanel';
 import { cn } from '../lib/utils';
@@ -201,6 +202,10 @@ export default function DatasetDetailPage() {
             <OwnershipPanel dataset={dataset} onUpdated={d => qc.setQueryData(['dataset', id], d)} />
             <div className="border-t pt-6">
               <TermsOfUsePanel datasetId={id!} canAction={canOwnerAction} />
+            </div>
+            <div className="border-t pt-6">
+              <h3 className="text-sm font-semibold text-gray-700 mb-4">Policy Enforcement</h3>
+              <PolicyPanel datasetId={id!} />
             </div>
           </div>
         )}

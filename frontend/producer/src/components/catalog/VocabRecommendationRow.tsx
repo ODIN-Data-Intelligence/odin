@@ -19,7 +19,13 @@ interface Props {
 
 export default function VocabRecommendationRow({ element, modelId, canAction }: Props) {
   const qc = useQueryClient();
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['logical-elements', modelId] });
+
+  const applyUpdate = (updated: LogicalDataElement) => {
+    qc.setQueryData<LogicalDataElement[]>(
+      ['logical-elements', modelId],
+      (old) => old?.map(el => el.id === updated.id ? updated : el),
+    );
+  };
 
   const recommendations = element.recommendedVocabMappings ?? [];
   const allIris = recommendations.map(r => r.conceptIri);
@@ -28,12 +34,12 @@ export default function VocabRecommendationRow({ element, modelId, canAction }: 
 
   const accept = useMutation({
     mutationFn: (iris?: string[]) => logicalElementApi.acceptVocabConcepts(element.id, iris),
-    onSuccess: invalidate,
+    onSuccess: applyUpdate,
   });
 
   const reject = useMutation({
     mutationFn: () => logicalElementApi.rejectVocabConcepts(element.id),
-    onSuccess: invalidate,
+    onSuccess: applyUpdate,
   });
 
   const isPending = accept.isPending || reject.isPending;

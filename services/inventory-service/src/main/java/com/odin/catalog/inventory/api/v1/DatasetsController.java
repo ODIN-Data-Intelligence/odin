@@ -24,6 +24,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
@@ -37,6 +39,8 @@ import java.util.UUID;
 @RequestMapping("/api/v1/datasets")
 @RequiredArgsConstructor
 public class DatasetsController {
+
+    private static final Logger log = LoggerFactory.getLogger(DatasetsController.class);
 
     private final DatasetService datasetService;
     private final LogicalModelService logicalModelService;
@@ -100,6 +104,7 @@ public class DatasetsController {
     public DatasetSemanticTagResponse acceptSemanticTag(
             @Parameter(description = "Dataset UUID") @PathVariable UUID id,
             @Valid @RequestBody DatasetSemanticTagRequest request) {
+        log.info("action=ACCEPT_SEMANTIC_TAG datasetId={}", id);
         datasetService.get(id);
         return logicalModelService.acceptSemanticTag(id, request);
     }
@@ -116,6 +121,7 @@ public class DatasetsController {
     public void deleteSemanticTag(
             @Parameter(description = "Dataset UUID") @PathVariable UUID id,
             @Parameter(description = "Tag UUID") @PathVariable UUID tagId) {
+        log.info("action=DELETE_SEMANTIC_TAG datasetId={} tagId={}", id, tagId);
         logicalModelService.deleteSemanticTag(id, tagId);
     }
 
@@ -132,6 +138,7 @@ public class DatasetsController {
     @PostMapping("/{id}/recommend-semantic-context")
     public SemanticRecommendationResponse recommendSemanticContext(
             @Parameter(description = "Dataset UUID") @PathVariable UUID id) {
+        log.info("action=RECOMMEND_SEMANTIC_CONTEXT datasetId={}", id);
         datasetService.get(id); // validates dataset exists
         var aiResult = logicalModelService.recommendSemanticContext(id);
         var types = aiResult.types().stream()
@@ -149,6 +156,7 @@ public class DatasetsController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public DatasetResponse create(@Valid @RequestBody DatasetRequest request) {
+        log.info("action=CREATE_DATASET catalogId={}", request.catalogId());
         return datasetService.create(request);
     }
 
@@ -164,6 +172,7 @@ public class DatasetsController {
             @Parameter(description = "Dataset UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
             @PathVariable UUID id,
             @Valid @RequestBody DatasetRequest request) {
+        log.info("action=UPDATE_DATASET id={}", id);
         return datasetService.update(id, request);
     }
 
@@ -178,6 +187,7 @@ public class DatasetsController {
     public void delete(
             @Parameter(description = "Dataset UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
             @PathVariable UUID id) {
+        log.info("action=DELETE_DATASET id={}", id);
         datasetService.delete(id);
     }
 
@@ -196,6 +206,7 @@ public class DatasetsController {
     public DatasetResponse assignOwner(
             @Parameter(description = "Dataset UUID") @PathVariable UUID id,
             @Valid @RequestBody AssignOwnerRequest request) {
+        log.info("action=ASSIGN_OWNER datasetId={} userId={}", id, request.userId());
         return datasetService.assignOwner(id, request.userId());
     }
 
@@ -228,6 +239,7 @@ public class DatasetsController {
     public OwnershipProposalResponse proposeTransfer(
             @Parameter(description = "Dataset UUID") @PathVariable UUID id,
             @Valid @RequestBody ProposeTransferRequest request) {
+        log.info("action=PROPOSE_TRANSFER datasetId={} proposedOwnerId={}", id, request.proposedOwnerId());
         return datasetService.proposeTransfer(id, request.proposedOwnerId());
     }
 
@@ -245,6 +257,7 @@ public class DatasetsController {
             @Parameter(description = "Dataset UUID") @PathVariable UUID id,
             @Parameter(description = "Proposal UUID") @PathVariable UUID proposalId,
             @RequestBody(required = false) ResolveProposalRequest request) {
+        log.info("action=APPROVE_TRANSFER datasetId={} proposalId={}", id, proposalId);
         return datasetService.approveTransfer(id, proposalId, request != null ? request.note() : null);
     }
 
@@ -262,6 +275,7 @@ public class DatasetsController {
             @Parameter(description = "Dataset UUID") @PathVariable UUID id,
             @Parameter(description = "Proposal UUID") @PathVariable UUID proposalId,
             @RequestBody(required = false) ResolveProposalRequest request) {
+        log.info("action=REJECT_TRANSFER datasetId={} proposalId={}", id, proposalId);
         return datasetService.rejectTransfer(id, proposalId, request != null ? request.note() : null);
     }
 
@@ -305,6 +319,7 @@ public class DatasetsController {
     @PostMapping("/{id}/terms-of-use/accept")
     public TermsOfUseResponse acceptTermsOfUse(
             @Parameter(description = "Dataset UUID") @PathVariable UUID id) {
+        log.info("action=ACCEPT_TERMS_OF_USE datasetId={}", id);
         return termsOfUseService.accept(id);
     }
 
@@ -319,6 +334,7 @@ public class DatasetsController {
     @DeleteMapping("/{id}/terms-of-use/policy")
     public TermsOfUseResponse resetTermsOfUse(
             @Parameter(description = "Dataset UUID") @PathVariable UUID id) {
+        log.info("action=RESET_TERMS_OF_USE datasetId={}", id);
         return termsOfUseService.reset(id);
     }
 }

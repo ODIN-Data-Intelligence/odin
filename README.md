@@ -5,7 +5,7 @@
 <h1 align="center">ODIN Catalog</h1>
 
 <p align="center">
-  Open-source data catalog built on W3C/OMG standards — DCAT 3.0, DPROD, CSV-W, OpenLineage, FIBO, and SKOS.
+  Open-source data catalog built on W3C/OMG standards — DCAT 3.0, DPROD, CSV-W, OpenLineage, FIBO, SKOS, and W3C DPV.
 </p>
 
 ---
@@ -26,7 +26,7 @@ Lineage is tracked using the OpenLineage standard via an Apache AGE graph databa
 
 - **Role-based access** — the producer UI is protected by Keycloak OIDC login with four defined roles (Administrator, Data Governance, Data Owner, Data Steward) that gate both UI navigation and backend permissions.
 - **Ownership governance** — datasets carry an owner, an ownership-transfer proposal workflow (propose → approve/reject), and an immutable audit history of every change.
-- **AI-assisted semantics** — RAG chat over your metadata, AI element classification, description, and vocabulary concept recommendations. Each AI-suggested concept is individually selectable — owners cherry-pick relevant ones before accepting.
+- **AI-assisted semantics** — RAG chat, AI element classification, description, vocabulary concept, and PII/direct-identifier recommendations. Every suggestion is owner-gated; vocab concept chips and PII flags use the same accept/reject pattern. DPV-PD vocabulary IRIs and field name heuristics drive the PII detection.
 - **Dataset semantic types** — domain types (e.g. `Customer`, `DebitCardAccount`) are derived from FIBO/schema.org vocabulary mappings, exposed as search facets and surfaced as badges in the consumer UI.
 - **Human-readable metadata** — an IRI→label translation API renders controlled-vocabulary IRIs as friendly labels throughout the UI.
 
@@ -34,7 +34,7 @@ Lineage is tracked using the OpenLineage standard via an Apache AGE graph databa
 
 ## Architecture
 
-Six Spring Boot 3.3 / Java 21 microservices, each with its own database:
+Seven Spring Boot 3.3 / Java 21 microservices, each with its own database:
 
 | Service | Port | Database | Responsibility |
 |---------|------|----------|---------------|
@@ -42,8 +42,9 @@ Six Spring Boot 3.3 / Java 21 microservices, each with its own database:
 | `harvest-service` | 8002 | PostgreSQL + MinIO | Connector pipeline — DCAT HTTP, AWS Glue, Snowflake, Teradata |
 | `lineage-service` | 8003 | PostgreSQL + Apache AGE | OpenLineage ingestion, DDL lineage, Cypher graph traversal |
 | `search-service` | 8004 | OpenSearch | Full-text search, semantic type facets, FIBO concept facets |
-| `ai-service` | 8005 | PostgreSQL + pgvector | RAG chat, semantic recommendations, element classification, embedding pipeline (Ollama / OpenAI) |
+| `ai-service` | 8005 | PostgreSQL + pgvector | RAG chat, semantic recommendations, element classification, PII detection, embedding pipeline (Ollama / OpenAI) |
 | `identity-service` | 8006 | PostgreSQL | Organisations, domains, users, roles, ABAC policies, API keys |
+| `policy-service` | 8007 | PostgreSQL | ODRL policy registry and ODRE enforcement engine (PDP). Evaluates A-Level and B1-Level policies at request time; Kafka-driven sync from dataset changes |
 
 Two React 18 + TypeScript + Vite frontends:
 
@@ -93,6 +94,7 @@ Once up:
 | `http://localhost:8004/swagger-ui.html` | search-service API docs |
 | `http://localhost:8005/swagger-ui.html` | ai-service API docs |
 | `http://localhost:8006/swagger-ui.html` | identity-service API docs |
+| `http://localhost:8007/swagger-ui.html` | policy-service API docs |
 | `http://localhost:8180` | Keycloak admin console |
 | `http://localhost:9000` | MinIO console |
 
@@ -161,6 +163,7 @@ make seed
 | [CSV-W](https://www.w3.org/TR/tabular-data-primer/) | Physical schema descriptor (columns, datatypes, constraints) |
 | [OpenLineage](https://openlineage.io/) | Job/Run/Dataset lineage events; compatible with Marquez and dbt |
 | [SKOS](https://www.w3.org/TR/skos-reference/) | Vocabulary mapping properties (exactMatch, closeMatch, …) |
+| [W3C DPV](https://www.w3.org/TR/dpv/) | Data Privacy Vocabulary — DPV-PD personal data category IRIs drive AI-based PII and direct-identifier detection on logical model elements |
 | [FIBO](https://spec.edmcouncil.org/fibo/) | Financial industry business ontology for semantic annotation |
 | [schema.org](https://schema.org/) | General-purpose vocabulary for non-financial datasets |
 
@@ -269,8 +272,9 @@ data-catalog/
 │   ├── harvest-service/      # Connectors, Spring Batch pipeline, Quartz scheduler
 │   ├── lineage-service/      # OpenLineage ingestion, Apache AGE graph
 │   ├── search-service/       # OpenSearch indexing and query
-│   ├── ai-service/           # RAG chat, embeddings, semantic search
-│   └── identity-service/     # Users, roles, ABAC, API keys, Keycloak integration
+│   ├── ai-service/           # RAG chat, embeddings, PII detection, semantic search
+│   ├── identity-service/     # Users, roles, ABAC, API keys, Keycloak integration
+│   └── policy-service/       # ODRL policy registry, ODRE enforcement engine (PDP)
 ├── shared/
 │   ├── shared-models/        # Java records for DCAT, DPROD, CSV-W, Kafka envelopes
 │   ├── kafka-client/         # KafkaEventPublisher, KafkaEventConsumer, topic constants

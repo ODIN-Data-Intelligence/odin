@@ -7,6 +7,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,6 +20,8 @@ import java.util.UUID;
 @RequestMapping("/api/v1/terms-policies")
 @RequiredArgsConstructor
 public class TermsPolicyController {
+
+    private static final Logger log = LoggerFactory.getLogger(TermsPolicyController.class);
 
     private final TermsPolicyService service;
 
@@ -48,12 +52,14 @@ public class TermsPolicyController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public TermsPolicySetResponse create(@RequestBody CreateTermsPolicyRequest req) {
+        log.info("action=CREATE_POLICY_SET name={}", req.name());
         return service.createPolicySet(req);
     }
 
     @Operation(summary = "Update name and description of a policy set")
     @PutMapping("/{id}")
     public TermsPolicySetResponse update(@PathVariable UUID id, @RequestBody UpdateTermsPolicyRequest req) {
+        log.info("action=UPDATE_POLICY_SET id={}", id);
         return service.updatePolicySet(id, req);
     }
 
@@ -61,12 +67,14 @@ public class TermsPolicyController {
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable UUID id) {
+        log.info("action=DELETE_POLICY_SET id={}", id);
         service.deletePolicySet(id);
     }
 
     @Operation(summary = "Activate a policy set — archives the current ACTIVE one")
     @PostMapping("/{id}/activate")
     public TermsPolicySetResponse activate(@PathVariable UUID id) {
+        log.info("action=ACTIVATE_POLICY_SET id={}", id);
         return service.activatePolicySet(id);
     }
 
@@ -74,6 +82,7 @@ public class TermsPolicyController {
     @PostMapping("/{id}/clone")
     @ResponseStatus(HttpStatus.CREATED)
     public TermsPolicySetResponse clone(@PathVariable UUID id, @RequestBody CloneTermsPolicyRequest req) {
+        log.info("action=CLONE_POLICY_SET sourceId={} name={}", id, req.name());
         return service.clonePolicySet(id, req.name());
     }
 
@@ -85,6 +94,7 @@ public class TermsPolicyController {
             @PathVariable UUID id,
             @PathVariable String classification,
             @RequestBody UpsertClassificationRuleRequest req) {
+        log.info("action=UPSERT_CLASSIFICATION_RULE policySetId={} classification={}", id, classification);
         return service.upsertClassificationRule(id, classification.toUpperCase(), req);
     }
 
@@ -92,6 +102,7 @@ public class TermsPolicyController {
     @DeleteMapping("/{id}/classification-rules/{classification}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteClassificationRule(@PathVariable UUID id, @PathVariable String classification) {
+        log.info("action=DELETE_CLASSIFICATION_RULE policySetId={} classification={}", id, classification);
         service.deleteClassificationRule(id, classification.toUpperCase());
     }
 
@@ -108,6 +119,7 @@ public class TermsPolicyController {
     @ResponseStatus(HttpStatus.CREATED)
     public TermsRegulationRuleResponse addRegulationRule(
             @PathVariable UUID id, @RequestBody RegulationRuleRequest req) {
+        log.info("action=ADD_REGULATION_RULE policySetId={} regulation={}", id, req.regulationName());
         return service.addRegulationRule(id, req);
     }
 
@@ -115,6 +127,7 @@ public class TermsPolicyController {
     @PutMapping("/{id}/regulation-rules/{ruleId}")
     public TermsRegulationRuleResponse updateRegulationRule(
             @PathVariable UUID id, @PathVariable UUID ruleId, @RequestBody RegulationRuleRequest req) {
+        log.info("action=UPDATE_REGULATION_RULE policySetId={} ruleId={}", id, ruleId);
         return service.updateRegulationRule(id, ruleId, req);
     }
 
@@ -122,6 +135,7 @@ public class TermsPolicyController {
     @DeleteMapping("/{id}/regulation-rules/{ruleId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteRegulationRule(@PathVariable UUID id, @PathVariable UUID ruleId) {
+        log.info("action=DELETE_REGULATION_RULE policySetId={} ruleId={}", id, ruleId);
         service.deleteRegulationRule(id, ruleId);
     }
 
@@ -138,6 +152,7 @@ public class TermsPolicyController {
     @ResponseStatus(HttpStatus.CREATED)
     public TermsRegulationObligationResponse addRegulationObligation(
             @PathVariable UUID id, @RequestBody RegulationObligationRequest req) {
+        log.info("action=ADD_REGULATION_OBLIGATION policySetId={}", id);
         return service.addRegulationObligation(id, req);
     }
 
@@ -145,6 +160,7 @@ public class TermsPolicyController {
     @DeleteMapping("/{id}/regulation-obligations/{oblId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteRegulationObligation(@PathVariable UUID id, @PathVariable UUID oblId) {
+        log.info("action=DELETE_REGULATION_OBLIGATION policySetId={} oblId={}", id, oblId);
         service.deleteRegulationObligation(id, oblId);
     }
 }

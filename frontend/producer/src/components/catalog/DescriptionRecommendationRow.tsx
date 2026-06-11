@@ -10,16 +10,22 @@ interface Props {
 
 export default function DescriptionRecommendationRow({ element, modelId, canAction }: Props) {
   const qc = useQueryClient();
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['logical-elements', modelId] });
+
+  const applyUpdate = (updated: LogicalDataElement) => {
+    qc.setQueryData<LogicalDataElement[]>(
+      ['logical-elements', modelId],
+      (old) => old?.map(el => el.id === updated.id ? updated : el),
+    );
+  };
 
   const accept = useMutation({
     mutationFn: () => logicalElementApi.acceptDescription(element.id),
-    onSuccess: invalidate,
+    onSuccess: applyUpdate,
   });
 
   const reject = useMutation({
     mutationFn: () => logicalElementApi.rejectDescription(element.id),
-    onSuccess: invalidate,
+    onSuccess: applyUpdate,
   });
 
   const isPending = accept.isPending || reject.isPending;

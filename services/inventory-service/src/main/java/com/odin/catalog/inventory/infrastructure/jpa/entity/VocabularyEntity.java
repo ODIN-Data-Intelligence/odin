@@ -27,6 +27,7 @@ public class VocabularyEntity {
 
     private String vocabularyType;
     private String description;
+    private String conceptHints;
     private String version;
     private String homepage;
 

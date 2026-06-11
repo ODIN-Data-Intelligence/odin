@@ -9,6 +9,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,6 +19,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 public class DescriptionController {
+
+    private static final Logger log = LoggerFactory.getLogger(DescriptionController.class);
 
     private final DescriptionService descriptionService;
 
@@ -31,6 +35,7 @@ public class DescriptionController {
     })
     @PostMapping("/api/v1/describe/elements")
     public DescribeElementsResponse describe(@RequestBody ClassifyElementsRequest request) {
+        log.info("action=DESCRIBE elementCount={}", request.elements().size());
         return descriptionService.describe(request);
     }
 }

@@ -10,6 +10,7 @@ volumes:
   pg-lineage-data:
   pg-identity-data:
   pg-ai-data:
+  pg-policy-data:
   opensearch-data:
   minio-data:
   kafka-data:
@@ -90,6 +91,24 @@ services:
     networks: [catalog-net]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U identity"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-policy:
+    image: postgres:16-alpine
+    container_name: postgres-policy
+    environment:
+      POSTGRES_DB: policy
+      POSTGRES_USER: policy
+      POSTGRES_PASSWORD: ${POLICY_DB_PASSWORD:-policy}
+    volumes:
+      - pg-policy-data:/var/lib/postgresql/data
+    ports:
+      - "5438:5432"
+    networks: [catalog-net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U policy"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -340,6 +359,32 @@ services:
       - "traefik.http.routers.inventory.rule=Host(`api.catalog.local`) && PathPrefix(`/inventory`)"
       - "traefik.http.services.inventory.loadbalancer.server.port=8001"
 
+  ai-service:
+    build:
+      context: .
+      dockerfile: services/ai-service/Dockerfile
+    container_name: ai-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-ai:5432/ai
+      SPRING_DATASOURCE_USERNAME: ai
+      SPRING_DATASOURCE_PASSWORD: ${AI_DB_PASSWORD:-ai}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_AI_OLLAMA_BASE_URL: http://host.docker.internal:11434
+      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-qwen3:4b}
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
+      CATALOG_SERVICE_URL: http://inventory-service:8001
+      APP_DEV_AUTH_ENABLED: "true"
+    ports:
+      - "8005:8005"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres-ai:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks: [catalog-net]
+
   harvest-service:
     build:
       context: .
@@ -442,6 +487,34 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.identity.rule=Host(`api.catalog.local`) && PathPrefix(`/identity`)"
       - "traefik.http.services.identity.loadbalancer.server.port=8006"
+
+  policy-service:
+    build:
+      context: .
+      dockerfile: services/policy-service/Dockerfile
+    container_name: policy-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-policy:5432/policy
+      SPRING_DATASOURCE_USERNAME: policy
+      SPRING_DATASOURCE_PASSWORD: ${POLICY_DB_PASSWORD:-policy}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KEYCLOAK_SERVER_URL: http://keycloak:8180
+      KEYCLOAK_REALM: datacatalog
+      KEYCLOAK_CLIENT_ID: policy-service
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      APP_DEV_AUTH_ENABLED: "true"
+    ports:
+      - "8007:8007"
+    depends_on:
+      postgres-policy:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    networks: [catalog-net]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.policy.rule=Host(`api.catalog.local`) && PathPrefix(`/policy`)"
+      - "traefik.http.services.policy.loadbalancer.server.port=8007"
 
   # ── Frontends ────────────────────────────────────────────────────────────────
 

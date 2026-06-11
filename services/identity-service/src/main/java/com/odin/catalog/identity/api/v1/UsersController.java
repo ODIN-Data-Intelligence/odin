@@ -11,6 +11,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
@@ -24,6 +26,8 @@ import java.util.UUID;
 @RequestMapping("/api/v1/users")
 @RequiredArgsConstructor
 public class UsersController {
+
+    private static final Logger log = LoggerFactory.getLogger(UsersController.class);
 
     private final UserService userService;
 
@@ -79,6 +83,7 @@ public class UsersController {
     @PostMapping("/invite")
     @ResponseStatus(HttpStatus.CREATED)
     public UserResponse invite(@Valid @RequestBody UserRequest request) {
+        log.info("action=INVITE_USER email={}", request.email());
         return userService.invite(request);
     }
 
@@ -95,6 +100,7 @@ public class UsersController {
             @Parameter(description = "User UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
             @PathVariable UUID id,
             @Valid @RequestBody UserRequest request) {
+        log.info("action=UPDATE_USER id={}", id);
         return userService.update(id, request);
     }
 
@@ -110,6 +116,7 @@ public class UsersController {
     public UserResponse activate(
             @Parameter(description = "User UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
             @PathVariable UUID id) {
+        log.info("action=ACTIVATE_USER id={}", id);
         return userService.activate(id);
     }
 
@@ -127,6 +134,7 @@ public class UsersController {
     public void deactivate(
             @Parameter(description = "User UUID to deactivate", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
             @PathVariable UUID id) {
+        log.info("action=DEACTIVATE_USER id={}", id);
         userService.deactivate(id);
     }
 }

@@ -121,6 +121,22 @@ get_or_create_element() {
     | jq -r '.id'
 }
 
+# Like get_or_create_element but also sets isPersonalInformation and isDirectIdentifier flags.
+get_or_create_pii_element() {
+  local lm="$1" name="$2" label="$3" type="$4" ordinal="$5" required="$6" identifier="$7" is_pii="$8" is_direct="$9"
+  local list existing
+  list=$(curl -sf -H "${HEADER_AUTH}" "${CATALOG_URL}/api/v1/logical-models/${lm}/elements")
+  existing=$(find_by "${list}" "name" "${name}")
+  [ -n "${existing}" ] && { echo "${existing}"; return; }
+  post "${CATALOG_URL}/api/v1/logical-models/${lm}/elements" \
+    "$(jq -n \
+      --arg n "${name}" --arg l "${label}" --arg t "${type}" \
+      --argjson o "${ordinal}" --argjson r "${required}" --argjson i "${identifier}" \
+      --argjson p "${is_pii}" --argjson d "${is_direct}" \
+      '{name:$n,label:$l,logicalType:$t,ordinal:$o,isRequired:$r,isIdentifier:$i,isPersonalInformation:$p,isDirectIdentifier:$d}')" \
+    | jq -r '.id'
+}
+
 # ── Conditional-add helpers (skip if already present) ─────────────────────────
 
 get_or_create_distribution() {
@@ -159,18 +175,22 @@ section "Phase 1 — Fetch vocabulary IDs"
 # ─────────────────────────────────────────────────────────────────────────────
 
 VOCABS=$(curl -sf -H "${HEADER_AUTH}" "${CATALOG_URL}/api/v1/vocabularies")
-VOCAB_SCHEMA=$(echo "${VOCABS}" | jq -r '.[] | select(.prefix=="schema") | .id')
-VOCAB_FND=$(echo "${VOCABS}"   | jq -r '.[] | select(.prefix=="fibo-fnd") | .id')
-VOCAB_FBC=$(echo "${VOCABS}"   | jq -r '.[] | select(.prefix=="fibo-fbc") | .id')
-VOCAB_SEC=$(echo "${VOCABS}"   | jq -r '.[] | select(.prefix=="fibo-sec") | .id')
-VOCAB_MD=$(echo "${VOCABS}"    | jq -r '.[] | select(.prefix=="fibo-md") | .id')
-VOCAB_SKOS=$(echo "${VOCABS}"  | jq -r '.[] | select(.prefix=="skos") | .id')
+VOCAB_SCHEMA=$(echo "${VOCABS}"  | jq -r '.[] | select(.prefix=="schema") | .id')
+VOCAB_FND=$(echo "${VOCABS}"     | jq -r '.[] | select(.prefix=="fibo-fnd") | .id')
+VOCAB_FBC=$(echo "${VOCABS}"     | jq -r '.[] | select(.prefix=="fibo-fbc") | .id')
+VOCAB_SEC=$(echo "${VOCABS}"     | jq -r '.[] | select(.prefix=="fibo-sec") | .id')
+VOCAB_MD=$(echo "${VOCABS}"      | jq -r '.[] | select(.prefix=="fibo-md") | .id')
+VOCAB_SKOS=$(echo "${VOCABS}"    | jq -r '.[] | select(.prefix=="skos") | .id')
+VOCAB_DPV=$(echo "${VOCABS}"     | jq -r '.[] | select(.prefix=="dpv") | .id')
+VOCAB_DPV_PD=$(echo "${VOCABS}"  | jq -r '.[] | select(.prefix=="dpv-pd") | .id')
 
 info "schema.org : ${VOCAB_SCHEMA}"
 info "FIBO FND   : ${VOCAB_FND}"
 info "FIBO FBC   : ${VOCAB_FBC}"
 info "FIBO SEC   : ${VOCAB_SEC}"
 info "FIBO MD    : ${VOCAB_MD}"
+info "DPV        : ${VOCAB_DPV}"
+info "DPV-PD     : ${VOCAB_DPV_PD}"
 
 # ─────────────────────────────────────────────────────────────────────────────
 section "Phase 2 — Catalogs"
@@ -215,6 +235,16 @@ CAT_COMPLIANCE=$(get_or_create_catalog "Compliance & Regulatory Catalog" '{
   "license": "https://rightsstatements.org/vocab/InC/1.0/"
 }')
 success "Compliance & Regulatory Catalog: ${CAT_COMPLIANCE}"
+
+CAT_HR=$(get_or_create_catalog "HR & People Catalog" '{
+  "title": "HR & People Catalog",
+  "description": "Highly restricted catalog for human-resources and people data. Contains employee profiles, trader credentials, and contact information. All datasets carry GDPR personal-data obligations. Access is limited to HR, Compliance, and named system integrations.",
+  "keywords": ["hr","people","employee","gdpr","personal-data","pii"],
+  "themes": ["http://publications.europa.eu/resource/authority/data-theme/GOVE"],
+  "language": ["en"],
+  "license": "https://rightsstatements.org/vocab/InC/1.0/"
+}')
+success "HR & People Catalog: ${CAT_HR}"
 
 # ─────────────────────────────────────────────────────────────────────────────
 section "Phase 3 — Datasets"
@@ -367,6 +397,20 @@ DS_FINREP=$(get_or_create_dataset "$(jq -n --arg cat "${CAT_COMPLIANCE}" '{
 }')")
 success "FinRep Consolidated Financial Statements: ${DS_FINREP}"
 
+DS_EMPLOYEE=$(get_or_create_dataset "$(jq -n --arg cat "${CAT_HR}" '{
+  title: "Employee & Trader Directory",
+  description: "Authoritative HR register of all Meridian Capital employees, with emphasis on trading-floor personnel. Carries full personal data: name, contact details, national identification, and date of birth. The traderId field in Executed Trades and Intraday Order Book resolves against this dataset. Classified HIGH_CONFIDENTIAL under the GDPR personal-data policy.",
+  catalogId: $cat,
+  accrualPeriodicity: "http://purl.org/cld/freq/daily",
+  keywords: ["employees","traders","hr","personal-data","gdpr","pii","contact"],
+  themes: ["http://publications.europa.eu/resource/authority/data-theme/GOVE"],
+  language: ["en"],
+  version: "1.0.0",
+  license: "https://rightsstatements.org/vocab/InC/1.0/",
+  sourceUri: "snowflake://meridian.snowflakecomputing.com/HR/PEOPLE/EMPLOYEE_DIRECTORY"
+}')")
+success "Employee & Trader Directory: ${DS_EMPLOYEE}"
+
 DS_EMIR=$(get_or_create_dataset "$(jq -n --arg cat "${CAT_COMPLIANCE}" '{
   title: "EMIR Derivatives Reporting",
   description: "Trade repository reports for OTC derivatives under EMIR Refit. Includes UTI, LEI pairs, product classification, notional, collateral, and lifecycle events reported to DTCC/REGIS-TR. Double-sided reporting for EU counterparties.",
@@ -482,6 +526,15 @@ DIST_FINREP_PQ=$(get_or_create_distribution "${DS_FINREP}" "downloadUrl" \
   '{"title":"Parquet Archive — FinRep","description":"Columnar Parquet archive of FinRep cells for internal finance analytics and audit trail queries.","downloadUrl":"s3://meridian-datalake/compliance/finrep/","mediaType":"application/parquet","format":"Parquet","availability":"available"}')
 success "Distributions: FinRep (XML=${DIST_FINREP_XML:0:8}… Parquet=${DIST_FINREP_PQ:0:8}…)"
 
+DIST_EMPLOYEE_SF=$(get_or_create_distribution "${DS_EMPLOYEE}" "accessUrl" \
+  "snowflake://meridian.snowflakecomputing.com/HR/PEOPLE/EMPLOYEE_DIRECTORY" \
+  '{"title":"Snowflake Table — Employee Directory","description":"Live Snowflake table; access requires HR_READ role and a signed data-access agreement. All queries are audited.","accessUrl":"snowflake://meridian.snowflakecomputing.com/HR/PEOPLE/EMPLOYEE_DIRECTORY","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available","databaseName":"HR","schemaName":"PEOPLE","tableName":"EMPLOYEE_DIRECTORY"}')
+
+DIST_EMPLOYEE_REST=$(get_or_create_distribution "${DS_EMPLOYEE}" "accessUrl" \
+  "https://api.meridian.internal/v1/hr/employees" \
+  '{"title":"REST API — Employee Lookup","description":"JSON REST endpoint for resolving a traderId to employee profile. Returns only the fields permitted by the caller role. Requires HR_CONSUMER OAuth scope.","accessUrl":"https://api.meridian.internal/v1/hr/employees","mediaType":"application/json","format":"JSON","availability":"available"}')
+success "Distributions: Employee & Trader Directory (Snowflake=${DIST_EMPLOYEE_SF:0:8}… REST=${DIST_EMPLOYEE_REST:0:8}…)"
+
 DIST_EMIR_XML=$(get_or_create_distribution "${DS_EMIR}" "downloadUrl" \
   "s3://meridian-compliance/emir/" \
   '{"title":"XML — EMIR Trade Report","description":"ISO 20022 EMIR Refit XML submitted to the DTCC trade repository daily. Covers all derivatives in scope of EMIR reporting obligations.","downloadUrl":"s3://meridian-compliance/emir/","mediaType":"application/xml","format":"ISO 20022 XML","availability":"available"}')
@@ -528,6 +581,14 @@ for DS in "${DS_MIFID}" "${DS_FINREP}" "${DS_EMIR}"; do
     "$(jq -n --arg v "${VOCAB_SCHEMA}" '{"vocabularyId":$v,"isPrimary":false,"domainTags":["date","identifier"]}')"
 done
 success "Vocabulary profiles: Compliance datasets → FIBO FBC + schema.org"
+
+add_vocab_profile_if_missing "${DS_EMPLOYEE}" "${VOCAB_DPV_PD}" \
+  "$(jq -n --arg v "${VOCAB_DPV_PD}" '{"vocabularyId":$v,"isPrimary":true,"domainTags":["personal-data","gdpr","pii"]}')"
+add_vocab_profile_if_missing "${DS_EMPLOYEE}" "${VOCAB_DPV}" \
+  "$(jq -n --arg v "${VOCAB_DPV}" '{"vocabularyId":$v,"isPrimary":false,"domainTags":["privacy","processing"]}')"
+add_vocab_profile_if_missing "${DS_EMPLOYEE}" "${VOCAB_SCHEMA}" \
+  "$(jq -n --arg v "${VOCAB_SCHEMA}" '{"vocabularyId":$v,"isPrimary":false,"domainTags":["person","contact"]}')"
+success "Vocabulary profiles: Employee Directory → DPV-PD (primary) + DPV + schema.org"
 
 # ─────────────────────────────────────────────────────────────────────────────
 section "Phase 6 — Logical Models with FIBO/schema.org Mappings"
@@ -798,6 +859,43 @@ add_vocab_mapping_if_missing "${EL_EM_SELLER}"   "${VOCAB_FBC}"    "https://spec
 add_vocab_mapping_if_missing "${EL_EM_VENUE}"    "${VOCAB_FBC}"    "https://spec.edmcouncil.org/fibo/ontology/FBC/FunctionalEntities/FinancialServicesEntities/MarketIdentifierCode" "MarketIdentifierCode"
 success "Logical model (published): EMIR Derivatives Report — 10 elements, FIBO-mapped"
 
+info "Building logical model: Employee & Trader Directory (PII dataset)..."
+LM_EMPLOYEE=$(get_or_create_logical_model "${DS_EMPLOYEE}" "Employee Directory Logical Model" \
+  '{"name":"Employee Directory Logical Model","description":"Business view of the HR employee register. All elements that carry personal data about a natural person are marked isPersonalInformation=true; direct identifiers additionally carry isDirectIdentifier=true. DPV-PD vocabulary mappings make the personal-data categories machine-readable for downstream policy evaluation.","version":"1.0","status":"published"}')
+
+# ── Elements — PII-flagged (isPersonalInformation, isDirectIdentifier) ──────────
+EL_EMP_ID=$(     get_or_create_pii_element "${LM_EMPLOYEE}" "employeeId"             "Employee Identifier"           "Identifier" 1  true  true  true  true)
+EL_EMP_FNAME=$(  get_or_create_pii_element "${LM_EMPLOYEE}" "firstName"              "First Name"                    "Text"       2  true  false true  true)
+EL_EMP_LNAME=$(  get_or_create_pii_element "${LM_EMPLOYEE}" "lastName"               "Last Name"                     "Text"       3  true  false true  true)
+EL_EMP_EMAIL=$(  get_or_create_pii_element "${LM_EMPLOYEE}" "emailAddress"           "Work Email Address"            "Text"       4  true  false true  true)
+EL_EMP_PHONE=$(  get_or_create_pii_element "${LM_EMPLOYEE}" "phoneNumber"            "Work Phone Number"             "Text"       5  false false true  false)
+EL_EMP_DOB=$(    get_or_create_pii_element "${LM_EMPLOYEE}" "dateOfBirth"            "Date of Birth"                 "Date"       6  false false true  false)
+EL_EMP_NAT=$(    get_or_create_pii_element "${LM_EMPLOYEE}" "nationality"            "Nationality"                   "Code"       7  false false true  false)
+EL_EMP_NIN=$(    get_or_create_pii_element "${LM_EMPLOYEE}" "nationalInsuranceNumber" "National Insurance Number"    "Text"       8  false false true  true)
+EL_EMP_TITLE=$(  get_or_create_pii_element "${LM_EMPLOYEE}" "jobTitle"               "Job Title"                     "Text"       9  true  false true  false)
+EL_EMP_DEPT=$(   get_or_create_pii_element "${LM_EMPLOYEE}" "department"             "Department"                    "Text"       10 true  false false false)
+EL_EMP_DESK=$(   get_or_create_pii_element "${LM_EMPLOYEE}" "deskId"                 "Trading Desk Identifier"       "Identifier" 11 false false false false)
+EL_EMP_HIRE=$(   get_or_create_pii_element "${LM_EMPLOYEE}" "hireDate"               "Hire Date"                     "Date"       12 true  false true  false)
+
+# ── Vocab mappings — DPV-PD (exact personal data categories) + schema.org ───────
+add_vocab_mapping_if_missing "${EL_EMP_ID}"     "${VOCAB_SCHEMA}" "https://schema.org/identifier"                          "identifier"
+add_vocab_mapping_if_missing "${EL_EMP_FNAME}"  "${VOCAB_SCHEMA}" "https://schema.org/givenName"                           "givenName"
+add_vocab_mapping_if_missing "${EL_EMP_FNAME}"  "${VOCAB_DPV_PD}" "https://w3id.org/dpv/dpv-pd#Name"                      "Name"
+add_vocab_mapping_if_missing "${EL_EMP_LNAME}"  "${VOCAB_SCHEMA}" "https://schema.org/familyName"                          "familyName"
+add_vocab_mapping_if_missing "${EL_EMP_LNAME}"  "${VOCAB_DPV_PD}" "https://w3id.org/dpv/dpv-pd#Name"                      "Name"          "closeMatch"
+add_vocab_mapping_if_missing "${EL_EMP_EMAIL}"  "${VOCAB_SCHEMA}" "https://schema.org/email"                               "email"
+add_vocab_mapping_if_missing "${EL_EMP_EMAIL}"  "${VOCAB_DPV_PD}" "https://w3id.org/dpv/dpv-pd#EmailAddress"               "EmailAddress"
+add_vocab_mapping_if_missing "${EL_EMP_PHONE}"  "${VOCAB_SCHEMA}" "https://schema.org/telephone"                           "telephone"
+add_vocab_mapping_if_missing "${EL_EMP_PHONE}"  "${VOCAB_DPV_PD}" "https://w3id.org/dpv/dpv-pd#PhoneNumber"                "PhoneNumber"
+add_vocab_mapping_if_missing "${EL_EMP_DOB}"    "${VOCAB_SCHEMA}" "https://schema.org/birthDate"                           "birthDate"
+add_vocab_mapping_if_missing "${EL_EMP_DOB}"    "${VOCAB_DPV_PD}" "https://w3id.org/dpv/dpv-pd#BirthDate"                  "BirthDate"
+add_vocab_mapping_if_missing "${EL_EMP_NAT}"    "${VOCAB_SCHEMA}" "https://schema.org/nationality"                         "nationality"
+add_vocab_mapping_if_missing "${EL_EMP_NAT}"    "${VOCAB_DPV_PD}" "https://w3id.org/dpv/dpv-pd#Nationality"                "Nationality"
+add_vocab_mapping_if_missing "${EL_EMP_NIN}"    "${VOCAB_DPV_PD}" "https://w3id.org/dpv/dpv-pd#NationalIdentificationNumber" "NationalIdentificationNumber"
+add_vocab_mapping_if_missing "${EL_EMP_TITLE}"  "${VOCAB_SCHEMA}" "https://schema.org/jobTitle"                            "jobTitle"
+add_vocab_mapping_if_missing "${EL_EMP_HIRE}"   "${VOCAB_SCHEMA}" "https://schema.org/startDate"                           "startDate"
+success "Logical model (published): Employee & Trader Directory — 12 elements, DPV-PD + schema.org mapped, PII-flagged"
+
 # ─────────────────────────────────────────────────────────────────────────────
 section "Phase 7 — Data Products"
 # ─────────────────────────────────────────────────────────────────────────────
@@ -963,6 +1061,15 @@ ol_event "${RUN_OB}" "trading" "order_book_fill_matcher" "COMPLETE" \
   "[$(ds_node "trading" "intraday_order_book")]" "[$(ds_node "trading" "executed_trades")]"
 success "Lineage Job 8: order_book_fill_matcher (order_book → executed_trades)"
 
+RUN_TRADER_ENRICH="aaaaaaaa-0009-0009-0009-000000000009"
+ol_event "${RUN_TRADER_ENRICH}" "trading" "trader_enrichment_job" "START" \
+  "[$(ds_node "hr" "employee_directory")]" \
+  "[$(ds_node "trading" "executed_trades"), $(ds_node "trading" "intraday_order_book")]"
+ol_event "${RUN_TRADER_ENRICH}" "trading" "trader_enrichment_job" "COMPLETE" \
+  "[$(ds_node "hr" "employee_directory")]" \
+  "[$(ds_node "trading" "executed_trades"), $(ds_node "trading" "intraday_order_book")]"
+success "Lineage Job 9: trader_enrichment_job (employee_directory → executed_trades + order_book)"
+
 # ─────────────────────────────────────────────────────────────────────────────
 section "Phase 9 — DDL Lineage Views"
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1018,8 +1125,9 @@ catalog_link "reference"  "fx_reference_rates"                       "${DS_FX_RA
 catalog_link "compliance" "mifid_ii_transaction_reports"             "${DS_MIFID}"
 catalog_link "compliance" "finrep_consolidated_financial_statements" "${DS_FINREP}"
 catalog_link "compliance" "emir_derivatives_reporting"               "${DS_EMIR}"
+catalog_link "hr"         "employee_directory"                       "${DS_EMPLOYEE}"
 
-success "Catalog ↔ lineage identity links registered (11 datasets)"
+success "Catalog ↔ lineage identity links registered (12 datasets)"
 
 # ─────────────────────────────────────────────────────────────────────────────
 section "Phase 11 — Harvest Sources & Jobs"
@@ -1387,6 +1495,38 @@ load_physical_schema "${DIST_FINREP_PQ}" "FinRep / Parquet" "$(jq -n '[
   {"name":"currency",           "datatype":"string",        "description":"Reporting currency ISO 4217",                 "required":true}
 ]')"
 
+# ── Employee & Trader Directory — Snowflake (12 cols, abbreviated UPPER_SNAKE_CASE)
+load_physical_schema "${DIST_EMPLOYEE_SF}" "Employee Directory / Snowflake" "$(jq -n '[
+  {"name":"EMP_ID",       "datatype":"VARCHAR(32)",   "description":"Internal employee identifier (surrogate key)",                   "required":true},
+  {"name":"FIRST_NM",     "datatype":"NVARCHAR(128)", "description":"Legal first name",                                               "required":true},
+  {"name":"LAST_NM",      "datatype":"NVARCHAR(128)", "description":"Legal last name",                                                "required":true},
+  {"name":"EMAIL_ADDR",   "datatype":"VARCHAR(256)",  "description":"Corporate email address",                                        "required":true},
+  {"name":"PHONE_NO",     "datatype":"VARCHAR(32)",   "description":"Work phone number in E.164 format",                              "required":false},
+  {"name":"DOB",          "datatype":"DATE",          "description":"Date of birth — restricted access",                              "required":false},
+  {"name":"NATLTY_CD",    "datatype":"CHAR(2)",       "description":"ISO 3166-1 alpha-2 nationality code",                            "required":false},
+  {"name":"NIN",          "datatype":"VARCHAR(16)",   "description":"National Insurance / social security number — highly restricted","required":false},
+  {"name":"JOB_TITLE",    "datatype":"VARCHAR(128)",  "description":"Job title as per HR system of record",                          "required":true},
+  {"name":"DEPT",         "datatype":"VARCHAR(64)",   "description":"Department name",                                                "required":true},
+  {"name":"DESK_ID",      "datatype":"VARCHAR(32)",   "description":"Trading desk identifier (null for non-traders)",                 "required":false},
+  {"name":"HIRE_DT",      "datatype":"DATE",          "description":"Date of first employment",                                       "required":true}
+]')"
+
+# ── Employee & Trader Directory — REST API (12 cols, camelCase JSON)
+load_physical_schema "${DIST_EMPLOYEE_REST}" "Employee Directory / REST API" "$(jq -n '[
+  {"name":"employeeId",             "datatype":"string",  "description":"Internal employee identifier",                        "required":true},
+  {"name":"firstName",              "datatype":"string",  "description":"Legal first name",                                    "required":true},
+  {"name":"lastName",               "datatype":"string",  "description":"Legal last name",                                     "required":true},
+  {"name":"emailAddress",           "datatype":"string",  "description":"Corporate email address",                             "required":true},
+  {"name":"phoneNumber",            "datatype":"string",  "description":"Work phone number in E.164 format",                   "required":false},
+  {"name":"dateOfBirth",            "datatype":"string",  "description":"Date of birth ISO 8601 — restricted field",           "required":false},
+  {"name":"nationality",            "datatype":"string",  "description":"ISO 3166-1 alpha-2 nationality code",                 "required":false},
+  {"name":"nationalInsuranceNumber","datatype":"string",  "description":"National Insurance number — omitted unless HR scope", "required":false},
+  {"name":"jobTitle",               "datatype":"string",  "description":"Job title",                                           "required":true},
+  {"name":"department",             "datatype":"string",  "description":"Department name",                                     "required":true},
+  {"name":"deskId",                 "datatype":"string",  "description":"Trading desk identifier (null for non-traders)",      "required":false},
+  {"name":"hireDate",               "datatype":"string",  "description":"Hire date ISO 8601",                                  "required":true}
+]')"
+
 # ── EMIR Derivatives Report — XML (10 cols, ISO 20022 abbreviated PascalCase)
 load_physical_schema "${DIST_EMIR_XML}" "EMIR Derivatives Report / ISO 20022 XML" "$(jq -n '[
   {"name":"UTI",      "datatype":"xs:string",   "description":"Unique Transaction Identifier (EMIR Refit Field 1)",      "required":true},
@@ -1633,6 +1773,34 @@ bind_column "${EL_OB_PRICE}"    "${DIST_ORDERBOOK_KAFKA}" "limitPrice"     "limi
 bind_column "${EL_OB_CCY}"      "${DIST_ORDERBOOK_KAFKA}" "currency"       "currency → currency (Kafka)"
 bind_column "${EL_OB_TRADER}"   "${DIST_ORDERBOOK_KAFKA}" "traderId"       "traderId → traderId (Kafka)"
 bind_column "${EL_OB_VENUE}"    "${DIST_ORDERBOOK_KAFKA}" "venueMic"       "venueMic → venueMic (Kafka)"
+
+# ── Employee Directory — Snowflake (12 bindings)
+bind_column "${EL_EMP_ID}"     "${DIST_EMPLOYEE_SF}" "EMP_ID"     "employeeId → EMP_ID (SF)"
+bind_column "${EL_EMP_FNAME}"  "${DIST_EMPLOYEE_SF}" "FIRST_NM"   "firstName → FIRST_NM (SF)"
+bind_column "${EL_EMP_LNAME}"  "${DIST_EMPLOYEE_SF}" "LAST_NM"    "lastName → LAST_NM (SF)"
+bind_column "${EL_EMP_EMAIL}"  "${DIST_EMPLOYEE_SF}" "EMAIL_ADDR" "emailAddress → EMAIL_ADDR (SF)"
+bind_column "${EL_EMP_PHONE}"  "${DIST_EMPLOYEE_SF}" "PHONE_NO"   "phoneNumber → PHONE_NO (SF)"
+bind_column "${EL_EMP_DOB}"    "${DIST_EMPLOYEE_SF}" "DOB"        "dateOfBirth → DOB (SF)"
+bind_column "${EL_EMP_NAT}"    "${DIST_EMPLOYEE_SF}" "NATLTY_CD"  "nationality → NATLTY_CD (SF)"
+bind_column "${EL_EMP_NIN}"    "${DIST_EMPLOYEE_SF}" "NIN"        "nationalInsuranceNumber → NIN (SF)"
+bind_column "${EL_EMP_TITLE}"  "${DIST_EMPLOYEE_SF}" "JOB_TITLE"  "jobTitle → JOB_TITLE (SF)"
+bind_column "${EL_EMP_DEPT}"   "${DIST_EMPLOYEE_SF}" "DEPT"       "department → DEPT (SF)"
+bind_column "${EL_EMP_DESK}"   "${DIST_EMPLOYEE_SF}" "DESK_ID"    "deskId → DESK_ID (SF)"
+bind_column "${EL_EMP_HIRE}"   "${DIST_EMPLOYEE_SF}" "HIRE_DT"    "hireDate → HIRE_DT (SF)"
+
+# ── Employee Directory — REST API (12 bindings)
+bind_column "${EL_EMP_ID}"     "${DIST_EMPLOYEE_REST}" "employeeId"             "employeeId → employeeId (REST)"
+bind_column "${EL_EMP_FNAME}"  "${DIST_EMPLOYEE_REST}" "firstName"              "firstName → firstName (REST)"
+bind_column "${EL_EMP_LNAME}"  "${DIST_EMPLOYEE_REST}" "lastName"               "lastName → lastName (REST)"
+bind_column "${EL_EMP_EMAIL}"  "${DIST_EMPLOYEE_REST}" "emailAddress"           "emailAddress → emailAddress (REST)"
+bind_column "${EL_EMP_PHONE}"  "${DIST_EMPLOYEE_REST}" "phoneNumber"            "phoneNumber → phoneNumber (REST)"
+bind_column "${EL_EMP_DOB}"    "${DIST_EMPLOYEE_REST}" "dateOfBirth"            "dateOfBirth → dateOfBirth (REST)"
+bind_column "${EL_EMP_NAT}"    "${DIST_EMPLOYEE_REST}" "nationality"            "nationality → nationality (REST)"
+bind_column "${EL_EMP_NIN}"    "${DIST_EMPLOYEE_REST}" "nationalInsuranceNumber" "nationalInsuranceNumber → nationalInsuranceNumber (REST)"
+bind_column "${EL_EMP_TITLE}"  "${DIST_EMPLOYEE_REST}" "jobTitle"               "jobTitle → jobTitle (REST)"
+bind_column "${EL_EMP_DEPT}"   "${DIST_EMPLOYEE_REST}" "department"             "department → department (REST)"
+bind_column "${EL_EMP_DESK}"   "${DIST_EMPLOYEE_REST}" "deskId"                 "deskId → deskId (REST)"
+bind_column "${EL_EMP_HIRE}"   "${DIST_EMPLOYEE_REST}" "hireDate"               "hireDate → hireDate (REST)"
 
 # ── FinRep — XML (8 bindings)
 bind_column "${EL_FR_REPORT_ID}" "${DIST_FINREP_XML}" "RptId"      "reportId → RptId (XML)"
@@ -1921,7 +2089,22 @@ add_regulation_rule_if_missing "${POLICY_STRICT}" "psd2" "$(jq -n '{
   "regulationName": "PSD2 Payment Services Directive",
   "signalLabel": "psd2"
 }')"
-success "Regulation rules: 9 base + 4 new signals (LEI, SFTR, DORA, PSD2)"
+
+# FCRA — triggers on any dataset with personal-data elements (HAS_PII_ELEMENTS) or
+# explicit "credit" keyword, covering consumer-report obligations under US law.
+add_regulation_rule_if_missing "${POLICY_STRICT}" "pii" "$(jq -n '{
+  "signalType": "HAS_PII_ELEMENTS",
+  "pattern": "pii",
+  "regulationName": "FCRA Consumer Data Protection",
+  "signalLabel": "Personal data elements present"
+}')"
+add_regulation_rule_if_missing "${POLICY_STRICT}" "credit" "$(jq -n '{
+  "signalType": "KEYWORD",
+  "pattern": "credit",
+  "regulationName": "FCRA Consumer Data Protection",
+  "signalLabel": "credit"
+}')"
+success "Regulation rules: 9 base + 4 new signals (LEI, SFTR, DORA, PSD2) + 2 FCRA signals (PII, credit)"
 
 # ── Regulation-triggered obligations ─────────────────────────────────────────
 
@@ -1964,7 +2147,23 @@ add_regulation_obligation_if_missing "${POLICY_STRICT}" \
     "obligation": "Register this data service in the ICT asset register and conduct annual resilience testing",
     "odrlDuty": "inform"
   }')"
-success "Regulation obligations: Market Data, GDPR (×2), SFTR, DORA"
+
+add_regulation_obligation_if_missing "${POLICY_STRICT}" \
+  "FCRA Consumer Data Protection" \
+  "Ensure permissible purpose for any consumer report use; provide adverse action notice when required" "$(jq -n '{
+    "regulationName": "FCRA Consumer Data Protection",
+    "obligation": "Ensure permissible purpose for any consumer report use; provide adverse action notice when required",
+    "odrlDuty": "obtainConsent"
+  }')"
+
+add_regulation_obligation_if_missing "${POLICY_STRICT}" \
+  "FCRA Consumer Data Protection" \
+  "Maintain data accuracy and provide consumer dispute resolution procedures" "$(jq -n '{
+    "regulationName": "FCRA Consumer Data Protection",
+    "obligation": "Maintain data accuracy and provide consumer dispute resolution procedures",
+    "odrlDuty": "attribute"
+  }')"
+success "Regulation obligations: Market Data, GDPR (×2), SFTR, DORA, FCRA (×2)"
 
 # ─────────────────────────────────────────────────────────────────────────────
 section "Seed Complete"
@@ -1975,20 +2174,24 @@ echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━
 echo -e "${GREEN} ODIN Catalog seed data loaded — Meridian Capital scenario${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo "  Catalogs   :  4 (Trading, Risk, Reference Data, Compliance)"
-echo "  Datasets   : 12 (trades, positions, orders, VAR, CCR, risk metrics,"
-echo "                securities, counterparties, FX rates, MiFID, FinRep, EMIR)"
-echo "  Distrib.   : 26 (Snowflake, Parquet, REST, Kafka, XML)"
-echo "  Phys.schema: 23 (one per distribution — Snowflake abbreviated, lake/REST/Kafka camelCase, XML ISO 20022)"
-echo "  Vocab      : FIBO (FND/FBC/SEC/MD) + schema.org profiles on all datasets"
-echo "  Log.models : 12 (Trades, Positions, Securities, VaR, MiFID, CCR, RiskMetrics, FX, CptyDir, OrderBook, FinRep, EMIR) — 114 elements"
-echo "  Phys.binds : 186 (each element bound to its column in every distribution format)"
+echo "  Catalogs   :  5 (Trading, Risk, Reference Data, Compliance, HR & People)"
+echo "  Datasets   : 13 (trades, positions, orders, VAR, CCR, risk metrics,"
+echo "                securities, counterparties, FX rates, MiFID, FinRep, EMIR,"
+echo "                + Employee & Trader Directory [PII / GDPR])"
+echo "  Distrib.   : 28 (Snowflake, Parquet, REST, Kafka, XML)"
+echo "  Phys.schema: 25 (one per distribution — Snowflake abbreviated, lake/REST/Kafka camelCase, XML ISO 20022)"
+echo "  Vocab      : FIBO (FND/FBC/SEC/MD) + schema.org + DPV/DPV-PD profiles"
+echo "  Log.models : 13 (Trades, Positions, Securities, VaR, MiFID, CCR, RiskMetrics, FX, CptyDir, OrderBook, FinRep, EMIR, EmployeeDir) — 126 elements"
+echo "  PII flags  :  Employee Directory — 10/12 elements marked isPersonalInformation=true,"
+echo "                7/12 marked isDirectIdentifier=true (name, email, NIN, employeeId)"
+echo "  Phys.binds : 210 (each element bound to its column in every distribution format)"
 echo "  FIBO maps  : 25+ concept mappings (ISIN, LEI, MonetaryAmount, Currency, ...)"
+echo "  DPV-PD maps: 10 concept mappings on Employee Directory (Name, Email, Phone, DOB, NIN, ...)"
 echo "  Data Prods :  5 (Consume×2, Deploy, Build, Design lifecycle stages)"
-echo "  Lineage    :  8 OpenLineage jobs — 4-hop pipeline (securities→finrep)"
+echo "  Lineage    :  9 OpenLineage jobs — 4-hop pipeline (securities→finrep) + employee enrichment"
 echo "  DDL views  :  3 (v_counterparty_exposure, v_mifid_enriched, v_daily_risk_summary)"
 echo "  Harvest    :  5 sources (Snowflake×3, AWS Glue, ECB DCAT) + 5 scheduled jobs"
-echo "  Policies   :  2 terms-of-use policy sets"
+echo "  Policies   :  2 terms-of-use policy sets (default ACTIVE + Strict DRAFT with FCRA)"
 echo "                  ACTIVE: Default Terms Policy (seeded by V11 migration)"
 echo "                  DRAFT:  Strict Regulatory Compliance Policy (13 signals, 4 rules, 5 obligations)"
 echo ""

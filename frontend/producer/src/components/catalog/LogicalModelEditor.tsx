@@ -8,6 +8,7 @@ import { ClassificationBadge } from '@datacatalog/shared';
 import ClassificationRecommendationRow from './ClassificationRecommendationRow';
 import DescriptionRecommendationRow from './DescriptionRecommendationRow';
 import VocabRecommendationRow from './VocabRecommendationRow';
+import PiiRecommendationRow from './PiiRecommendationRow';
 
 const MATCH_TYPE_COLORS: Record<string, string> = {
   exactMatch: 'bg-green-100 text-green-700',
@@ -39,6 +40,9 @@ export default function LogicalModelEditor({ datasetId, models, canAction }: Pro
   const [bulkVocabJobId, setBulkVocabJobId] = useState<string | null>(null);
   const [vocabRecommendError, setVocabRecommendError] = useState<string | null>(null);
   const [vocabRecommendingElementId, setVocabRecommendingElementId] = useState<string | null>(null);
+  const [piiRecommendingElementId, setPiiRecommendingElementId] = useState<string | null>(null);
+  const [piiRecommendError, setPiiRecommendError] = useState<string | null>(null);
+  const [bulkPiiJobId, setBulkPiiJobId] = useState<string | null>(null);
 
   useEffect(() => {
     if (selectedModelId === null && models.length > 0) setSelectedModelId(models[0].id);
@@ -49,6 +53,7 @@ export default function LogicalModelEditor({ datasetId, models, canAction }: Pro
     setBulkJobId(null);
     setBulkDescJobId(null);
     setBulkVocabJobId(null);
+    setBulkPiiJobId(null);
   }, [selectedModelId]);
 
   const { data: elements = [] } = useQuery({
@@ -128,6 +133,27 @@ export default function LogicalModelEditor({ datasetId, models, canAction }: Pro
 
   const isVocabJobRunning = !!bulkVocabJobId && (bulkVocabJob?.status === 'PENDING' || bulkVocabJob?.status === 'RUNNING');
 
+  // Poll bulk PII job while in flight.
+  const { data: bulkPiiJob } = useQuery({
+    queryKey: ['pii-recommendation-job', bulkPiiJobId],
+    queryFn: () => logicalElementApi.getPiiRecommendationJob(bulkPiiJobId!),
+    enabled: !!bulkPiiJobId,
+    refetchInterval: bulkPiiJobId ? JOB_POLL_INTERVAL_MS : false,
+  });
+
+  useEffect(() => {
+    if (!bulkPiiJob) return;
+    if (bulkPiiJob.status === 'COMPLETED') {
+      setBulkPiiJobId(null);
+      qc.invalidateQueries({ queryKey: ['logical-elements', selectedModelId] });
+    } else if (bulkPiiJob.status === 'FAILED') {
+      setBulkPiiJobId(null);
+      setPiiRecommendError(bulkPiiJob.error ?? 'Bulk PII recommendation failed.');
+    }
+  }, [bulkPiiJob, selectedModelId, qc]);
+
+  const isPiiJobRunning = !!bulkPiiJobId && (bulkPiiJob?.status === 'PENDING' || bulkPiiJob?.status === 'RUNNING');
+
   const createModelMut = useMutation({
     mutationFn: () => logicalModelApi.create(datasetId, { name: 'Model v1', version: '1.0', status: 'draft' }),
     onSuccess: (m) => { qc.invalidateQueries({ queryKey: ['logical-models', datasetId] }); setSelectedModelId(m.id); },
@@ -202,6 +228,28 @@ export default function LogicalModelEditor({ datasetId, models, canAction }: Pro
       setRecommendingElementId(null);
       setElementRecommendError('Recommendation service is unavailable. Please try again later.');
     },
+  });
+
+  const recommendPiiMut = useMutation({
+    mutationFn: (elementId: string) => logicalElementApi.recommendPii(elementId),
+    onSuccess: () => {
+      setPiiRecommendingElementId(null);
+      setPiiRecommendError(null);
+      qc.invalidateQueries({ queryKey: ['logical-elements', selectedModelId] });
+    },
+    onError: () => {
+      setPiiRecommendingElementId(null);
+      setPiiRecommendError('PII recommendation service is unavailable. Please try again later.');
+    },
+  });
+
+  const recommendAllPiiMut = useMutation({
+    mutationFn: (modelId: string) => logicalElementApi.recommendModelPii(modelId),
+    onSuccess: (job) => {
+      setPiiRecommendError(null);
+      setBulkPiiJobId(job.jobId);
+    },
+    onError: () => setPiiRecommendError('PII recommendation service is unavailable. Please try again later.'),
   });
 
   const selectedModel = models.find(m => m.id === selectedModelId);
@@ -320,6 +368,30 @@ export default function LogicalModelEditor({ datasetId, models, canAction }: Pro
         </div>
       )}
 
+      {isPiiJobRunning && (
+        <div className="flex items-center gap-3 px-4 py-3 bg-rose-50 border border-rose-200 rounded-lg text-sm text-rose-700">
+          <svg className="h-4 w-4 shrink-0 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          <span>
+            <span className="font-medium">{bulkPiiJob?.status === 'PENDING' ? 'Queued' : 'Analyzing'}</span> — AI is assessing PII and direct-identifier indicators.
+            Results appear row-by-row as they arrive.
+          </span>
+          <button onClick={() => setBulkPiiJobId(null)} className="ml-auto text-rose-500 hover:text-rose-700" title="Dismiss">✕</button>
+        </div>
+      )}
+
+      {piiRecommendError && (
+        <div className="flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          {piiRecommendError}
+          <button onClick={() => setPiiRecommendError(null)} className="ml-auto text-red-500 hover:text-red-700">✕</button>
+        </div>
+      )}
+
       <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
         <table className="min-w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
@@ -390,6 +462,31 @@ export default function LogicalModelEditor({ datasetId, models, canAction }: Pro
                       className="text-blue-500 hover:text-blue-700 disabled:opacity-40 disabled:cursor-not-allowed normal-case font-normal"
                     >
                       {recommendAllVocabMut.isPending || isVocabJobRunning
+                        ? (
+                          <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                        ) : (
+                          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
+                          </svg>
+                        )}
+                    </button>
+                  )}
+                </div>
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <div className="flex items-center gap-1.5">
+                  PII / ID
+                  {selectedModelId && canAction && (
+                    <button
+                      onClick={() => { setPiiRecommendError(null); recommendAllPiiMut.mutate(selectedModelId); }}
+                      disabled={recommendAllPiiMut.isPending || isPiiJobRunning}
+                      title={isPiiJobRunning ? 'Analyzing…' : 'AI-recommend PII and direct-identifier indicators for all elements'}
+                      className="text-rose-400 hover:text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed normal-case font-normal"
+                    >
+                      {recommendAllPiiMut.isPending || isPiiJobRunning
                         ? (
                           <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -524,6 +621,58 @@ export default function LogicalModelEditor({ datasetId, models, canAction }: Pro
                       )}
                     </div>
                   </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap items-center gap-1">
+                      {el.isPersonalInformation && (
+                        <span
+                          title="Personal Information"
+                          className="px-2 py-0.5 rounded text-xs font-semibold bg-rose-600 text-white"
+                        >
+                          PII
+                        </span>
+                      )}
+                      {el.isDirectIdentifier && (
+                        <span
+                          title="Direct Identifier"
+                          className="px-2 py-0.5 rounded text-xs font-semibold bg-amber-500 text-white"
+                        >
+                          ID
+                        </span>
+                      )}
+                      {el.recommendedIsPersonalInformation != null && (
+                        <span title={el.piiRecommendationReasoning ?? 'Pending AI recommendation'} className="h-2 w-2 rounded-full bg-amber-400 inline-block" />
+                      )}
+                      {el.recommendedIsPersonalInformation == null && !isPiiJobRunning && canAction && (
+                        <button
+                          onClick={() => {
+                            setPiiRecommendError(null);
+                            setPiiRecommendingElementId(el.id);
+                            recommendPiiMut.mutate(el.id);
+                          }}
+                          disabled={piiRecommendingElementId === el.id}
+                          title="AI-recommend PII indicators for this element"
+                          className="text-rose-400 hover:text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          {piiRecommendingElementId === el.id
+                            ? (
+                              <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                              </svg>
+                            ) : (
+                              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
+                              </svg>
+                            )}
+                        </button>
+                      )}
+                      {el.recommendedIsPersonalInformation == null && isPiiJobRunning && (
+                        <svg className="h-3.5 w-3.5 text-rose-300 animate-pulse" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                        </svg>
+                      )}
+                    </div>
+                  </td>
                 </tr>
                 {el.recommendedVocabMappings && el.recommendedVocabMappings.length > 0 && (
                   <VocabRecommendationRow
@@ -549,10 +698,18 @@ export default function LogicalModelEditor({ datasetId, models, canAction }: Pro
                     canAction={canAction}
                   />
                 )}
+                {el.recommendedIsPersonalInformation != null && (
+                  <PiiRecommendationRow
+                    key={`pii-rec-${el.id}`}
+                    element={el}
+                    modelId={selectedModelId!}
+                    canAction={canAction}
+                  />
+                )}
               </>
             ))}
             {elements.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No elements in this model</td></tr>
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No elements in this model</td></tr>
             )}
           </tbody>
         </table>

@@ -11,5 +11,6 @@ include(
     "services:lineage-service",
     "services:search-service",
     "services:ai-service",
-    "services:identity-service"
+    "services:identity-service",
+    "services:policy-service"
 )

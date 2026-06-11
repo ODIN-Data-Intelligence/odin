@@ -66,6 +66,17 @@ public class LogicalDataElementEntity {
     private String vocabMappingReasoning;
     private OffsetDateTime vocabMappingRecommendedAt;
 
+    @Column(nullable = false)
+    private boolean isPersonalInformation = false;
+
+    @Column(nullable = false)
+    private boolean isDirectIdentifier = false;
+
+    private Boolean recommendedIsPersonalInformation;
+    private Boolean recommendedIsDirectIdentifier;
+    private String piiRecommendationReasoning;
+    private OffsetDateTime piiRecommendedAt;
+
     @PrePersist
     void prePersist() {
         createdAt = OffsetDateTime.now();

@@ -11,6 +11,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -20,6 +22,8 @@ import java.util.List;
 @RequestMapping("/api/v1/search")
 @RequiredArgsConstructor
 public class SearchController {
+
+    private static final Logger log = LoggerFactory.getLogger(SearchController.class);
 
     private final OpenSearchIndexService indexService;
 
@@ -80,6 +84,7 @@ public class SearchController {
         String tenantId = TenantContextHolder.get();
         var result = indexService.search(q, type, domainId, lifecycleStatus, format, hasLineage,
                 tenantId, page, size, keyword, theme, vocabConcept, vocab, semanticType);
+        log.debug("action=SEARCH q={} type={} page={} hits={}", q, type, page, result.totalHits());
 
         return new SearchResponse(
             result.documents(),

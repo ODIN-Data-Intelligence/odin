@@ -14,6 +14,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
@@ -28,6 +30,8 @@ import java.util.UUID;
 @RequestMapping("/api/v1/conversations")
 @RequiredArgsConstructor
 public class ConversationsController {
+
+    private static final Logger log = LoggerFactory.getLogger(ConversationsController.class);
 
     private final ConversationRepository conversationRepository;
     private final ChatService chatService;
@@ -57,6 +61,7 @@ public class ConversationsController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public ConversationEntity create(@RequestBody(required = false) String title) {
+        log.info("action=CREATE_CONVERSATION");
         UUID tenantId = UUID.fromString(TenantContextHolder.get());
         ConversationEntity conv = new ConversationEntity();
         conv.setTenantId(tenantId);
@@ -100,6 +105,7 @@ public class ConversationsController {
             @Parameter(description = "Conversation UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
             @PathVariable UUID id,
             @Valid @RequestBody MessageRequest request) {
+        log.info("action=SEND_MESSAGE conversationId={}", id);
         return chatService.streamResponse(id, request);
     }
 }

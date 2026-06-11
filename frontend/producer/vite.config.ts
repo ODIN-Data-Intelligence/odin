@@ -42,6 +42,7 @@ export default defineConfig({
       '/api/v1/jobs':                 proxyEntry('http://localhost:8002'),
       '/api/v1/runs':                 proxyEntry('http://localhost:8002'),
       // AI-backed endpoints on inventory-service need a long proxy timeout
+      '/api/v1/policies':             proxyEntry('http://localhost:8007'),
       '/api/v1/logical-models':       proxyEntry('http://localhost:8001', AI_PROXY_TIMEOUT_MS),
       '/api/v1/logical-data-elements': proxyEntry('http://localhost:8001', AI_PROXY_TIMEOUT_MS),
       '/api':                         proxyEntry('http://localhost:8001'),

@@ -2,6 +2,7 @@ package com.odin.catalog.shared.models.events;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.odin.catalog.shared.models.dcat.DcatDataset;
+import com.odin.catalog.shared.models.policy.PolicyComponentPayload;
 
 import java.util.List;
 
@@ -20,12 +21,16 @@ public record DatasetChangedPayload(
     List<String> vocabConceptIris,
     List<String> fiboConcepts,
     List<String> logicalElementNames,
-    List<String> logicalTypes
+    List<String> logicalTypes,
+    // ODRL policy JSON-LD stored on the dataset — null when no policy has been accepted yet.
+    String hasPolicy,
+    // Individual policy pieces that compose hasPolicy — null for non-terms-of-use events.
+    List<PolicyComponentPayload> policyComponents
 ) {
     /** Convenience factory for events without semantic context (e.g. delete, or initial create). */
     public static DatasetChangedPayload ofBasic(String changeType, String datasetId,
             String catalogId, String domainId, String tenantId, DcatDataset dataset) {
         return new DatasetChangedPayload(changeType, datasetId, catalogId, domainId, tenantId,
-                dataset, null, null, null, null, null, null);
+                dataset, null, null, null, null, null, null, null, null);
     }
 }

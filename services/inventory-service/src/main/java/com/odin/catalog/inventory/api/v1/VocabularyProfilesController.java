@@ -10,6 +10,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -23,6 +25,8 @@ import java.util.UUID;
 @RestController
 @RequiredArgsConstructor
 public class VocabularyProfilesController {
+
+    private static final Logger log = LoggerFactory.getLogger(VocabularyProfilesController.class);
 
     private final DatasetVocabularyProfileRepository profileRepository;
 
@@ -57,6 +61,7 @@ public class VocabularyProfilesController {
             @PathVariable UUID datasetId,
             @RequestBody Map<String, Object> body) {
         UUID vocabId = UUID.fromString((String) body.get("vocabularyId"));
+        log.info("action=CREATE_VOCAB_PROFILE datasetId={} vocabId={}", datasetId, vocabId);
         if (profileRepository.existsByDatasetIdAndVocabularyId(datasetId, vocabId)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Vocabulary profile already exists for this dataset");
         }
@@ -84,6 +89,7 @@ public class VocabularyProfilesController {
             @PathVariable UUID datasetId,
             @Parameter(description = "Vocabulary UUID to disassociate", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
             @PathVariable UUID vocabId) {
+        log.info("action=DELETE_VOCAB_PROFILE datasetId={} vocabId={}", datasetId, vocabId);
         profileRepository.deleteByDatasetIdAndVocabularyId(datasetId, vocabId);
     }
 }

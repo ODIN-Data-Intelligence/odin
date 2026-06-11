@@ -86,6 +86,24 @@ public record LogicalDataElementResponse(
     String vocabMappingReasoning,
 
     @Schema(description = "When the vocabulary concept recommendations were generated", accessMode = Schema.AccessMode.READ_ONLY)
-    OffsetDateTime vocabMappingRecommendedAt
+    OffsetDateTime vocabMappingRecommendedAt,
+
+    @Schema(description = "Whether this element contains personal information about a natural person")
+    boolean isPersonalInformation,
+
+    @Schema(description = "Whether this element is a direct identifier (name, email, SSN, passport, etc.)")
+    boolean isDirectIdentifier,
+
+    @Schema(description = "AI-recommended personal information flag pending review")
+    Boolean recommendedIsPersonalInformation,
+
+    @Schema(description = "AI-recommended direct identifier flag pending review")
+    Boolean recommendedIsDirectIdentifier,
+
+    @Schema(description = "Reasoning for the PII indicator recommendation")
+    String piiRecommendationReasoning,
+
+    @Schema(description = "When the PII indicator recommendation was generated", accessMode = Schema.AccessMode.READ_ONLY)
+    OffsetDateTime piiRecommendedAt
 
 ) {}

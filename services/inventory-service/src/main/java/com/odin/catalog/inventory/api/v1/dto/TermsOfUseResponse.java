@@ -1,5 +1,6 @@
 package com.odin.catalog.inventory.api.v1.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
@@ -30,7 +31,7 @@ public record TermsOfUseResponse(
     @Schema(description = "Regulatory frameworks applicable to this dataset based on vocabulary concept mappings")
     List<String> applicableRegulations,
 
-    @Schema(description = "Full ODRL policy document")
+    @Schema(description = "Full ODRL policy document assembled from all applicable policy pieces")
     Map<String, Object> odrlPolicy,
 
     @Schema(description = "How this policy was determined",
@@ -39,7 +40,11 @@ public record TermsOfUseResponse(
     String policySource,
 
     @Schema(description = "Details explaining how the recommendation was derived")
-    DerivationDetails derivationDetails
+    DerivationDetails derivationDetails,
+
+    @Schema(description = "Individual policy pieces that compose the full ODRL policy; null in fallback mode")
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    List<PolicyComponent> policyComponents
 
 ) {
 
@@ -74,6 +79,24 @@ public record TermsOfUseResponse(
             "the Accept Policy action is only meaningful when this is true",
             example = "true")
         boolean readyToAccept
+
+    ) {}
+
+    @Schema(description = "A named ODRL policy piece keyed to one policy dimension")
+    public record PolicyComponent(
+
+        @Schema(description = "Dimension type", example = "CLASSIFICATION",
+            allowableValues = {"CLASSIFICATION", "REGULATION", "CONTRACTUAL", "LOGICAL_TYPE", "CUSTOM"})
+        String pieceType,
+
+        @Schema(description = "Dimension value this piece applies to", example = "CONFIDENTIAL")
+        String dimensionKey,
+
+        @Schema(description = "Human-readable label", example = "RESTRICTED — CONFIDENTIAL data access rules")
+        String label,
+
+        @Schema(description = "Target-free ODRL fragment; target is injected during assembly")
+        Map<String, Object> policyFragment
 
     ) {}
 }

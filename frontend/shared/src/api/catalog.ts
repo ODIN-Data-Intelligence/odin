@@ -8,6 +8,7 @@ import type {
   AcceptedSemanticTag, DashboardSummary, UserActivity, TermsOfUse,
   TermsPolicySet, TermsPolicyDetail, TermsClassificationRule,
   TermsRegulationRule, TermsRegulationObligation,
+  PolicyRecord, PolicyComponentsResponse, EvaluationResponse, EvaluationLogEntry,
 } from '../types/catalog';
 
 const BASE = '/api/v1';
@@ -177,6 +178,16 @@ export const logicalElementApi = {
     post<BulkRecommendationJob>(`${BASE}/logical-models/${modelId}/recommend-vocab-concepts`, {}),
   getVocabRecommendationJob: (jobId: string) =>
     get<BulkRecommendationJob>(`${BASE}/logical-models/recommend-vocab-concepts/jobs/${jobId}`),
+  recommendPii: (id: string) =>
+    post<LogicalDataElement>(`${BASE}/logical-data-elements/${id}/recommend-pii`, {}),
+  acceptPii: (id: string) =>
+    post<LogicalDataElement>(`${BASE}/logical-data-elements/${id}/accept-pii`, {}),
+  rejectPii: (id: string) =>
+    post<LogicalDataElement>(`${BASE}/logical-data-elements/${id}/reject-pii`, {}),
+  recommendModelPii: (modelId: string) =>
+    post<BulkRecommendationJob>(`${BASE}/logical-models/${modelId}/recommend-pii`, {}),
+  getPiiRecommendationJob: (jobId: string) =>
+    get<BulkRecommendationJob>(`${BASE}/logical-models/recommend-pii/jobs/${jobId}`),
 };
 
 // Dashboard
@@ -223,4 +234,21 @@ export const termsPolicyApi = {
     post<TermsRegulationObligation>(`${BASE}/terms-policies/${id}/regulation-obligations`, body),
   deleteRegulationObligation: (id: string, oblId: string) =>
     del<void>(`${BASE}/terms-policies/${id}/regulation-obligations/${oblId}`),
+};
+
+// Policy service (ODRE enforcement — port 8007, proxied via /api/v1/policies)
+export const policyApi = {
+  getPolicy:     (datasetId: string) =>
+    get<PolicyRecord>(`${BASE}/policies/${datasetId}`),
+  getComponents: (datasetId: string) =>
+    get<PolicyComponentsResponse>(`${BASE}/policies/${datasetId}/components`),
+  upsertPolicy:  (datasetId: string, body: { policyJson: string; policyLevel?: string }) =>
+    put<PolicyRecord>(`${BASE}/policies/${datasetId}`, body),
+  deletePolicy:  (datasetId: string) =>
+    del<void>(`${BASE}/policies/${datasetId}`),
+  evaluate:      (datasetId: string, body: { M: Record<string, unknown>; F?: Record<string, unknown> }) =>
+    post<EvaluationResponse>(`${BASE}/policies/${datasetId}/evaluate`, body),
+  listEvaluations: (datasetId: string, page = 0, size = 5) =>
+    get<{ content: EvaluationLogEntry[]; totalElements: number }>(
+      `${BASE}/policies/${datasetId}/evaluations?page=${page}&size=${size}`),
 };
