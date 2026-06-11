@@ -1,5 +1,6 @@
 package com.odin.catalog.inventory.api.v1;
 
+import com.odin.catalog.inventory.api.v1.dto.IriTranslateBatchResponse;
 import com.odin.catalog.inventory.api.v1.dto.IriTranslateResponse;
 import com.odin.catalog.inventory.api.v1.dto.VocabularyRequest;
 import com.odin.catalog.inventory.api.v1.dto.VocabularyResponse;
@@ -17,7 +18,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 @Tag(name = "Vocabularies", description = "Controlled vocabulary registry — schema.org, FIBO, SKOS, GeoSPARQL, and custom vocabularies")
@@ -131,7 +131,7 @@ public class VocabularyController {
         @ApiResponse(responseCode = "400", description = "Request body missing or too large", content = @Content)
     })
     @PostMapping("/translate")
-    public Map<String, String> translateBatch(@RequestBody List<String> iris) {
-        return vocabularyService.translateBatch(iris);
+    public IriTranslateBatchResponse translateBatch(@RequestBody List<String> iris) {
+        return new IriTranslateBatchResponse(vocabularyService.translateBatch(iris));
     }
 }

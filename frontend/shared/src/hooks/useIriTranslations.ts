@@ -40,7 +40,7 @@ export function useIriTranslations(iris: string[]): Record<string, string> {
 
     vocabularyApi
       .translateBatch(uncached)
-      .then(fresh => {
+      .then(({ translations: fresh }) => {
         uncached.forEach(iri => pending.current.delete(iri));
         const updated = mergeIntoCache(fresh);
         setTranslations(updated);

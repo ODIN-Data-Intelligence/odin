@@ -109,7 +109,7 @@ export const vocabularyApi = {
     get<{ iri: string; label: string }>(`${BASE}/vocabularies/translate?iri=${encodeURIComponent(iri)}`),
   /** Resolve up to 200 IRIs to their preferred labels in one request. Returns iri→label map. */
   translateBatch: (iris: string[]) =>
-    post<Record<string, string>>(`${BASE}/vocabularies/translate`, iris),
+    post<{ translations: Record<string, string> }>(`${BASE}/vocabularies/translate`, iris),
 };
 
 // Dataset vocabulary profiles
@@ -170,8 +170,8 @@ export const logicalElementApi = {
     get<BulkRecommendationJob>(`${BASE}/logical-models/recommend-descriptions/jobs/${jobId}`),
   recommendVocabConcepts: (id: string) =>
     post<LogicalDataElement>(`${BASE}/logical-data-elements/${id}/recommend-vocab-concepts`, {}),
-  acceptVocabConcepts: (id: string, iris?: string[]) =>
-    post<LogicalDataElement>(`${BASE}/logical-data-elements/${id}/accept-vocab-concepts`, iris ? { iris } : {}),
+  acceptVocabConcepts: (id: string, iris: string[]) =>
+    post<LogicalDataElement>(`${BASE}/logical-data-elements/${id}/accept-vocab-concepts`, { iris }),
   rejectVocabConcepts: (id: string) =>
     post<LogicalDataElement>(`${BASE}/logical-data-elements/${id}/reject-vocab-concepts`, {}),
   recommendModelVocabConcepts: (modelId: string) =>

@@ -1,13 +1,8 @@
 package com.odin.catalog.policy.api.v1;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.odin.catalog.policy.api.v1.dto.*;
 import com.odin.catalog.policy.application.PolicyEvaluationService;
 import com.odin.catalog.policy.application.PolicyRegistryService;
-import com.odin.catalog.policy.infrastructure.jpa.DatasetPolicyLinkEntity;
-import com.odin.catalog.policy.infrastructure.jpa.EvaluationLogRepository;
-import com.odin.catalog.policy.infrastructure.jpa.PolicyPieceEntity;
-import com.odin.catalog.policy.infrastructure.jpa.PolicyRecordEntity;
 import com.odin.catalog.shared.auth.filter.TenantContextHolder;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -16,13 +11,10 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -35,17 +27,14 @@ public class PolicyController {
 
     private final PolicyRegistryService registryService;
     private final PolicyEvaluationService evaluationService;
-    private final EvaluationLogRepository logRepository;
-    private final ObjectMapper objectMapper;
 
     @Operation(summary = "Get policy for a dataset")
     @GetMapping("/{datasetId}")
     public PolicyResponse getPolicy(@PathVariable UUID datasetId) {
-        UUID tenantId = tenantId();
-        PolicyRecordEntity entity = registryService.find(datasetId, tenantId)
+        return registryService.find(datasetId, tenantId())
+            .map(registryService::toResponse)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                 "No policy record found for dataset " + datasetId));
-        return toResponse(entity);
     }
 
     @Operation(summary = "Create or replace policy for a dataset")
@@ -53,10 +42,8 @@ public class PolicyController {
     public PolicyResponse upsertPolicy(@PathVariable UUID datasetId,
                                        @Valid @RequestBody PolicyUpsertRequest request) {
         log.info("action=UPSERT_POLICY datasetId={} level={}", datasetId, request.policyLevel());
-        UUID tenantId = tenantId();
-        PolicyRecordEntity entity = registryService.upsert(
-            datasetId, tenantId, request.policyJson(), request.policyLevel());
-        return toResponse(entity);
+        return registryService.toResponse(
+            registryService.upsert(datasetId, tenantId(), request.policyJson(), request.policyLevel()));
     }
 
     @Operation(summary = "Delete policy for a dataset")
@@ -83,28 +70,7 @@ public class PolicyController {
             + "REGULATION, CONTRACTUAL) and dimension value.")
     @GetMapping("/{datasetId}/components")
     public PolicyComponentsResponse getComponents(@PathVariable UUID datasetId) {
-        UUID tenantId = tenantId();
-        PolicyRecordEntity record = registryService.find(datasetId, tenantId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                "No policy record found for dataset " + datasetId));
-
-        List<DatasetPolicyLinkEntity> links = registryService.findLinks(datasetId, tenantId);
-
-        List<PolicyComponentSummary> summaries = links.stream().map(link -> {
-            PolicyPieceEntity piece = link.getPiece();
-            Object fragment = null;
-            try { fragment = objectMapper.readValue(piece.getPolicyJson(), Object.class); }
-            catch (Exception ignored) { fragment = piece.getPolicyJson(); }
-            return new PolicyComponentSummary(
-                piece.getId(), piece.getPieceType(), piece.getDimensionKey(),
-                piece.getLabel(), piece.getPolicyLevel(), fragment, link.getAppliedAt());
-        }).toList();
-
-        Object assembled = null;
-        try { assembled = objectMapper.readValue(record.getPolicyJson(), Object.class); }
-        catch (Exception ignored) { assembled = record.getPolicyJson(); }
-
-        return new PolicyComponentsResponse(datasetId, tenantId, summaries, assembled);
+        return registryService.getComponents(datasetId, tenantId());
     }
 
     @Operation(summary = "List recent evaluations for a dataset")
@@ -112,21 +78,7 @@ public class PolicyController {
     public Page<EvaluationLogEntry> listEvaluations(@PathVariable UUID datasetId,
                                                     @RequestParam(defaultValue = "0") int page,
                                                     @RequestParam(defaultValue = "20") int size) {
-        return logRepository
-            .findByDatasetIdAndTenantIdOrderByCreatedAtDesc(datasetId, tenantId(), PageRequest.of(page, size))
-            .map(e -> new EvaluationLogEntry(e.getId(), e.getDatasetId(), e.getAction(),
-                e.isGranted(), e.getCreatedAt()));
-    }
-
-    private PolicyResponse toResponse(PolicyRecordEntity e) {
-        Object parsed = null;
-        try {
-            parsed = objectMapper.readValue(e.getPolicyJson(), Object.class);
-        } catch (Exception ignored) {
-            parsed = e.getPolicyJson();
-        }
-        return new PolicyResponse(e.getId(), e.getDatasetId(), e.getTenantId(),
-            e.getPolicyLevel(), parsed, e.getCreatedAt(), e.getUpdatedAt());
+        return evaluationService.listEvaluations(datasetId, tenantId(), page, size);
     }
 
     private UUID tenantId() {

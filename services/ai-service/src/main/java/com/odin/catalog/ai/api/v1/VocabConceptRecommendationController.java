@@ -11,12 +11,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "Vocabulary Concepts", description = "AI-powered vocabulary concept mapping recommendations")
 @RestController
+@RequestMapping("/api/v1/recommend-vocab-concepts")
 @RequiredArgsConstructor
 public class VocabConceptRecommendationController {
 
@@ -33,7 +32,7 @@ public class VocabConceptRecommendationController {
         @ApiResponse(responseCode = "400", description = "Validation error", content = @Content),
         @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
     })
-    @PostMapping("/api/v1/recommend-vocab-concepts")
+    @PostMapping
     public VocabConceptRecommendationResponse recommend(@RequestBody VocabConceptRecommendationRequest request) {
         log.info("action=RECOMMEND_VOCAB_CONCEPTS elementCount={}", request.elements().size());
         return recommendationService.recommend(request);

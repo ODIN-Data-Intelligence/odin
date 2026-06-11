@@ -18,8 +18,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.UUID;
+import org.springframework.web.server.ResponseStatusException;
 
 @Tag(name = "Logical Models", description = "Logical data models — semantic business view of a dataset's structure")
 @RestController
@@ -364,7 +364,7 @@ public class LogicalModelsController {
             @PathVariable UUID jobId) {
         return jobRegistry.get(jobId)
             .map(this::toJobResponse)
-            .orElseThrow(() -> new NoSuchElementException("Recommendation job not found: " + jobId));
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Recommendation job not found: " + jobId));
     }
 
     @Operation(summary = "Batch-recommend descriptions for all elements in a model",
@@ -396,7 +396,7 @@ public class LogicalModelsController {
             @PathVariable UUID jobId) {
         return jobRegistry.get(jobId)
             .map(this::toJobResponse)
-            .orElseThrow(() -> new NoSuchElementException("Description recommendation job not found: " + jobId));
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Description recommendation job not found: " + jobId));
     }
 
     @Operation(summary = "Request AI vocabulary concept recommendations for an element",
@@ -506,7 +506,7 @@ public class LogicalModelsController {
             @Parameter(description = "Job UUID returned by the POST endpoint") @PathVariable UUID jobId) {
         return jobRegistry.get(jobId)
             .map(this::toJobResponse)
-            .orElseThrow(() -> new NoSuchElementException("Vocabulary recommendation job not found: " + jobId));
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Vocabulary recommendation job not found: " + jobId));
     }
 
     @Operation(summary = "Batch-recommend PII indicators for all elements in a model",
@@ -536,7 +536,7 @@ public class LogicalModelsController {
             @Parameter(description = "Job UUID returned by the POST endpoint") @PathVariable UUID jobId) {
         return jobRegistry.get(jobId)
             .map(this::toJobResponse)
-            .orElseThrow(() -> new NoSuchElementException("PII recommendation job not found: " + jobId));
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "PII recommendation job not found: " + jobId));
     }
 
     private BulkRecommendationJobResponse toJobResponse(BulkRecommendationJobRegistry.Job job) {

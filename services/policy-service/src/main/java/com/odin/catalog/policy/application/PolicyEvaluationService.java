@@ -1,6 +1,7 @@
 package com.odin.catalog.policy.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.odin.catalog.policy.api.v1.dto.EvaluationLogEntry;
 import com.odin.catalog.policy.api.v1.dto.EvaluationResponse;
 import com.odin.catalog.policy.infrastructure.jpa.EvaluationLogEntity;
 import com.odin.catalog.policy.infrastructure.jpa.EvaluationLogRepository;
@@ -22,6 +23,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 
 @Service
 @RequiredArgsConstructor
@@ -71,6 +74,13 @@ public class PolicyEvaluationService {
         publishEvent(datasetId, tenantId, "read", granted, tuples);
 
         return new EvaluationResponse(granted, record.getPolicyLevel(), tuples);
+    }
+
+    public Page<EvaluationLogEntry> listEvaluations(UUID datasetId, UUID tenantId, int page, int size) {
+        return logRepository
+            .findByDatasetIdAndTenantIdOrderByCreatedAtDesc(datasetId, tenantId, PageRequest.of(page, size))
+            .map(e -> new EvaluationLogEntry(e.getId(), e.getDatasetId(), e.getAction(),
+                e.isGranted(), e.getCreatedAt()));
     }
 
     private void persistLog(UUID datasetId, UUID tenantId, String action, boolean granted,

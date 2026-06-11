@@ -1,8 +1,8 @@
 package com.odin.catalog.ai.api.v1;
 
+import com.odin.catalog.ai.api.v1.dto.ConversationResponse;
 import com.odin.catalog.ai.api.v1.dto.MessageRequest;
-import com.odin.catalog.ai.infrastructure.jpa.entity.ConversationEntity;
-import com.odin.catalog.ai.infrastructure.jpa.repository.ConversationRepository;
+import com.odin.catalog.ai.application.ConversationService;
 import com.odin.catalog.ai.rag.ChatService;
 import com.odin.catalog.shared.auth.filter.TenantContextHolder;
 import io.swagger.v3.oas.annotations.Operation;
@@ -33,7 +33,7 @@ public class ConversationsController {
 
     private static final Logger log = LoggerFactory.getLogger(ConversationsController.class);
 
-    private final ConversationRepository conversationRepository;
+    private final ConversationService conversationService;
     private final ChatService chatService;
 
     @Operation(summary = "List conversations",
@@ -43,9 +43,9 @@ public class ConversationsController {
         @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
     })
     @GetMapping
-    public List<ConversationEntity> list() {
+    public List<ConversationResponse> list() {
         UUID tenantId = UUID.fromString(TenantContextHolder.get());
-        return conversationRepository.findByTenantIdOrderByCreatedAtDesc(tenantId);
+        return conversationService.list(tenantId);
     }
 
     @Operation(summary = "Create a conversation",
@@ -60,13 +60,10 @@ public class ConversationsController {
         content = @Content(schema = @Schema(type = "string", example = "Credit risk datasets")))
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public ConversationEntity create(@RequestBody(required = false) String title) {
+    public ConversationResponse create(@RequestBody(required = false) String title) {
         log.info("action=CREATE_CONVERSATION");
         UUID tenantId = UUID.fromString(TenantContextHolder.get());
-        ConversationEntity conv = new ConversationEntity();
-        conv.setTenantId(tenantId);
-        conv.setTitle(title != null ? title : "New conversation");
-        return conversationRepository.save(conv);
+        return conversationService.create(tenantId, title);
     }
 
     @Operation(summary = "Get a conversation",
@@ -77,11 +74,10 @@ public class ConversationsController {
         @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
     })
     @GetMapping("/{id}")
-    public ConversationEntity get(
+    public ConversationResponse get(
             @Parameter(description = "Conversation UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
             @PathVariable UUID id) {
-        return conversationRepository.findById(id)
-            .orElseThrow(() -> new java.util.NoSuchElementException("Conversation not found: " + id));
+        return conversationService.get(id);
     }
 
     @Operation(summary = "Send a message and stream the AI response",
