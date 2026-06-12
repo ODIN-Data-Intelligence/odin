@@ -1,13 +1,16 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
+import StarIcon from '@mui/icons-material/Star';
+import StarBorderIcon from '@mui/icons-material/StarBorder';
 import { bookmarkApi } from '@datacatalog/shared';
 
 interface BookmarkButtonProps {
   datasetId: string;
   datasetTitle: string;
-  className?: string;
 }
 
-export default function BookmarkButton({ datasetId, datasetTitle, className = '' }: BookmarkButtonProps) {
+export default function BookmarkButton({ datasetId, datasetTitle }: BookmarkButtonProps) {
   const qc = useQueryClient();
 
   const { data: bookmark, isLoading } = useQuery({
@@ -43,17 +46,17 @@ export default function BookmarkButton({ datasetId, datasetTitle, className = ''
   }
 
   return (
-    <button
-      onClick={handleClick}
-      disabled={isBusy}
-      title={isBookmarked ? 'Remove bookmark' : 'Bookmark this dataset'}
-      className={`flex-shrink-0 text-lg leading-none transition-colors focus:outline-none ${
-        isBookmarked
-          ? 'text-amber-400 hover:text-amber-500'
-          : 'text-gray-300 hover:text-amber-400'
-      } ${isBusy ? 'opacity-50 cursor-wait' : 'cursor-pointer'} ${className}`}
-    >
-      {isBookmarked ? '★' : '☆'}
-    </button>
+    <Tooltip title={isBookmarked ? 'Remove bookmark' : 'Bookmark this dataset'}>
+      <span>
+        <IconButton
+          size="small"
+          onClick={handleClick}
+          disabled={isBusy}
+          color={isBookmarked ? 'warning' : 'default'}
+        >
+          {isBookmarked ? <StarIcon fontSize="small" /> : <StarBorderIcon fontSize="small" />}
+        </IconButton>
+      </span>
+    </Tooltip>
   );
 }

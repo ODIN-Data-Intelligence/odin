@@ -5,6 +5,11 @@ import ReactFlow, {
   type Node, type Edge, type NodeMouseHandler, type NodeProps,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
+import Box from '@mui/material/Box';
+import Dialog from '@mui/material/Dialog';
+import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
+import CloseIcon from '@mui/icons-material/Close';
 import { logicalModelApi, logicalElementApi } from '@datacatalog/shared';
 import type { LineageGraph as LineageGraphData } from '@datacatalog/shared';
 
@@ -85,8 +90,6 @@ function DatasetNode({ id, data, sourcePosition = Position.Right, targetPosition
               <div
                 key={el.id}
                 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 9, padding: '1.5px 0', gap: 6, cursor: 'default' }}
-                onMouseEnter={() => (data.onHighlightNode as ((nid: string | null) => void) | undefined)?.(id)}
-                onMouseLeave={() => (data.onHighlightNode as ((nid: string | null) => void) | undefined)?.(null)}
               >
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{el.name}</span>
                 {el.logicalType && <span style={{ color: '#94a3b8', flexShrink: 0, fontSize: 8 }}>{el.logicalType}</span>}
@@ -241,34 +244,32 @@ export default function LineageGraph({ graph, onNodeDoubleClick, onNavigate }: P
 
   return (
     <>
-      <div className="relative w-full h-full">
-        <button
+      <Box sx={{ position: 'relative', width: '100%', height: '100%' }}>
+        <Box
+          component="button"
           onClick={() => setMaximized(true)}
           title="Maximize"
-          className="absolute top-2 right-2 z-10 bg-white border border-gray-200 rounded px-1.5 py-0.5 text-gray-500 hover:text-gray-800 shadow-sm text-xs"
+          sx={{
+            position: 'absolute', top: 8, right: 8, zIndex: 10,
+            bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 0.5,
+            px: 0.75, py: 0.25, cursor: 'pointer', typography: 'caption', color: 'text.secondary',
+            boxShadow: 1, '&:hover': { color: 'text.primary' },
+          }}
         >
           ⤢
-        </button>
+        </Box>
         <FlowCanvas nodes={nodes} edges={edges} onNodeDoubleClick={onNodeDoubleClick} />
-      </div>
+      </Box>
 
-      {maximized && (
-        <div className="fixed inset-0 z-50 bg-white flex flex-col">
-          <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 bg-gray-50 flex-shrink-0">
-            <span className="text-sm font-medium text-gray-700">Lineage Graph</span>
-            <button
-              onClick={() => setMaximized(false)}
-              className="text-gray-400 hover:text-gray-700 text-xl leading-none px-1"
-              title="Close"
-            >
-              ✕
-            </button>
-          </div>
-          <div className="flex-1 min-h-0">
-            <FlowCanvas nodes={nodes} edges={edges} onNodeDoubleClick={onNodeDoubleClick} />
-          </div>
-        </div>
-      )}
+      <Dialog open={maximized} onClose={() => setMaximized(false)} maxWidth={false} fullScreen PaperProps={{ sx: { display: 'flex', flexDirection: 'column' } }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, py: 1, borderBottom: 1, borderColor: 'divider', bgcolor: 'grey.50', flexShrink: 0 }}>
+          <Typography variant="body2" fontWeight={600}>Lineage Graph</Typography>
+          <IconButton size="small" onClick={() => setMaximized(false)} title="Close"><CloseIcon fontSize="small" /></IconButton>
+        </Box>
+        <Box sx={{ flex: 1, minHeight: 0 }}>
+          <FlowCanvas nodes={nodes} edges={edges} onNodeDoubleClick={onNodeDoubleClick} />
+        </Box>
+      </Dialog>
     </>
   );
 }

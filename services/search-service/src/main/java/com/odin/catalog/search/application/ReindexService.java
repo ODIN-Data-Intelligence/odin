@@ -115,12 +115,19 @@ public class ReindexService {
         }
 
         int distCount = 0;
+        List<String> distributionFormats = new ArrayList<>();
         try {
-            ResponseEntity<List<?>> distResp = restTemplate.exchange(
+            ResponseEntity<List<Map<String, Object>>> distResp = restTemplate.exchange(
                 inventoryServiceUrl + "/api/v1/datasets/" + id + "/distributions",
                 HttpMethod.GET, new HttpEntity<>(hdrs),
-                new ParameterizedTypeReference<List<?>>() {});
-            if (distResp.getBody() != null) distCount = distResp.getBody().size();
+                new ParameterizedTypeReference<List<Map<String, Object>>>() {});
+            if (distResp.getBody() != null) {
+                distCount = distResp.getBody().size();
+                for (Map<String, Object> dist : distResp.getBody()) {
+                    String fmt = (String) dist.get("format");
+                    if (fmt != null && !distributionFormats.contains(fmt)) distributionFormats.add(fmt);
+                }
+            }
         } catch (Exception e) {
             log.debug("action=FETCH_DISTRIBUTIONS_FAILED datasetId={} error={}", id, e.getMessage());
         }
@@ -140,6 +147,7 @@ public class ReindexService {
             (String) ds.get("accrualPeriodicity"),
             (String) ds.get("sourceUri"), null, null,
             Boolean.TRUE.equals(deleted), false, hasLogicalModel, distCount,
+            distributionFormats,
             elemNames, List.of(), logicalTypes, vocabIris, vocabLabels, vocabTypes, fiboConcepts,
             new ArrayList<>(semanticTypes),
             List.of(), List.of(), null
@@ -266,6 +274,7 @@ public class ReindexService {
                     (String) dp.get("lifecycleStatus"), null, null,
                     null, null, null, null, null, null,
                     Boolean.TRUE.equals(deleted), false, false, 0,
+                    List.of(),
                     List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
                     List.of(), List.of(), null
                 );
@@ -293,6 +302,7 @@ public class ReindexService {
             (String) dist.get("format"),
             (String) dist.get("mediaType"),
             null, null, null, null, false, false, false, 0,
+            null,
             List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
             List.of(), List.of(), datasetId
         );

@@ -20,6 +20,7 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -57,9 +58,12 @@ public class CatalogChangeConsumer {
                 return;
             }
 
-            CatalogSearchDocument doc = buildDatasetDocument(payload);
+            CatalogSearchDocument doc = buildDatasetDocument(payload, List.of());
             indexService.index(doc);
-            syncDistributionsForDataset(payload.datasetId(), payload.tenantId());
+            List<String> distFormats = syncDistributionsForDataset(payload.datasetId(), payload.tenantId());
+            if (!distFormats.isEmpty()) {
+                indexService.index(buildDatasetDocument(payload, distFormats));
+            }
             log.info("action=EVENT_PROCESSED topic={} changeType={} entityId={} elapsed={}ms",
                 record.topic(), payload.changeType(), payload.datasetId(), System.currentTimeMillis() - t);
         } catch (Exception e) {
@@ -97,7 +101,7 @@ public class CatalogChangeConsumer {
         }
     }
 
-    private CatalogSearchDocument buildDatasetDocument(DatasetChangedPayload payload) {
+    private CatalogSearchDocument buildDatasetDocument(DatasetChangedPayload payload, List<String> distributionFormats) {
         var ds = payload.dataset();
         List<String> elemNames = orEmpty(payload.logicalElementNames());
         boolean hasLogicalModel = !elemNames.isEmpty();
@@ -112,6 +116,7 @@ public class CatalogChangeConsumer {
             null, null, ds != null ? ds.accrualPeriodicity() : null,
             ds != null ? ds.resource().sourceUri() : null,
             null, null, false, false, hasLogicalModel, 0,
+            distributionFormats,
             elemNames,
             List.of(),
             orEmpty(payload.logicalTypes()),
@@ -141,13 +146,15 @@ public class CatalogChangeConsumer {
             null, dp != null ? dp.resource().license() : null,
             null, null, null, null, null, null,
             false, false, false, 0,
+            List.of(),
             List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
             List.of(), List.of(), null
         );
     }
 
     @SuppressWarnings("unchecked")
-    private void syncDistributionsForDataset(String datasetId, String tenantId) {
+    private List<String> syncDistributionsForDataset(String datasetId, String tenantId) {
+        List<String> formats = new ArrayList<>();
         try {
             HttpHeaders hdrs = new HttpHeaders();
             hdrs.set("X-API-Key", "dev-reindex");
@@ -160,11 +167,14 @@ public class CatalogChangeConsumer {
             if (distributions != null) {
                 for (Map<String, Object> dist : distributions) {
                     indexService.index(buildDistributionDocument(dist, tenantId));
+                    String fmt = (String) dist.get("format");
+                    if (fmt != null && !formats.contains(fmt)) formats.add(fmt);
                 }
             }
         } catch (Exception e) {
             log.debug("Failed to sync distributions for dataset {}: {}", datasetId, e.getMessage());
         }
+        return formats;
     }
 
     private void deleteDistributionsForDataset(String datasetId, String tenantId) {
@@ -190,6 +200,7 @@ public class CatalogChangeConsumer {
             (String) dist.get("format"),
             (String) dist.get("mediaType"),
             null, null, null, null, false, false, false, 0,
+            null,
             List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
             List.of(), List.of(), (String) dist.get("datasetId")
         );

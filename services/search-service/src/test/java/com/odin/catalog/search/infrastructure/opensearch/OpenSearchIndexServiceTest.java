@@ -53,7 +53,7 @@ class OpenSearchIndexServiceTest {
     void search_internalFailure_returnsEmptyResultWithEmptyFacets() {
         // client.search() returns null → NPE caught by service → empty result
         var result = service.search("orders", null, null, null, null,
-                null, "tenant-1", 0, 20, null, null, null, null, null);
+                null, null, "tenant-1", 0, 20, null, null, null, null, null);
 
         assertThat(result.documents()).isEmpty();
         assertThat(result.totalHits()).isZero();
@@ -66,7 +66,7 @@ class OpenSearchIndexServiceTest {
     @Test
     void search_nullQueryAndNoFilters_gracefullyReturnsEmpty() {
         var result = service.search(null, null, null, null, null,
-                null, null, 0, 10, null, null, null, null, null);
+                null, null, null, 0, 10, null, null, null, null, null);
 
         assertThat(result.documents()).isEmpty();
         assertThat(result.facets()).isNotNull();
@@ -74,7 +74,7 @@ class OpenSearchIndexServiceTest {
 
     @Test
     void search_allFiltersProvided_gracefullyReturnsEmpty() {
-        var result = service.search("q", "DATASET", "domain-1", "Consume", "CSV",
+        var result = service.search("q", "DATASET", null, "domain-1", "Consume", "CSV",
                 true, "tenant-1", 0, 10, "risk", "Finance", "Monetary Amount", "financial", "Customer");
 
         assertThat(result.documents()).isEmpty();
@@ -97,6 +97,7 @@ class OpenSearchIndexServiceTest {
             List.of(), List.of(), null, null, null, null,
             null, null, null, null, null, null, null, null, null,
             false, false, false, 0,
+            null,
             List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
             List.of(), List.of(), null
         );

@@ -1,27 +1,35 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { userApi } from '@datacatalog/shared';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import Button from '@mui/material/Button';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Alert from '@mui/material/Alert';
+import Skeleton from '@mui/material/Skeleton';
+import { userApi, PageHeader } from '@datacatalog/shared';
 import type { User } from '@datacatalog/shared';
-import { PageHeader } from '@datacatalog/shared';
-import { Button } from '@datacatalog/shared';
-import { Badge } from '@datacatalog/shared';
 import UserInviteForm from '../../components/admin/UserInviteForm';
 
-const ROLE_STYLES: Record<string, string> = {
-  'administrator':    'bg-red-100 text-red-700',
-  'data-governance':  'bg-purple-100 text-purple-700',
-  'data-owner':       'bg-blue-100 text-blue-700',
-  'data-steward':     'bg-green-100 text-green-700',
+const ROLE_COLORS: Record<string, 'error' | 'secondary' | 'primary' | 'success'> = {
+  'administrator':   'error',
+  'data-governance': 'secondary',
+  'data-owner':      'primary',
+  'data-steward':    'success',
 };
 
 function RoleBadge({ role }: { role: string }) {
-  const className = ROLE_STYLES[role] ?? 'bg-gray-100 text-gray-600';
   const label = role.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-  return <Badge label={label} className={className} />;
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  return <Chip label={label} color={ROLE_COLORS[role] ?? 'default'} size="small" sx={{ height: 18, fontSize: 11 }} />;
 }
 
 export default function UsersPage() {
@@ -41,141 +49,123 @@ export default function UsersPage() {
 
   const deactivateMut = useMutation({
     mutationFn: (id: string) => userApi.deactivate(id),
-    onSuccess: () => {
-      setConfirmDeactivate(null);
-      qc.invalidateQueries({ queryKey: ['users'] });
-    },
+    onSuccess: () => { setConfirmDeactivate(null); qc.invalidateQueries({ queryKey: ['users'] }); },
   });
 
   const active   = users.filter(u => u.active);
   const inactive = users.filter(u => !u.active);
 
   return (
-    <div>
+    <Box>
       <PageHeader
         title="Users"
         description={`${active.length} active${inactive.length > 0 ? `, ${inactive.length} inactive` : ''}`}
-        actions={<Button onClick={() => setShowInvite(true)}>Invite User</Button>}
+        actions={
+          <Button variant="contained" size="small" onClick={() => setShowInvite(true)} sx={{ textTransform: 'none' }}>
+            Invite User
+          </Button>
+        }
       />
 
-      <div className="p-6 space-y-6">
+      <Box sx={{ p: 3 }}>
         {isLoading && (
-          <p className="text-sm text-gray-400 text-center py-8">Loading users…</p>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {[...Array(4)].map((_, i) => <Skeleton key={i} height={52} variant="rounded" />)}
+          </Box>
         )}
-        {isError && (
-          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-4 py-3">
-            Failed to load users.
-          </p>
-        )}
+        {isError && <Alert severity="error">Failed to load users.</Alert>}
 
         {!isLoading && !isError && (
-          <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Roles</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Invited</th>
-                  <th className="px-5 py-3" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
+          <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow sx={{ bgcolor: 'grey.50' }}>
+                  <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>User</TableCell>
+                  <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Roles</TableCell>
+                  <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Status</TableCell>
+                  <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Invited</TableCell>
+                  <TableCell />
+                </TableRow>
+              </TableHead>
+              <TableBody>
                 {users.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="px-5 py-10 text-center text-gray-400">
+                  <TableRow>
+                    <TableCell colSpan={5} sx={{ textAlign: 'center', py: 6, color: 'text.disabled' }}>
                       No users yet. Invite your first team member.
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 )}
                 {users.map(user => (
-                  <tr key={user.id} className={`hover:bg-gray-50 ${!user.active ? 'opacity-60' : ''}`}>
-                    <td className="px-5 py-3.5">
-                      <p className="font-medium text-gray-900">
+                  <TableRow key={user.id} sx={{ opacity: user.active ? 1 : 0.6 }} hover>
+                    <TableCell>
+                      <Typography variant="body2" fontWeight={600}>
                         {user.firstName || user.lastName
                           ? `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim()
                           : '—'}
-                      </p>
-                      <p className="text-xs text-gray-500">{user.email}</p>
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <div className="flex flex-wrap gap-1">
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">{user.email}</Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                         {user.roles.length > 0
                           ? user.roles.map(r => <RoleBadge key={r} role={r} />)
-                          : <span className="text-gray-400 text-xs">No roles</span>}
-                      </div>
-                    </td>
-                    <td className="px-5 py-3.5">
-                      {user.active
-                        ? <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700">
-                            <span className="h-1.5 w-1.5 rounded-full bg-green-500 inline-block" />
-                            Active
-                          </span>
-                        : <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400">
-                            <span className="h-1.5 w-1.5 rounded-full bg-gray-300 inline-block" />
-                            Inactive
-                          </span>}
-                    </td>
-                    <td className="px-5 py-3.5 text-xs text-gray-500">
-                      {user.createdAt ? formatDate(user.createdAt) : '—'}
-                    </td>
-                    <td className="px-5 py-3.5 text-right">
+                          : <Typography variant="caption" color="text.disabled">No roles</Typography>}
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                        <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: user.active ? 'success.main' : 'grey.400' }} />
+                        <Typography variant="caption" color={user.active ? 'success.main' : 'text.disabled'} fontWeight={500}>
+                          {user.active ? 'Active' : 'Inactive'}
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="caption" color="text.secondary">
+                        {user.createdAt ? new Date(user.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={{ textAlign: 'right' }}>
                       {user.active ? (
-                        <button
-                          onClick={() => setConfirmDeactivate(user)}
-                          className="text-xs text-red-500 hover:text-red-700"
-                        >
+                        <Button size="small" color="error" sx={{ textTransform: 'none', minWidth: 'auto', fontSize: 12 }} onClick={() => setConfirmDeactivate(user)}>
                           Deactivate
-                        </button>
+                        </Button>
                       ) : (
-                        <button
-                          onClick={() => activateMut.mutate(user.id)}
-                          disabled={activateMut.isPending}
-                          className="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-50"
-                        >
+                        <Button size="small" color="primary" sx={{ textTransform: 'none', minWidth: 'auto', fontSize: 12 }} onClick={() => activateMut.mutate(user.id)} disabled={activateMut.isPending}>
                           {activateMut.isPending ? 'Activating…' : 'Activate'}
-                        </button>
+                        </Button>
                       )}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </TableBody>
+            </Table>
+          </Paper>
         )}
-      </div>
+      </Box>
 
       {showInvite && <UserInviteForm onClose={() => setShowInvite(false)} />}
 
-      {confirmDeactivate && (
-        <div
-          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
-          onClick={e => e.target === e.currentTarget && setConfirmDeactivate(null)}
-        >
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm mx-4 p-6">
-            <h2 className="text-base font-semibold text-gray-900 mb-2">Deactivate user?</h2>
-            <p className="text-sm text-gray-600 mb-5">
-              <strong>{confirmDeactivate.email}</strong> will lose access immediately. You can
-              reactivate their account at any time.
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setConfirmDeactivate(null)}
-                className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => deactivateMut.mutate(confirmDeactivate.id)}
-                disabled={deactivateMut.isPending}
-                className="px-4 py-2 text-sm text-white bg-red-600 rounded hover:bg-red-700 disabled:opacity-50"
-              >
-                {deactivateMut.isPending ? 'Deactivating…' : 'Deactivate'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+      <Dialog open={!!confirmDeactivate} onClose={() => setConfirmDeactivate(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Deactivate user?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            <strong>{confirmDeactivate?.email}</strong> will lose access immediately. You can reactivate their account at any time.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDeactivate(null)} sx={{ textTransform: 'none' }}>Cancel</Button>
+          <Button
+            variant="contained"
+            color="error"
+            disabled={deactivateMut.isPending}
+            onClick={() => confirmDeactivate && deactivateMut.mutate(confirmDeactivate.id)}
+            sx={{ textTransform: 'none' }}
+          >
+            {deactivateMut.isPending ? 'Deactivating…' : 'Deactivate'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
   );
 }

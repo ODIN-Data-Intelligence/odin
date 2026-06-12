@@ -10,6 +10,7 @@ export interface SearchResult {
   lifecycleStatus?: string;
   format?: string;
   mediaType?: string;
+  distributionFormats?: string[];
   sourceUri?: string;
   hasLineage?: boolean;
   hasLogicalModel?: boolean;
@@ -50,6 +51,7 @@ export interface SearchResponse {
 export interface SearchRequest {
   q?: string;
   type?: string;
+  types?: string;
   domain?: string;
   lifecycleStatus?: string;
   format?: string;

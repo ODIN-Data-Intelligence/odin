@@ -1,10 +1,20 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import TextField from '@mui/material/TextField';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Alert from '@mui/material/Alert';
+import Paper from '@mui/material/Paper';
+import Chip from '@mui/material/Chip';
 import { userApi, datasetApi } from '@datacatalog/shared';
 import type { OwnershipProposal } from '@datacatalog/shared';
-import { Button } from '@datacatalog/shared';
 
-interface OwnershipTransferModalProps {
+interface Props {
   datasetId: string;
   title?: string;
   description?: string;
@@ -20,7 +30,7 @@ export default function OwnershipTransferModal({
   submitLabel = 'Propose Transfer',
   onSuccess,
   onCancel,
-}: OwnershipTransferModalProps) {
+}: Props) {
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState('');
 
@@ -48,65 +58,58 @@ export default function OwnershipTransferModal({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100">
-          <h2 className="text-base font-semibold text-gray-900">{title}</h2>
-          <p className="text-xs text-gray-500 mt-0.5">{description}</p>
-        </div>
-        <div className="p-5 space-y-3">
-          <input
-            type="text"
-            placeholder="Search by name or email…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            autoFocus
-          />
-          <div className="max-h-56 overflow-y-auto divide-y divide-gray-100 border border-gray-200 rounded-lg">
-            {isLoading && (
-              <p className="text-sm text-gray-400 p-3">Loading users…</p>
-            )}
-            {!isLoading && filtered.length === 0 && (
-              <p className="text-sm text-gray-400 p-3">No users found.</p>
-            )}
-            {filtered.map(u => (
-              <button
-                key={u.id}
-                onClick={() => setSelectedId(u.id)}
-                className={`w-full text-left px-3 py-2.5 hover:bg-gray-50 transition-colors ${
-                  selectedId === u.id ? 'bg-blue-50' : ''
-                }`}
-              >
-                <p className="text-sm font-medium text-gray-900">
-                  {u.firstName && u.lastName ? `${u.firstName} ${u.lastName}` : u.email}
-                </p>
-                {(u.firstName || u.lastName) && (
-                  <p className="text-xs text-gray-500">{u.email}</p>
-                )}
-                {u.roles.includes('DATA_OWNER') && (
-                  <span className="text-xs text-purple-600 font-medium">DATA_OWNER</span>
-                )}
-              </button>
-            ))}
-          </div>
-          {mutation.isError && (
-            <p className="text-xs text-red-600">Failed to submit proposal. Please try again.</p>
+    <Dialog open onClose={onCancel} maxWidth="sm" fullWidth>
+      <DialogTitle>
+        {title}
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>{description}</Typography>
+      </DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: '8px !important' }}>
+        <TextField
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search by name or email…"
+          size="small"
+          fullWidth
+          autoFocus
+        />
+        <Paper variant="outlined" sx={{ maxHeight: 224, overflowY: 'auto' }}>
+          {isLoading && <Typography variant="body2" color="text.secondary" sx={{ p: 1.5 }}>Loading users…</Typography>}
+          {!isLoading && filtered.length === 0 && (
+            <Typography variant="body2" color="text.secondary" sx={{ p: 1.5 }}>No users found.</Typography>
           )}
-        </div>
-        <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-end gap-3">
-          <Button variant="secondary" size="sm" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button
-            size="sm"
-            disabled={!selectedId || mutation.isPending}
-            onClick={() => mutation.mutate()}
-          >
-            {mutation.isPending ? 'Submitting…' : submitLabel}
-          </Button>
-        </div>
-      </div>
-    </div>
+          {filtered.map(u => {
+            const displayName = u.firstName && u.lastName ? `${u.firstName} ${u.lastName}` : null;
+            return (
+              <Box
+                key={u.id}
+                component="button"
+                onClick={() => setSelectedId(u.id)}
+                sx={{
+                  width: '100%', textAlign: 'left', px: 1.5, py: 1.25,
+                  bgcolor: selectedId === u.id ? 'primary.50' : 'transparent',
+                  border: 'none', cursor: 'pointer', display: 'block',
+                  borderBottom: 1, borderColor: 'divider',
+                  '&:hover': { bgcolor: selectedId === u.id ? 'primary.50' : 'grey.50' },
+                  '&:last-child': { borderBottom: 'none' },
+                }}
+              >
+                <Typography variant="body2" fontWeight={600}>{displayName ?? u.email}</Typography>
+                {displayName && <Typography variant="caption" color="text.secondary">{u.email}</Typography>}
+                {u.roles.includes('DATA_OWNER') && (
+                  <Chip label="DATA_OWNER" size="small" color="secondary" sx={{ ml: 0.5, height: 16, fontSize: 10 }} />
+                )}
+              </Box>
+            );
+          })}
+        </Paper>
+        {mutation.isError && <Alert severity="error">Failed to submit proposal. Please try again.</Alert>}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onCancel} sx={{ textTransform: 'none' }}>Cancel</Button>
+        <Button variant="contained" disabled={!selectedId || mutation.isPending} onClick={() => mutation.mutate()} sx={{ textTransform: 'none' }}>
+          {mutation.isPending ? 'Submitting…' : submitLabel}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }

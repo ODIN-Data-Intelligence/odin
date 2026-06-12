@@ -1,4 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 import { datasetApi, TermsOfUseDisplay } from '@datacatalog/shared';
 
 export default function TermsOfUseTab({ datasetId }: { datasetId: string }) {
@@ -9,12 +11,16 @@ export default function TermsOfUseTab({ datasetId }: { datasetId: string }) {
     staleTime: 60_000,
   });
 
-  if (isLoading) return <div className="p-4 text-sm text-gray-400">Loading terms of use…</div>;
-  if (!terms) return <div className="p-4 text-sm text-gray-500">Terms of use could not be loaded.</div>;
+  if (isLoading) {
+    return <Typography variant="body2" color="text.disabled" sx={{ p: 2 }}>Loading terms of use…</Typography>;
+  }
+  if (!terms) {
+    return <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>Terms of use could not be loaded.</Typography>;
+  }
 
   return (
-    <div className="p-4">
+    <Box>
       <TermsOfUseDisplay terms={terms} />
-    </div>
+    </Box>
   );
 }

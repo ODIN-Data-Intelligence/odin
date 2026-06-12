@@ -1,21 +1,35 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { logicalModelApi, logicalElementApi, preferredLabel, useIriTranslations, resolveLabel } from '@datacatalog/shared';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import Alert from '@mui/material/Alert';
+import CircularProgress from '@mui/material/CircularProgress';
+import Tooltip from '@mui/material/Tooltip';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import { logicalModelApi, logicalElementApi, preferredLabel, useIriTranslations, resolveLabel, ClassificationBadge } from '@datacatalog/shared';
 import type { LogicalModel } from '@datacatalog/shared';
-import { Button } from '@datacatalog/shared';
-import { Badge } from '@datacatalog/shared';
-import { ClassificationBadge } from '@datacatalog/shared';
 import ClassificationRecommendationRow from './ClassificationRecommendationRow';
 import DescriptionRecommendationRow from './DescriptionRecommendationRow';
 import VocabRecommendationRow from './VocabRecommendationRow';
 import PiiRecommendationRow from './PiiRecommendationRow';
 
-const MATCH_TYPE_COLORS: Record<string, string> = {
-  exactMatch: 'bg-green-100 text-green-700',
-  closeMatch: 'bg-blue-100 text-blue-700',
-  relatedMatch: 'bg-purple-100 text-purple-700',
-  broadMatch: 'bg-orange-100 text-orange-700',
-  narrowMatch: 'bg-yellow-100 text-yellow-700',
+const MATCH_TYPE_COLORS: Record<string, 'success' | 'primary' | 'secondary' | 'warning' | 'info'> = {
+  exactMatch: 'success',
+  closeMatch: 'primary',
+  relatedMatch: 'secondary',
+  broadMatch: 'warning',
+  narrowMatch: 'info',
 };
 
 const JOB_POLL_INTERVAL_MS = 3_000;
@@ -24,6 +38,21 @@ interface Props {
   datasetId: string;
   models: LogicalModel[];
   canAction: boolean;
+}
+
+function SparkButton({ onClick, disabled, loading, title, color = 'primary' }: {
+  onClick: () => void; disabled?: boolean; loading?: boolean; title: string;
+  color?: 'primary' | 'error' | 'secondary';
+}) {
+  return (
+    <Tooltip title={title}>
+      <span>
+        <IconButton size="small" onClick={onClick} disabled={disabled || loading} color={color} sx={{ p: 0.25 }}>
+          {loading ? <CircularProgress size={12} color="inherit" /> : <AutoAwesomeIcon sx={{ fontSize: 13 }} />}
+        </IconButton>
+      </span>
+    </Tooltip>
+  );
 }
 
 export default function LogicalModelEditor({ datasetId, models, canAction }: Props) {
@@ -35,7 +64,6 @@ export default function LogicalModelEditor({ datasetId, models, canAction }: Pro
   const [describingElementId, setDescribingElementId] = useState<string | null>(null);
   const [describeError, setDescribeError] = useState<string | null>(null);
   const [bulkDescJobId, setBulkDescJobId] = useState<string | null>(null);
-  // jobId returned by the 202 — non-null while a bulk job is running.
   const [bulkJobId, setBulkJobId] = useState<string | null>(null);
   const [bulkVocabJobId, setBulkVocabJobId] = useState<string | null>(null);
   const [vocabRecommendError, setVocabRecommendError] = useState<string | null>(null);
@@ -48,12 +76,8 @@ export default function LogicalModelEditor({ datasetId, models, canAction }: Pro
     if (selectedModelId === null && models.length > 0) setSelectedModelId(models[0].id);
   }, [models, selectedModelId]);
 
-  // Clear job state when the user switches models.
   useEffect(() => {
-    setBulkJobId(null);
-    setBulkDescJobId(null);
-    setBulkVocabJobId(null);
-    setBulkPiiJobId(null);
+    setBulkJobId(null); setBulkDescJobId(null); setBulkVocabJobId(null); setBulkPiiJobId(null);
   }, [selectedModelId]);
 
   const { data: elements = [] } = useQuery({
@@ -62,14 +86,9 @@ export default function LogicalModelEditor({ datasetId, models, canAction }: Pro
     enabled: !!selectedModelId,
   });
 
-  // Translate IRIs that have no stored conceptLabel or conceptDefinition
-  const unmappedIris = elements
-    .flatMap(el => el.vocabMappings ?? [])
-    .filter(m => !m.conceptLabel && !m.conceptDefinition)
-    .map(m => m.conceptIri);
+  const unmappedIris = elements.flatMap(el => el.vocabMappings ?? []).filter(m => !m.conceptLabel && !m.conceptDefinition).map(m => m.conceptIri);
   const vocabTranslations = useIriTranslations(unmappedIris);
 
-  // Poll the job status endpoint while a bulk job is in flight.
   const { data: bulkJob } = useQuery({
     queryKey: ['recommendation-job', bulkJobId],
     queryFn: () => logicalElementApi.getRecommendationJob(bulkJobId!),
@@ -77,21 +96,14 @@ export default function LogicalModelEditor({ datasetId, models, canAction }: Pro
     refetchInterval: bulkJobId ? JOB_POLL_INTERVAL_MS : false,
   });
 
-  // React to job status transitions.
   useEffect(() => {
     if (!bulkJob) return;
-    if (bulkJob.status === 'COMPLETED') {
-      setBulkJobId(null);
-      qc.invalidateQueries({ queryKey: ['logical-elements', selectedModelId] });
-    } else if (bulkJob.status === 'FAILED') {
-      setBulkJobId(null);
-      setRecommendError(bulkJob.error ?? 'Bulk recommendation failed.');
-    }
+    if (bulkJob.status === 'COMPLETED') { setBulkJobId(null); qc.invalidateQueries({ queryKey: ['logical-elements', selectedModelId] }); }
+    else if (bulkJob.status === 'FAILED') { setBulkJobId(null); setRecommendError(bulkJob.error ?? 'Bulk recommendation failed.'); }
   }, [bulkJob, selectedModelId, qc]);
 
   const isJobRunning = !!bulkJobId && (bulkJob?.status === 'PENDING' || bulkJob?.status === 'RUNNING');
 
-  // Poll bulk description job while in flight.
   const { data: bulkDescJob } = useQuery({
     queryKey: ['description-recommendation-job', bulkDescJobId],
     queryFn: () => logicalElementApi.getDescriptionRecommendationJob(bulkDescJobId!),
@@ -101,18 +113,12 @@ export default function LogicalModelEditor({ datasetId, models, canAction }: Pro
 
   useEffect(() => {
     if (!bulkDescJob) return;
-    if (bulkDescJob.status === 'COMPLETED') {
-      setBulkDescJobId(null);
-      qc.invalidateQueries({ queryKey: ['logical-elements', selectedModelId] });
-    } else if (bulkDescJob.status === 'FAILED') {
-      setBulkDescJobId(null);
-      setDescribeError(bulkDescJob.error ?? 'Bulk description recommendation failed.');
-    }
+    if (bulkDescJob.status === 'COMPLETED') { setBulkDescJobId(null); qc.invalidateQueries({ queryKey: ['logical-elements', selectedModelId] }); }
+    else if (bulkDescJob.status === 'FAILED') { setBulkDescJobId(null); setDescribeError(bulkDescJob.error ?? 'Bulk description recommendation failed.'); }
   }, [bulkDescJob, selectedModelId, qc]);
 
   const isDescJobRunning = !!bulkDescJobId && (bulkDescJob?.status === 'PENDING' || bulkDescJob?.status === 'RUNNING');
 
-  // Poll bulk vocab job while in flight.
   const { data: bulkVocabJob } = useQuery({
     queryKey: ['vocab-recommendation-job', bulkVocabJobId],
     queryFn: () => logicalElementApi.getVocabRecommendationJob(bulkVocabJobId!),
@@ -122,18 +128,12 @@ export default function LogicalModelEditor({ datasetId, models, canAction }: Pro
 
   useEffect(() => {
     if (!bulkVocabJob) return;
-    if (bulkVocabJob.status === 'COMPLETED') {
-      setBulkVocabJobId(null);
-      qc.invalidateQueries({ queryKey: ['logical-elements', selectedModelId] });
-    } else if (bulkVocabJob.status === 'FAILED') {
-      setBulkVocabJobId(null);
-      setVocabRecommendError(bulkVocabJob.error ?? 'Bulk vocabulary recommendation failed.');
-    }
+    if (bulkVocabJob.status === 'COMPLETED') { setBulkVocabJobId(null); qc.invalidateQueries({ queryKey: ['logical-elements', selectedModelId] }); }
+    else if (bulkVocabJob.status === 'FAILED') { setBulkVocabJobId(null); setVocabRecommendError(bulkVocabJob.error ?? 'Bulk vocabulary recommendation failed.'); }
   }, [bulkVocabJob, selectedModelId, qc]);
 
   const isVocabJobRunning = !!bulkVocabJobId && (bulkVocabJob?.status === 'PENDING' || bulkVocabJob?.status === 'RUNNING');
 
-  // Poll bulk PII job while in flight.
   const { data: bulkPiiJob } = useQuery({
     queryKey: ['pii-recommendation-job', bulkPiiJobId],
     queryFn: () => logicalElementApi.getPiiRecommendationJob(bulkPiiJobId!),
@@ -143,13 +143,8 @@ export default function LogicalModelEditor({ datasetId, models, canAction }: Pro
 
   useEffect(() => {
     if (!bulkPiiJob) return;
-    if (bulkPiiJob.status === 'COMPLETED') {
-      setBulkPiiJobId(null);
-      qc.invalidateQueries({ queryKey: ['logical-elements', selectedModelId] });
-    } else if (bulkPiiJob.status === 'FAILED') {
-      setBulkPiiJobId(null);
-      setPiiRecommendError(bulkPiiJob.error ?? 'Bulk PII recommendation failed.');
-    }
+    if (bulkPiiJob.status === 'COMPLETED') { setBulkPiiJobId(null); qc.invalidateQueries({ queryKey: ['logical-elements', selectedModelId] }); }
+    else if (bulkPiiJob.status === 'FAILED') { setBulkPiiJobId(null); setPiiRecommendError(bulkPiiJob.error ?? 'Bulk PII recommendation failed.'); }
   }, [bulkPiiJob, selectedModelId, qc]);
 
   const isPiiJobRunning = !!bulkPiiJobId && (bulkPiiJob?.status === 'PENDING' || bulkPiiJob?.status === 'RUNNING');
@@ -166,89 +161,49 @@ export default function LogicalModelEditor({ datasetId, models, canAction }: Pro
 
   const recommendAllMut = useMutation({
     mutationFn: (modelId: string) => logicalElementApi.recommendModelClassifications(modelId),
-    onSuccess: (job) => {
-      setRecommendError(null);
-      setBulkJobId(job.jobId);
-    },
+    onSuccess: (job) => { setRecommendError(null); setBulkJobId(job.jobId); },
     onError: () => setRecommendError('Recommendation service is unavailable. Please try again later.'),
   });
 
   const recommendAllDescMut = useMutation({
     mutationFn: (modelId: string) => logicalElementApi.recommendModelDescriptions(modelId),
-    onSuccess: (job) => {
-      setDescribeError(null);
-      setBulkDescJobId(job.jobId);
-    },
+    onSuccess: (job) => { setDescribeError(null); setBulkDescJobId(job.jobId); },
     onError: () => setDescribeError('Description recommendation service is unavailable. Please try again later.'),
   });
 
   const recommendAllVocabMut = useMutation({
     mutationFn: (modelId: string) => logicalElementApi.recommendModelVocabConcepts(modelId),
-    onSuccess: (job) => {
-      setVocabRecommendError(null);
-      setBulkVocabJobId(job.jobId);
-    },
+    onSuccess: (job) => { setVocabRecommendError(null); setBulkVocabJobId(job.jobId); },
     onError: () => setVocabRecommendError('Vocabulary recommendation service is unavailable. Please try again later.'),
   });
 
   const recommendOneVocabMut = useMutation({
     mutationFn: (elementId: string) => logicalElementApi.recommendVocabConcepts(elementId),
-    onSuccess: () => {
-      setVocabRecommendingElementId(null);
-      setVocabRecommendError(null);
-      qc.invalidateQueries({ queryKey: ['logical-elements', selectedModelId] });
-    },
-    onError: () => {
-      setVocabRecommendingElementId(null);
-      setVocabRecommendError('Vocabulary recommendation service is unavailable. Please try again later.');
-    },
+    onSuccess: () => { setVocabRecommendingElementId(null); setVocabRecommendError(null); qc.invalidateQueries({ queryKey: ['logical-elements', selectedModelId] }); },
+    onError: () => { setVocabRecommendingElementId(null); setVocabRecommendError('Vocabulary recommendation service is unavailable. Please try again later.'); },
   });
 
   const describeOneMut = useMutation({
     mutationFn: (elementId: string) => logicalElementApi.recommendDescription(elementId),
-    onSuccess: () => {
-      setDescribingElementId(null);
-      setDescribeError(null);
-      qc.invalidateQueries({ queryKey: ['logical-elements', selectedModelId] });
-    },
-    onError: () => {
-      setDescribingElementId(null);
-      setDescribeError('Description recommendation service is unavailable. Please try again later.');
-    },
+    onSuccess: () => { setDescribingElementId(null); setDescribeError(null); qc.invalidateQueries({ queryKey: ['logical-elements', selectedModelId] }); },
+    onError: () => { setDescribingElementId(null); setDescribeError('Description recommendation service is unavailable. Please try again later.'); },
   });
 
   const recommendOneMut = useMutation({
     mutationFn: (elementId: string) => logicalElementApi.recommendClassification(elementId),
-    onSuccess: () => {
-      setRecommendingElementId(null);
-      setElementRecommendError(null);
-      qc.invalidateQueries({ queryKey: ['logical-elements', selectedModelId] });
-    },
-    onError: () => {
-      setRecommendingElementId(null);
-      setElementRecommendError('Recommendation service is unavailable. Please try again later.');
-    },
+    onSuccess: () => { setRecommendingElementId(null); setElementRecommendError(null); qc.invalidateQueries({ queryKey: ['logical-elements', selectedModelId] }); },
+    onError: () => { setRecommendingElementId(null); setElementRecommendError('Recommendation service is unavailable. Please try again later.'); },
   });
 
   const recommendPiiMut = useMutation({
     mutationFn: (elementId: string) => logicalElementApi.recommendPii(elementId),
-    onSuccess: () => {
-      setPiiRecommendingElementId(null);
-      setPiiRecommendError(null);
-      qc.invalidateQueries({ queryKey: ['logical-elements', selectedModelId] });
-    },
-    onError: () => {
-      setPiiRecommendingElementId(null);
-      setPiiRecommendError('PII recommendation service is unavailable. Please try again later.');
-    },
+    onSuccess: () => { setPiiRecommendingElementId(null); setPiiRecommendError(null); qc.invalidateQueries({ queryKey: ['logical-elements', selectedModelId] }); },
+    onError: () => { setPiiRecommendingElementId(null); setPiiRecommendError('PII recommendation service is unavailable. Please try again later.'); },
   });
 
   const recommendAllPiiMut = useMutation({
     mutationFn: (modelId: string) => logicalElementApi.recommendModelPii(modelId),
-    onSuccess: (job) => {
-      setPiiRecommendError(null);
-      setBulkPiiJobId(job.jobId);
-    },
+    onSuccess: (job) => { setPiiRecommendError(null); setBulkPiiJobId(job.jobId); },
     onError: () => setPiiRecommendError('PII recommendation service is unavailable. Please try again later.'),
   });
 
@@ -256,464 +211,239 @@ export default function LogicalModelEditor({ datasetId, models, canAction }: Pro
 
   if (models.length === 0) {
     return (
-      <div className="text-center py-10">
-        <p className="text-sm text-gray-500 mb-3">No logical model yet.</p>
-        <Button onClick={() => createModelMut.mutate()} disabled={createModelMut.isPending}>
+      <Box sx={{ textAlign: 'center', py: 8 }}>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>No logical model yet.</Typography>
+        <Button variant="contained" onClick={() => createModelMut.mutate()} disabled={createModelMut.isPending} sx={{ textTransform: 'none' }}>
           Create Draft Model
         </Button>
-      </div>
+      </Box>
     );
   }
 
   const jobStatusLabel = bulkJob?.status === 'PENDING' ? 'Queued' : 'Analyzing';
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <select
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {/* Model selector + actions */}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Select
             value={selectedModelId ?? ''}
             onChange={e => setSelectedModelId(e.target.value)}
-            className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            size="small"
+            sx={{ fontSize: 13, minWidth: 220 }}
           >
-            {models.map(m => <option key={m.id} value={m.id}>{m.name} v{m.version} ({m.status})</option>)}
-          </select>
+            {models.map(m => <MenuItem key={m.id} value={m.id} sx={{ fontSize: 13 }}>{m.name} v{m.version} ({m.status})</MenuItem>)}
+          </Select>
           {selectedModel && (
-            <Badge
-              label={selectedModel.status}
-              className={selectedModel.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}
-            />
+            <Chip label={selectedModel.status} color={selectedModel.status === 'published' ? 'success' : 'default'} size="small" sx={{ height: 18, fontSize: 11 }} />
           )}
-        </div>
-        <div className="flex gap-2">
-          {selectedModel?.status === 'draft' && (
-            <Button size="sm" variant="secondary" onClick={() => publishMut.mutate(selectedModel.id)}>
-              Publish
-            </Button>
-          )}
-        </div>
-      </div>
+        </Box>
+        {selectedModel?.status === 'draft' && (
+          <Button variant="outlined" size="small" onClick={() => publishMut.mutate(selectedModel.id)} disabled={publishMut.isPending} sx={{ textTransform: 'none' }}>
+            Publish
+          </Button>
+        )}
+      </Box>
 
+      {/* Job running banners */}
       {isJobRunning && (
-        <div className="flex items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
-          <svg className="h-4 w-4 shrink-0 animate-spin" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-          <span>
-            <span className="font-medium">{jobStatusLabel}</span> — AI is classifying elements.
-            Results appear row-by-row as they arrive.
-          </span>
-          <button
-            onClick={() => setBulkJobId(null)}
-            className="ml-auto text-blue-500 hover:text-blue-700"
-            title="Dismiss (job continues in background)"
-          >
-            ✕
-          </button>
-        </div>
+        <Alert severity="info" icon={<CircularProgress size={16} color="inherit" />} onClose={() => setBulkJobId(null)}>
+          <strong>{jobStatusLabel}</strong> — AI is classifying elements. Results appear row-by-row as they arrive.
+        </Alert>
       )}
-
-      {recommendError && (
-        <div className="flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-          <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          {recommendError}
-          <button onClick={() => setRecommendError(null)} className="ml-auto text-red-500 hover:text-red-700">✕</button>
-        </div>
+      {recommendError && <Alert severity="error" onClose={() => setRecommendError(null)}>{recommendError}</Alert>}
+      {elementRecommendError && <Alert severity="error" onClose={() => setElementRecommendError(null)}>{elementRecommendError}</Alert>}
+      {describeError && <Alert severity="error" onClose={() => setDescribeError(null)}>{describeError}</Alert>}
+      {isDescJobRunning && (
+        <Alert severity="info" icon={<CircularProgress size={16} color="inherit" />} onClose={() => setBulkDescJobId(null)}>
+          <strong>{bulkDescJob?.status === 'PENDING' ? 'Queued' : 'Analyzing'}</strong> — AI is suggesting descriptions. Results appear row-by-row as they arrive.
+        </Alert>
       )}
-
-      {elementRecommendError && (
-        <div className="flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-          <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          {elementRecommendError}
-          <button onClick={() => setElementRecommendError(null)} className="ml-auto text-red-500 hover:text-red-700">✕</button>
-        </div>
-      )}
-
-      {describeError && (
-        <div className="flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-          <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          {describeError}
-          <button onClick={() => setDescribeError(null)} className="ml-auto text-red-500 hover:text-red-700">✕</button>
-        </div>
-      )}
-
       {isVocabJobRunning && (
-        <div className="flex items-center gap-3 px-4 py-3 bg-violet-50 border border-violet-200 rounded-lg text-sm text-violet-700">
-          <svg className="h-4 w-4 shrink-0 animate-spin" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-          <span>
-            <span className="font-medium">{bulkVocabJob?.status === 'PENDING' ? 'Queued' : 'Analyzing'}</span> — AI is suggesting vocabulary concepts.
-            Results appear row-by-row as they arrive.
-          </span>
-          <button onClick={() => setBulkVocabJobId(null)} className="ml-auto text-violet-500 hover:text-violet-700" title="Dismiss">✕</button>
-        </div>
+        <Alert severity="info" icon={<CircularProgress size={16} color="inherit" />} onClose={() => setBulkVocabJobId(null)} sx={{ '& .MuiAlert-icon': { color: 'secondary.main' } }}>
+          <strong>{bulkVocabJob?.status === 'PENDING' ? 'Queued' : 'Analyzing'}</strong> — AI is suggesting vocabulary concepts. Results appear row-by-row as they arrive.
+        </Alert>
       )}
-
-      {vocabRecommendError && (
-        <div className="flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-          <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          {vocabRecommendError}
-          <button onClick={() => setVocabRecommendError(null)} className="ml-auto text-red-500 hover:text-red-700">✕</button>
-        </div>
-      )}
-
+      {vocabRecommendError && <Alert severity="error" onClose={() => setVocabRecommendError(null)}>{vocabRecommendError}</Alert>}
       {isPiiJobRunning && (
-        <div className="flex items-center gap-3 px-4 py-3 bg-rose-50 border border-rose-200 rounded-lg text-sm text-rose-700">
-          <svg className="h-4 w-4 shrink-0 animate-spin" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-          <span>
-            <span className="font-medium">{bulkPiiJob?.status === 'PENDING' ? 'Queued' : 'Analyzing'}</span> — AI is assessing PII and direct-identifier indicators.
-            Results appear row-by-row as they arrive.
-          </span>
-          <button onClick={() => setBulkPiiJobId(null)} className="ml-auto text-rose-500 hover:text-rose-700" title="Dismiss">✕</button>
-        </div>
+        <Alert severity="warning" icon={<CircularProgress size={16} color="inherit" />} onClose={() => setBulkPiiJobId(null)}>
+          <strong>{bulkPiiJob?.status === 'PENDING' ? 'Queued' : 'Analyzing'}</strong> — AI is assessing PII and direct-identifier indicators. Results appear row-by-row as they arrive.
+        </Alert>
       )}
+      {piiRecommendError && <Alert severity="error" onClose={() => setPiiRecommendError(null)}>{piiRecommendError}</Alert>}
 
-      {piiRecommendError && (
-        <div className="flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-          <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          {piiRecommendError}
-          <button onClick={() => setPiiRecommendError(null)} className="ml-auto text-red-500 hover:text-red-700">✕</button>
-        </div>
-      )}
-
-      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-        <table className="min-w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-8">#</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Business Name</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                <div className="flex items-center gap-1.5">
+      {/* Elements table */}
+      <Paper variant="outlined" sx={{ overflow: 'auto' }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow sx={{ bgcolor: 'grey.50' }}>
+              <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase', width: 32 }}>#</TableCell>
+              <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Business Name</TableCell>
+              <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                   Description
                   {selectedModelId && canAction && (
-                    <button
+                    <SparkButton
                       onClick={() => { setDescribeError(null); recommendAllDescMut.mutate(selectedModelId); }}
                       disabled={recommendAllDescMut.isPending || isDescJobRunning}
-                      title={isDescJobRunning
-                        ? `${bulkDescJob?.status === 'PENDING' ? 'Queued' : 'Analyzing'}…`
-                        : 'AI-suggest descriptions for all elements from vocabulary concepts'}
-                      className="text-blue-500 hover:text-blue-700 disabled:opacity-40 disabled:cursor-not-allowed normal-case font-normal"
-                    >
-                      {recommendAllDescMut.isPending || isDescJobRunning
-                        ? (
-                          <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                          </svg>
-                        ) : (
-                          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
-                          </svg>
-                        )}
-                    </button>
+                      loading={recommendAllDescMut.isPending || isDescJobRunning}
+                      title={isDescJobRunning ? `${bulkDescJob?.status === 'PENDING' ? 'Queued' : 'Analyzing'}…` : 'AI-suggest descriptions for all elements'}
+                    />
                   )}
-                </div>
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Logical Type</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                <div className="flex items-center gap-1.5">
+                </Box>
+              </TableCell>
+              <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Logical Type</TableCell>
+              <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                   Classification
                   {selectedModelId && canAction && (
-                    <button
+                    <SparkButton
                       onClick={() => { setRecommendError(null); recommendAllMut.mutate(selectedModelId); }}
                       disabled={recommendAllMut.isPending || isJobRunning}
+                      loading={recommendAllMut.isPending || isJobRunning}
                       title={isJobRunning ? `${jobStatusLabel}…` : 'AI-recommend classification for all elements'}
-                      className="text-blue-500 hover:text-blue-700 disabled:opacity-40 disabled:cursor-not-allowed normal-case font-normal"
-                    >
-                      {recommendAllMut.isPending || isJobRunning
-                        ? (
-                          <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                          </svg>
-                        ) : (
-                          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
-                          </svg>
-                        )}
-                    </button>
+                    />
                   )}
-                </div>
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                <div className="flex items-center gap-1.5">
+                </Box>
+              </TableCell>
+              <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                   Vocabulary Concepts
                   {selectedModelId && canAction && (
-                    <button
+                    <SparkButton
                       onClick={() => { setVocabRecommendError(null); recommendAllVocabMut.mutate(selectedModelId); }}
                       disabled={recommendAllVocabMut.isPending || isVocabJobRunning}
+                      loading={recommendAllVocabMut.isPending || isVocabJobRunning}
                       title={isVocabJobRunning ? 'Analyzing…' : 'AI-suggest vocabulary concepts for all elements'}
-                      className="text-blue-500 hover:text-blue-700 disabled:opacity-40 disabled:cursor-not-allowed normal-case font-normal"
-                    >
-                      {recommendAllVocabMut.isPending || isVocabJobRunning
-                        ? (
-                          <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                          </svg>
-                        ) : (
-                          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
-                          </svg>
-                        )}
-                    </button>
+                    />
                   )}
-                </div>
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                <div className="flex items-center gap-1.5">
+                </Box>
+              </TableCell>
+              <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                   PII / ID
                   {selectedModelId && canAction && (
-                    <button
+                    <SparkButton
                       onClick={() => { setPiiRecommendError(null); recommendAllPiiMut.mutate(selectedModelId); }}
                       disabled={recommendAllPiiMut.isPending || isPiiJobRunning}
+                      loading={recommendAllPiiMut.isPending || isPiiJobRunning}
                       title={isPiiJobRunning ? 'Analyzing…' : 'AI-recommend PII and direct-identifier indicators for all elements'}
-                      className="text-rose-400 hover:text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed normal-case font-normal"
-                    >
-                      {recommendAllPiiMut.isPending || isPiiJobRunning
-                        ? (
-                          <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                          </svg>
-                        ) : (
-                          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
-                          </svg>
-                        )}
-                    </button>
+                      color="error"
+                    />
                   )}
-                </div>
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
+                </Box>
+              </TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
             {elements.map(el => (
               <>
-                <tr key={el.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-gray-400 text-xs">{el.ordinal}</td>
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-gray-900">{el.label ?? el.name}</p>
-                  </td>
-                  <td className="px-4 py-3 max-w-xs">
-                    <div className="flex items-start gap-1.5">
-                      <span className="text-xs text-gray-600 leading-relaxed">{el.description ?? ''}</span>
+                <TableRow key={el.id} hover sx={{ verticalAlign: 'top' }}>
+                  <TableCell><Typography variant="caption" color="text.disabled">{el.ordinal}</Typography></TableCell>
+                  <TableCell><Typography variant="body2" fontWeight={600}>{el.label ?? el.name}</Typography></TableCell>
+                  <TableCell sx={{ maxWidth: 200 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5 }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.5 }}>{el.description ?? ''}</Typography>
                       {!el.recommendedDescription && canAction && (
-                        <button
-                          onClick={() => {
-                            setDescribeError(null);
-                            setDescribingElementId(el.id);
-                            describeOneMut.mutate(el.id);
-                          }}
+                        <SparkButton
+                          onClick={() => { setDescribeError(null); setDescribingElementId(el.id); describeOneMut.mutate(el.id); }}
                           disabled={describingElementId === el.id}
+                          loading={describingElementId === el.id}
                           title="AI-suggest description from vocabulary concepts"
-                          className="shrink-0 text-blue-400 hover:text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed mt-0.5"
-                        >
-                          {describingElementId === el.id
-                            ? (
-                              <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                              </svg>
-                            ) : (
-                              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
-                              </svg>
-                            )}
-                        </button>
+                        />
                       )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
+                    </Box>
+                  </TableCell>
+                  <TableCell>
                     {el.logicalType
-                      ? <Badge label={el.logicalType} className="bg-purple-100 text-purple-700" />
-                      : <span className="text-gray-400">—</span>}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
+                      ? <Chip label={el.logicalType} color="secondary" size="small" sx={{ height: 18, fontSize: 11 }} />
+                      : <Typography variant="caption" color="text.disabled">—</Typography>}
+                  </TableCell>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <ClassificationBadge level={el.classification} />
                       {!el.recommendedClassification && !isJobRunning && canAction && (
-                        <button
-                          onClick={() => {
-                            setElementRecommendError(null);
-                            setRecommendingElementId(el.id);
-                            recommendOneMut.mutate(el.id);
-                          }}
+                        <SparkButton
+                          onClick={() => { setElementRecommendError(null); setRecommendingElementId(el.id); recommendOneMut.mutate(el.id); }}
                           disabled={recommendingElementId === el.id}
+                          loading={recommendingElementId === el.id}
                           title="AI-recommend classification for this element"
-                          className="text-blue-400 hover:text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          {recommendingElementId === el.id
-                            ? (
-                              <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                              </svg>
-                            ) : (
-                              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
-                              </svg>
-                            )}
-                        </button>
+                        />
                       )}
-                      {!el.recommendedClassification && isJobRunning && (
-                        <svg className="h-3.5 w-3.5 text-blue-300 animate-pulse" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-                        </svg>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1 items-center">
+                      {!el.recommendedClassification && isJobRunning && <CircularProgress size={12} sx={{ color: 'primary.light' }} />}
+                    </Box>
+                  </TableCell>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center' }}>
                       {el.vocabMappings?.map(m => (
-                        <span
+                        <Chip
                           key={m.id}
+                          label={resolveLabel(vocabTranslations, m.conceptIri, m.conceptLabel, m.conceptDefinition)}
+                          color={MATCH_TYPE_COLORS[m.matchType] ?? 'default'}
+                          size="small"
                           title={m.conceptIri}
-                          className={`px-2 py-0.5 rounded text-xs font-medium cursor-default ${MATCH_TYPE_COLORS[m.matchType]}`}
-                        >
-                          {resolveLabel(vocabTranslations, m.conceptIri, m.conceptLabel, m.conceptDefinition)}
-                        </span>
+                          sx={{ height: 18, fontSize: 11 }}
+                        />
                       ))}
                       {!el.recommendedVocabMappings && !isVocabJobRunning && canAction && (
-                        <button
-                          onClick={() => {
-                            setVocabRecommendError(null);
-                            setVocabRecommendingElementId(el.id);
-                            recommendOneVocabMut.mutate(el.id);
-                          }}
+                        <SparkButton
+                          onClick={() => { setVocabRecommendError(null); setVocabRecommendingElementId(el.id); recommendOneVocabMut.mutate(el.id); }}
                           disabled={vocabRecommendingElementId === el.id}
+                          loading={vocabRecommendingElementId === el.id}
                           title="AI-suggest vocabulary concepts for this element"
-                          className="text-blue-400 hover:text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          {vocabRecommendingElementId === el.id
-                            ? (
-                              <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                              </svg>
-                            ) : (
-                              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
-                              </svg>
-                            )}
-                        </button>
+                        />
                       )}
-                      {!el.recommendedVocabMappings && isVocabJobRunning && (
-                        <svg className="h-3.5 w-3.5 text-violet-300 animate-pulse" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-                        </svg>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap items-center gap-1">
+                      {!el.recommendedVocabMappings && isVocabJobRunning && <CircularProgress size={12} sx={{ color: 'secondary.light' }} />}
+                    </Box>
+                  </TableCell>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 0.5 }}>
                       {el.isPersonalInformation && (
-                        <span
-                          title="Personal Information"
-                          className="px-2 py-0.5 rounded text-xs font-semibold bg-rose-600 text-white"
-                        >
-                          PII
-                        </span>
+                        <Chip label="PII" size="small" color="error" sx={{ height: 18, fontSize: 11, fontWeight: 700 }} title="Personal Information" />
                       )}
                       {el.isDirectIdentifier && (
-                        <span
-                          title="Direct Identifier"
-                          className="px-2 py-0.5 rounded text-xs font-semibold bg-amber-500 text-white"
-                        >
-                          ID
-                        </span>
+                        <Chip label="ID" size="small" color="warning" sx={{ height: 18, fontSize: 11, fontWeight: 700 }} title="Direct Identifier" />
                       )}
                       {el.recommendedIsPersonalInformation != null && (
-                        <span title={el.piiRecommendationReasoning ?? 'Pending AI recommendation'} className="h-2 w-2 rounded-full bg-amber-400 inline-block" />
+                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'warning.main' }} title={el.piiRecommendationReasoning ?? 'Pending AI recommendation'} />
                       )}
                       {el.recommendedIsPersonalInformation == null && !isPiiJobRunning && canAction && (
-                        <button
-                          onClick={() => {
-                            setPiiRecommendError(null);
-                            setPiiRecommendingElementId(el.id);
-                            recommendPiiMut.mutate(el.id);
-                          }}
+                        <SparkButton
+                          onClick={() => { setPiiRecommendError(null); setPiiRecommendingElementId(el.id); recommendPiiMut.mutate(el.id); }}
                           disabled={piiRecommendingElementId === el.id}
+                          loading={piiRecommendingElementId === el.id}
                           title="AI-recommend PII indicators for this element"
-                          className="text-rose-400 hover:text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          {piiRecommendingElementId === el.id
-                            ? (
-                              <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                              </svg>
-                            ) : (
-                              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
-                              </svg>
-                            )}
-                        </button>
+                          color="error"
+                        />
                       )}
-                      {el.recommendedIsPersonalInformation == null && isPiiJobRunning && (
-                        <svg className="h-3.5 w-3.5 text-rose-300 animate-pulse" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-                        </svg>
-                      )}
-                    </div>
-                  </td>
-                </tr>
+                      {el.recommendedIsPersonalInformation == null && isPiiJobRunning && <CircularProgress size={12} sx={{ color: 'error.light' }} />}
+                    </Box>
+                  </TableCell>
+                </TableRow>
+
                 {el.recommendedVocabMappings && el.recommendedVocabMappings.length > 0 && (
-                  <VocabRecommendationRow
-                    key={`vocab-rec-${el.id}`}
-                    element={el}
-                    modelId={selectedModelId!}
-                    canAction={canAction}
-                  />
+                  <VocabRecommendationRow key={`vocab-rec-${el.id}`} element={el} modelId={selectedModelId!} canAction={canAction} />
                 )}
                 {el.recommendedDescription && (
-                  <DescriptionRecommendationRow
-                    key={`desc-rec-${el.id}`}
-                    element={el}
-                    modelId={selectedModelId!}
-                    canAction={canAction}
-                  />
+                  <DescriptionRecommendationRow key={`desc-rec-${el.id}`} element={el} modelId={selectedModelId!} canAction={canAction} />
                 )}
                 {el.recommendedClassification && (
-                  <ClassificationRecommendationRow
-                    key={`rec-${el.id}`}
-                    element={el}
-                    modelId={selectedModelId!}
-                    canAction={canAction}
-                  />
+                  <ClassificationRecommendationRow key={`rec-${el.id}`} element={el} modelId={selectedModelId!} canAction={canAction} />
                 )}
                 {el.recommendedIsPersonalInformation != null && (
-                  <PiiRecommendationRow
-                    key={`pii-rec-${el.id}`}
-                    element={el}
-                    modelId={selectedModelId!}
-                    canAction={canAction}
-                  />
+                  <PiiRecommendationRow key={`pii-rec-${el.id}`} element={el} modelId={selectedModelId!} canAction={canAction} />
                 )}
               </>
             ))}
             {elements.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No elements in this model</td></tr>
+              <TableRow>
+                <TableCell colSpan={7} sx={{ textAlign: 'center', py: 6, color: 'text.disabled' }}>No elements in this model</TableCell>
+              </TableRow>
             )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+          </TableBody>
+        </Table>
+      </Paper>
+    </Box>
   );
 }

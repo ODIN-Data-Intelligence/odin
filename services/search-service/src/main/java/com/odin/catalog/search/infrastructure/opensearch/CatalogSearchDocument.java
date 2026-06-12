@@ -30,6 +30,7 @@ public record CatalogSearchDocument(
     boolean hasLineage,
     boolean hasLogicalModel,
     int distributionCount,
+    List<String> distributionFormats,
     // Logical model fields
     List<String> logicalElementNames,
     List<String> logicalElementLabels,

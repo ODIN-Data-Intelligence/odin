@@ -1,6 +1,29 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
+import List from '@mui/material/List';
+import ListItemButton from '@mui/material/ListItemButton';
+import ListItemText from '@mui/material/ListItemText';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import IconButton from '@mui/material/IconButton';
+import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
+import Skeleton from '@mui/material/Skeleton';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
+import Divider from '@mui/material/Divider';
+import Tooltip from '@mui/material/Tooltip';
+import BookmarksIcon from '@mui/icons-material/Bookmarks';
+import FolderIcon from '@mui/icons-material/Folder';
+import AddIcon from '@mui/icons-material/Add';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import DriveFileMoveIcon from '@mui/icons-material/DriveFileMove';
+import CloseIcon from '@mui/icons-material/Close';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { bookmarkApi, bookmarkCollectionApi } from '@datacatalog/shared';
 import type { Bookmark, BookmarkCollection } from '@datacatalog/shared';
 import { useDrawerStore } from '../store/drawerStore';
@@ -29,6 +52,13 @@ export default function BookmarksPage() {
     staleTime: 30_000,
   });
 
+  const totalCount = useQuery({
+    queryKey: ['bookmarks', null],
+    queryFn: () => bookmarkApi.list(),
+    staleTime: 30_000,
+    select: (data) => data.length,
+  });
+
   const createCollection = useMutation({
     mutationFn: (name: string) => bookmarkCollectionApi.create({ name }),
     onSuccess: (col) => {
@@ -40,8 +70,7 @@ export default function BookmarksPage() {
   });
 
   const updateCollection = useMutation({
-    mutationFn: ({ id, name }: { id: string; name: string }) =>
-      bookmarkCollectionApi.update(id, { name }),
+    mutationFn: ({ id, name }: { id: string; name: string }) => bookmarkCollectionApi.update(id, { name }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['bookmark-collections'] });
       setEditingCollection(null);
@@ -59,7 +88,7 @@ export default function BookmarksPage() {
 
   const removeBookmark = useMutation({
     mutationFn: (id: string) => bookmarkApi.delete(id),
-    onSuccess: (_, id) => {
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['bookmarks'] });
       qc.invalidateQueries({ queryKey: ['bookmark-check'] });
     },
@@ -68,16 +97,7 @@ export default function BookmarksPage() {
   const moveBookmark = useMutation({
     mutationFn: ({ id, collectionId }: { id: string; collectionId: string | null }) =>
       bookmarkApi.patch(id, { collectionId }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['bookmarks'] });
-    },
-  });
-
-  const totalCount = useQuery({
-    queryKey: ['bookmarks', null],
-    queryFn: () => bookmarkApi.list(),
-    staleTime: 30_000,
-    select: (data) => data.length,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['bookmarks'] }),
   });
 
   function handleCreateCollection(e: React.FormEvent) {
@@ -100,145 +120,168 @@ export default function BookmarksPage() {
   const selectedCollection = collections.find(c => c.id === selectedCollectionId) ?? null;
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      {/* ── Sidebar ── */}
-      <div className="w-56 flex-shrink-0 border-r border-gray-200 bg-gray-50 flex flex-col overflow-y-auto">
-        <div className="px-4 pt-5 pb-3 border-b border-gray-200">
-          <Link to="/" className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1 mb-3">
-            ← Home
-          </Link>
-          <h1 className="font-semibold text-gray-900 text-sm">My Bookmarks</h1>
-        </div>
-
-        <nav className="flex-1 px-2 py-3 space-y-0.5">
-          {/* All Bookmarks */}
-          <button
-            onClick={() => setSelectedCollectionId(null)}
-            className={`w-full text-left px-3 py-2 rounded-md text-sm flex items-center justify-between transition-colors ${
-              selectedCollectionId === null
-                ? 'bg-white text-gray-900 font-medium shadow-sm border border-gray-200'
-                : 'text-gray-600 hover:bg-white hover:text-gray-900'
-            }`}
+    <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      {/* Sidebar */}
+      <Paper
+        square
+        elevation={0}
+        sx={{ width: 224, flexShrink: 0, borderRight: 1, borderColor: 'divider', bgcolor: 'grey.50', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}
+      >
+        <Box sx={{ px: 2, pt: 2.5, pb: 1.5, borderBottom: 1, borderColor: 'divider' }}>
+          <Button
+            component={Link}
+            to="/"
+            startIcon={<ArrowBackIcon fontSize="small" />}
+            size="small"
+            sx={{ fontSize: 12, mb: 1.5, textTransform: 'none', color: 'text.secondary' }}
           >
-            <span className="flex items-center gap-2">
-              <span>★</span> All Bookmarks
-            </span>
-            {totalCount.data !== undefined && (
-              <span className="text-xs text-gray-400">{totalCount.data}</span>
-            )}
-          </button>
+            Home
+          </Button>
+          <Typography variant="subtitle2" fontWeight={700}>My Bookmarks</Typography>
+        </Box>
 
-          {/* Collections */}
+        <List dense sx={{ flex: 1, px: 1, py: 1 }}>
+          <ListItemButton
+            selected={selectedCollectionId === null}
+            onClick={() => setSelectedCollectionId(null)}
+            sx={{ borderRadius: 1, mb: 0.25 }}
+          >
+            <ListItemIcon sx={{ minWidth: 28 }}>
+              <BookmarksIcon fontSize="small" color="warning" />
+            </ListItemIcon>
+            <ListItemText primary="All Bookmarks" primaryTypographyProps={{ variant: 'body2' }} />
+            {totalCount.data !== undefined && (
+              <Typography variant="caption" color="text.secondary">{totalCount.data}</Typography>
+            )}
+          </ListItemButton>
+
           {collections.map(col => (
-            <div key={col.id} className="group relative">
+            <Box key={col.id} sx={{ '&:hover .col-actions': { opacity: 1 } }}>
               {editingCollection?.id === col.id ? (
-                <form onSubmit={handleUpdateCollection} className="px-2 py-1">
-                  <input
+                <Box component="form" onSubmit={handleUpdateCollection} sx={{ px: 1, py: 0.5 }}>
+                  <TextField
                     autoFocus
                     value={editName}
                     onChange={e => setEditName(e.target.value)}
                     onBlur={() => setEditingCollection(null)}
-                    className="w-full text-xs border border-blue-400 rounded px-2 py-1 focus:outline-none"
+                    size="small"
+                    variant="outlined"
+                    fullWidth
+                    inputProps={{ style: { fontSize: 13, padding: '4px 8px' } }}
                   />
-                </form>
+                </Box>
               ) : (
-                <button
+                <ListItemButton
+                  selected={selectedCollectionId === col.id}
                   onClick={() => setSelectedCollectionId(col.id)}
-                  className={`w-full text-left px-3 py-2 rounded-md text-sm flex items-center justify-between transition-colors ${
-                    selectedCollectionId === col.id
-                      ? 'bg-white text-gray-900 font-medium shadow-sm border border-gray-200'
-                      : 'text-gray-600 hover:bg-white hover:text-gray-900'
-                  }`}
+                  sx={{ borderRadius: 1, mb: 0.25 }}
                 >
-                  <span className="flex items-center gap-2 min-w-0">
-                    <span className="text-gray-400">📁</span>
-                    <span className="truncate">{col.name}</span>
-                  </span>
-                  <span className="hidden group-hover:flex items-center gap-0.5 flex-shrink-0">
-                    <button
-                      onClick={e => { e.stopPropagation(); startEdit(col); }}
-                      className="text-gray-400 hover:text-gray-600 text-xs px-1"
-                      title="Rename"
-                    >✎</button>
-                    <button
-                      onClick={e => { e.stopPropagation(); if (confirm(`Delete "${col.name}"?`)) deleteCollection.mutate(col.id); }}
-                      className="text-gray-400 hover:text-red-500 text-xs px-1"
-                      title="Delete"
-                    >✕</button>
-                  </span>
-                </button>
+                  <ListItemIcon sx={{ minWidth: 28 }}>
+                    <FolderIcon fontSize="small" color="action" />
+                  </ListItemIcon>
+                  <ListItemText primary={col.name} primaryTypographyProps={{ variant: 'body2', noWrap: true }} />
+                  <Box className="col-actions" sx={{ display: 'flex', opacity: 0, transition: 'opacity 0.15s' }}>
+                    <Tooltip title="Rename">
+                      <IconButton size="small" onClick={e => { e.stopPropagation(); startEdit(col); }} sx={{ p: 0.25 }}>
+                        <EditIcon sx={{ fontSize: 14 }} />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Delete">
+                      <IconButton
+                        size="small"
+                        color="error"
+                        onClick={e => { e.stopPropagation(); if (confirm(`Delete "${col.name}"?`)) deleteCollection.mutate(col.id); }}
+                        sx={{ p: 0.25 }}
+                      >
+                        <DeleteIcon sx={{ fontSize: 14 }} />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                </ListItemButton>
               )}
-            </div>
+            </Box>
           ))}
-        </nav>
+        </List>
 
-        {/* New collection */}
-        <div className="px-3 pb-4">
+        <Box sx={{ px: 2, pb: 2 }}>
           {showNewCollectionForm ? (
-            <form onSubmit={handleCreateCollection} className="flex gap-1">
-              <input
+            <Box component="form" onSubmit={handleCreateCollection} sx={{ display: 'flex', gap: 0.75 }}>
+              <TextField
                 autoFocus
                 value={newCollectionName}
                 onChange={e => setNewCollectionName(e.target.value)}
                 onBlur={() => { if (!newCollectionName.trim()) setShowNewCollectionForm(false); }}
                 placeholder="Collection name"
-                className="flex-1 text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:border-blue-400"
+                size="small"
+                variant="outlined"
+                fullWidth
+                inputProps={{ style: { fontSize: 13, padding: '4px 8px' } }}
               />
-              <button
+              <Button
                 type="submit"
+                variant="contained"
+                size="small"
                 disabled={!newCollectionName.trim()}
-                className="text-xs bg-blue-600 text-white rounded px-2 py-1.5 hover:bg-blue-700 disabled:opacity-50"
-              >Add</button>
-            </form>
+                sx={{ flexShrink: 0, px: 1, minWidth: 0 }}
+              >
+                Add
+              </Button>
+            </Box>
           ) : (
-            <button
+            <Button
+              startIcon={<AddIcon />}
+              size="small"
+              fullWidth
               onClick={() => setShowNewCollectionForm(true)}
-              className="w-full text-left text-xs text-gray-400 hover:text-gray-700 px-3 py-2 rounded-md hover:bg-white transition-colors flex items-center gap-1"
+              sx={{ justifyContent: 'flex-start', textTransform: 'none', fontSize: 13, color: 'text.secondary' }}
             >
-              <span className="text-base leading-none">+</span> New collection
-            </button>
+              New collection
+            </Button>
           )}
-        </div>
-      </div>
+        </Box>
+      </Paper>
 
-      {/* ── Main content ── */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-6 py-8">
-          {/* Header */}
-          <div className="mb-6">
-            <h2 className="text-lg font-semibold text-gray-900">
+      {/* Main content */}
+      <Box sx={{ flex: 1, overflowY: 'auto' }}>
+        <Box sx={{ maxWidth: 800, mx: 'auto', px: 3, py: 4 }}>
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="h6" fontWeight={600}>
               {selectedCollection ? selectedCollection.name : 'All Bookmarks'}
-            </h2>
-            <p className="text-sm text-gray-500 mt-0.5">
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
               {bookmarks.length} {bookmarks.length === 1 ? 'dataset' : 'datasets'}
-            </p>
-          </div>
+            </Typography>
+          </Box>
 
-          {/* Empty state */}
           {!isLoading && bookmarks.length === 0 && (
-            <div className="text-center py-20 text-gray-400">
-              <div className="text-5xl mb-4">☆</div>
-              <p className="font-medium text-gray-500 mb-1">No bookmarks yet</p>
-              <p className="text-sm">
+            <Box sx={{ textAlign: 'center', py: 15 }}>
+              <Typography variant="h2" color="text.disabled" sx={{ mb: 2 }}>☆</Typography>
+              <Typography variant="subtitle1" color="text.secondary" gutterBottom fontWeight={500}>
+                No bookmarks yet
+              </Typography>
+              <Typography variant="body2" color="text.disabled">
                 Star a dataset in{' '}
-                <button onClick={() => navigate('/search')} className="text-blue-600 hover:underline">
+                <Typography
+                  component="span"
+                  variant="body2"
+                  color="primary"
+                  sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
+                  onClick={() => navigate('/search')}
+                >
                   search
-                </button>{' '}
-                to save it here
-              </p>
-            </div>
+                </Typography>
+                {' '}to save it here
+              </Typography>
+            </Box>
           )}
 
-          {/* Bookmark cards */}
           {isLoading && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {[...Array(4)].map((_, i) => (
-                <div key={i} className="h-28 bg-gray-100 rounded-lg animate-pulse" />
-              ))}
-            </div>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+              {[...Array(4)].map((_, i) => <Skeleton key={i} variant="rounded" height={112} />)}
+            </Box>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
             {bookmarks.map(bm => (
               <BookmarkCard
                 key={bm.id}
@@ -249,17 +292,14 @@ export default function BookmarksPage() {
                 onMove={(collectionId) => moveBookmark.mutate({ id: bm.id, collectionId })}
               />
             ))}
-          </div>
-        </div>
-      </div>
+          </Box>
+        </Box>
+      </Box>
 
-      {/* Detail drawer */}
       {openDatasetId && <DatasetDetailDrawer />}
-    </div>
+    </Box>
   );
 }
-
-// ── Bookmark card ──────────────────────────────────────────────────────────────
 
 interface BookmarkCardProps {
   bookmark: Bookmark;
@@ -270,69 +310,87 @@ interface BookmarkCardProps {
 }
 
 function BookmarkCard({ bookmark, collections, onOpen, onRemove, onMove }: BookmarkCardProps) {
-  const [showMoveMenu, setShowMoveMenu] = useState(false);
+  const [moveAnchorEl, setMoveAnchorEl] = useState<HTMLElement | null>(null);
 
   return (
-    <div className="relative border border-gray-200 rounded-lg bg-white p-4 hover:border-gray-300 hover:shadow-sm transition-all group">
-      {/* Title — click opens drawer */}
-      <button
-        onClick={onOpen}
-        className="w-full text-left"
-      >
-        <h3 className="font-medium text-gray-900 text-sm truncate pr-14">{bookmark.datasetTitle}</h3>
+    <Paper
+      variant="outlined"
+      sx={{
+        p: 2,
+        cursor: 'pointer',
+        '&:hover': { borderColor: 'primary.light', boxShadow: 1 },
+        transition: 'border-color 0.15s, box-shadow 0.15s',
+        position: 'relative',
+      }}
+    >
+      <Box onClick={onOpen} sx={{ pr: 8 }}>
+        <Typography variant="body2" fontWeight={600} noWrap>{bookmark.datasetTitle}</Typography>
         {bookmark.note && (
-          <p className="mt-1 text-xs text-gray-500 line-clamp-2 italic">{bookmark.note}</p>
-        )}
-        <p className="mt-2 text-xs text-gray-400">
-          Saved {new Date(bookmark.createdAt).toLocaleDateString()}
-        </p>
-      </button>
-
-      {/* Actions */}
-      <div className="absolute top-3 right-3 flex items-center gap-1">
-        {/* Move to collection */}
-        <div className="relative">
-          <button
-            onClick={() => setShowMoveMenu(v => !v)}
-            title="Move to collection"
-            className="text-xs text-gray-300 hover:text-gray-600 px-1 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            fontStyle="italic"
+            sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', mt: 0.5 }}
           >
-            📁
-          </button>
-          {showMoveMenu && (
-            <div
-              className="absolute right-0 top-6 z-20 bg-white border border-gray-200 rounded-lg shadow-lg py-1 w-48"
-              onMouseLeave={() => setShowMoveMenu(false)}
-            >
-              <div className="px-3 py-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">Move to</div>
-              <button
-                onClick={() => { onMove(null); setShowMoveMenu(false); }}
-                className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 ${!bookmark.collectionId ? 'text-blue-600 font-medium' : 'text-gray-700'}`}
-              >
-                ★ No collection
-              </button>
-              {collections.map(col => (
-                <button
-                  key={col.id}
-                  onClick={() => { onMove(col.id); setShowMoveMenu(false); }}
-                  className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 truncate ${bookmark.collectionId === col.id ? 'text-blue-600 font-medium' : 'text-gray-700'}`}
-                >
-                  📁 {col.name}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+            {bookmark.note}
+          </Typography>
+        )}
+        <Typography variant="caption" color="text.disabled" display="block" sx={{ mt: 1 }}>
+          Saved {new Date(bookmark.createdAt).toLocaleDateString()}
+        </Typography>
+      </Box>
 
-        {/* Remove bookmark */}
-        <button
-          onClick={onRemove}
-          title="Remove bookmark"
-          className="text-xs text-gray-300 hover:text-red-500 px-1 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+      <Box sx={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 0.25 }}>
+        <Tooltip title="Move to collection">
+          <IconButton
+            size="small"
+            onClick={e => setMoveAnchorEl(e.currentTarget)}
+            sx={{ opacity: 0.4, '&:hover': { opacity: 1 }, p: 0.5 }}
+          >
+            <DriveFileMoveIcon sx={{ fontSize: 16 }} />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title="Remove bookmark">
+          <IconButton
+            size="small"
+            color="error"
+            onClick={onRemove}
+            sx={{ opacity: 0.4, '&:hover': { opacity: 1 }, p: 0.5 }}
+          >
+            <CloseIcon sx={{ fontSize: 16 }} />
+          </IconButton>
+        </Tooltip>
+      </Box>
+
+      <Menu
+        anchorEl={moveAnchorEl}
+        open={!!moveAnchorEl}
+        onClose={() => setMoveAnchorEl(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Typography variant="caption" color="text.secondary" sx={{ px: 2, py: 0.75, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600 }}>
+          Move to
+        </Typography>
+        <MenuItem
+          onClick={() => { onMove(null); setMoveAnchorEl(null); }}
+          selected={!bookmark.collectionId}
+          dense
         >
-          ✕
-        </button>
-      </div>
-    </div>
+          ★ No collection
+        </MenuItem>
+        <Divider />
+        {collections.map(col => (
+          <MenuItem
+            key={col.id}
+            onClick={() => { onMove(col.id); setMoveAnchorEl(null); }}
+            selected={bookmark.collectionId === col.id}
+            dense
+          >
+            <FolderIcon fontSize="small" sx={{ mr: 1 }} /> {col.name}
+          </MenuItem>
+        ))}
+      </Menu>
+    </Paper>
   );
 }

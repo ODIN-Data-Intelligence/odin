@@ -1,16 +1,24 @@
-import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { harvestRunApi } from '@datacatalog/shared';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import LinearProgress from '@mui/material/LinearProgress';
+import Alert from '@mui/material/Alert';
+import { harvestRunApi, PageHeader } from '@datacatalog/shared';
 import type { HarvestRun } from '@datacatalog/shared';
-import { PageHeader } from '@datacatalog/shared';
-import { Badge } from '@datacatalog/shared';
 import { formatDateTime, RUN_STATUS_COLORS } from '../../lib/utils';
 
 export default function HarvestRunDetailPage() {
   const { id } = useParams();
 
-  const { data: run, refetch } = useQuery({
+  const { data: run } = useQuery({
     queryKey: ['harvest-run', id],
     queryFn: () => harvestRunApi.get(id!),
     enabled: !!id,
@@ -26,99 +34,103 @@ export default function HarvestRunDetailPage() {
     enabled: !!id && run?.status === 'completed',
   });
 
-  if (!run) return <div className="p-6 text-sm text-gray-500">Loading...</div>;
+  if (!run) return <Typography variant="body2" color="text.secondary" sx={{ p: 3 }}>Loading...</Typography>;
 
   const progress = run.entitiesDiscovered
     ? Math.round(((run.entitiesCreated ?? 0) + (run.entitiesUpdated ?? 0)) / run.entitiesDiscovered * 100)
     : 0;
 
   return (
-    <div>
+    <Box>
       <PageHeader
         title={`Run ${run.id.slice(0, 8)}…`}
         description={`Triggered by: ${run.triggeredBy ?? 'system'}`}
-        actions={<Badge label={run.status} className={RUN_STATUS_COLORS[run.status]} />}
+        actions={
+          <Chip label={run.status} color={RUN_STATUS_COLORS[run.status] ?? 'default'} size="small" sx={{ height: 22, fontSize: 12 }} />
+        }
       />
 
-      <div className="p-6 space-y-6">
+      <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
         {run.status === 'running' && (
-          <div>
-            <div className="flex justify-between text-xs text-gray-500 mb-1">
-              <span>Progress</span>
-              <span>{progress}%</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div className="bg-blue-600 h-2 rounded-full transition-all" style={{ width: `${progress}%` }} />
-            </div>
-          </div>
+          <Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+              <Typography variant="caption" color="text.secondary">Progress</Typography>
+              <Typography variant="caption" color="text.secondary">{progress}%</Typography>
+            </Box>
+            <LinearProgress variant="determinate" value={progress} sx={{ borderRadius: 1 }} />
+          </Box>
         )}
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <StatCard label="Discovered" value={run.entitiesDiscovered ?? 0} color="text-gray-900" />
-          <StatCard label="Created" value={run.entitiesCreated ?? 0} color="text-green-600" />
-          <StatCard label="Updated" value={run.entitiesUpdated ?? 0} color="text-blue-600" />
-          <StatCard label="Failed" value={run.entitiesFailed ?? 0} color="text-red-600" />
-        </div>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: 'repeat(4, 1fr)' }, gap: 2 }}>
+          <StatCard label="Discovered" value={run.entitiesDiscovered ?? 0} color="text.primary" />
+          <StatCard label="Created" value={run.entitiesCreated ?? 0} color="success.main" />
+          <StatCard label="Updated" value={run.entitiesUpdated ?? 0} color="primary.main" />
+          <StatCard label="Failed" value={run.entitiesFailed ?? 0} color="error.main" />
+        </Box>
 
-        <dl className="grid grid-cols-2 gap-3 text-sm">
+        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
           <DlItem label="Started" value={formatDateTime(run.startedAt)} />
           <DlItem label="Completed" value={formatDateTime(run.completedAt)} />
-        </dl>
+        </Box>
 
-        {run.errorMessage && (
-          <div className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-700">
-            {run.errorMessage}
-          </div>
-        )}
+        {run.errorMessage && <Alert severity="error">{run.errorMessage}</Alert>}
 
         {items.length > 0 && (
-          <section>
-            <h2 className="text-base font-semibold text-gray-800 mb-3">Items ({items.length})</h2>
-            <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-              <table className="min-w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Entity</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Error</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
+          <Box>
+            <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1.5 }}>Items ({items.length})</Typography>
+            <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'grey.50' }}>
+                    <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Entity</TableCell>
+                    <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Type</TableCell>
+                    <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Action</TableCell>
+                    <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Error</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
                   {items.map(item => (
-                    <tr key={item.id} className={item.errorDetail ? 'bg-red-50' : 'hover:bg-gray-50'}>
-                      <td className="px-4 py-2 font-mono text-xs truncate max-w-xs">{item.sourceKey}</td>
-                      <td className="px-4 py-2 text-gray-600">{item.entityType}</td>
-                      <td className="px-4 py-2">
-                        {item.action && <Badge label={item.action} className="bg-gray-100 text-gray-700" />}
-                      </td>
-                      <td className="px-4 py-2 text-red-600 text-xs truncate max-w-xs">{item.errorDetail ?? '—'}</td>
-                    </tr>
+                    <TableRow key={item.id} sx={item.errorDetail ? { bgcolor: '#fff5f5' } : undefined}>
+                      <TableCell sx={{ maxWidth: 240 }}>
+                        <Typography variant="caption" fontFamily="monospace" sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {item.sourceKey}
+                        </Typography>
+                      </TableCell>
+                      <TableCell><Typography variant="caption" color="text.secondary">{item.entityType}</Typography></TableCell>
+                      <TableCell>
+                        {item.action && <Chip label={item.action} size="small" sx={{ height: 18, fontSize: 11 }} />}
+                      </TableCell>
+                      <TableCell sx={{ maxWidth: 240 }}>
+                        <Typography variant="caption" color="error" sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {item.errorDetail ?? '—'}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
+                </TableBody>
+              </Table>
+            </Paper>
+          </Box>
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }
 
 function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4">
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className={`text-2xl font-semibold mt-1 ${color}`}>{value}</p>
-    </div>
+    <Paper variant="outlined" sx={{ p: 2 }}>
+      <Typography variant="caption" color="text.secondary">{label}</Typography>
+      <Typography variant="h4" fontWeight={600} color={color} sx={{ mt: 0.5 }}>{value}</Typography>
+    </Paper>
   );
 }
 
 function DlItem({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <dt className="text-xs text-gray-500">{label}</dt>
-      <dd className="mt-0.5 text-gray-900 text-sm">{value}</dd>
-    </div>
+    <Box>
+      <Typography variant="caption" color="text.secondary">{label}</Typography>
+      <Typography variant="body2" sx={{ mt: 0.25 }}>{value}</Typography>
+    </Box>
   );
 }

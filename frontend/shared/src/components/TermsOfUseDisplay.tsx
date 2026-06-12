@@ -1,13 +1,21 @@
+import Box from '@mui/material/Box';
+import Chip from '@mui/material/Chip';
+import Typography from '@mui/material/Typography';
+import Alert from '@mui/material/Alert';
+import Paper from '@mui/material/Paper';
+import List from '@mui/material/List';
+import ListItem from '@mui/material/ListItem';
+import ListItemText from '@mui/material/ListItemText';
 import type { TermsOfUse } from '../types/catalog';
 
 const ACCESS_LEVEL_CONFIG: Record<
   NonNullable<TermsOfUse['accessLevel']>,
-  { label: string; badge: string }
+  { label: string; color: 'success' | 'info' | 'warning' | 'error' }
 > = {
-  OPEN:              { label: 'Open',             badge: 'bg-green-100 text-green-800' },
-  INTERNAL_ONLY:     { label: 'Internal Only',    badge: 'bg-blue-100 text-blue-800' },
-  RESTRICTED:        { label: 'Restricted',       badge: 'bg-amber-100 text-amber-800' },
-  HIGHLY_RESTRICTED: { label: 'Highly Restricted', badge: 'bg-red-100 text-red-800' },
+  OPEN:              { label: 'Open',             color: 'success' },
+  INTERNAL_ONLY:     { label: 'Internal Only',    color: 'info' },
+  RESTRICTED:        { label: 'Restricted',       color: 'warning' },
+  HIGHLY_RESTRICTED: { label: 'Highly Restricted', color: 'error' },
 };
 
 interface TermsOfUseDisplayProps {
@@ -18,118 +26,98 @@ export default function TermsOfUseDisplay({ terms }: TermsOfUseDisplayProps) {
   const levelConfig = terms.accessLevel ? ACCESS_LEVEL_CONFIG[terms.accessLevel] : null;
 
   return (
-    <div className="space-y-4">
-      {/* Access level badge + effective classification */}
-      <div className="flex items-center gap-3">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
         {levelConfig && (
-          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${levelConfig.badge}`}>
-            {levelConfig.label}
-          </span>
+          <Chip label={levelConfig.label} color={levelConfig.color} size="small" />
         )}
         {terms.effectiveClassification && (
-          <span className="text-xs text-gray-500">
+          <Typography variant="caption" color="text.secondary">
             Effective classification:{' '}
-            <span className="font-medium text-gray-700">{terms.effectiveClassification}</span>
-          </span>
+            <Typography component="span" variant="caption" fontWeight={600} color="text.primary">
+              {terms.effectiveClassification}
+            </Typography>
+          </Typography>
         )}
-      </div>
+      </Box>
 
-      {/* Source banners */}
       {terms.policySource === 'explicit' && (
-        <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-md px-3 py-2 text-xs text-blue-800">
-          <span className="mt-0.5">ℹ</span>
-          <span>This dataset has a custom policy set by the data owner.</span>
-        </div>
+        <Alert severity="info" variant="outlined" sx={{ py: 0.5 }}>
+          This dataset has a custom policy set by the data owner.
+        </Alert>
       )}
       {terms.policySource === 'fallback' && (
-        <div className="flex items-start gap-2 bg-gray-50 border border-gray-200 rounded-md px-3 py-2 text-xs text-gray-600">
-          <span className="mt-0.5">ℹ</span>
-          <span>No element classifications found. Terms are derived from the dataset's declared license.</span>
-        </div>
+        <Alert severity="info" variant="outlined" sx={{ py: 0.5 }}>
+          No element classifications found. Terms are derived from the dataset's declared license.
+        </Alert>
       )}
 
-      {/* Rule sections */}
       {terms.permissions && terms.permissions.length > 0 && (
-        <RuleSection
-          title="Permitted Uses"
-          items={terms.permissions}
-          icon="✓"
-          iconClass="text-green-600"
-          borderClass="border-green-200"
-          titleClass="text-green-800"
-        />
+        <RuleSection title="Permitted Uses" items={terms.permissions} severity="success" icon="✓" />
       )}
       {terms.prohibitions && terms.prohibitions.length > 0 && (
-        <RuleSection
-          title="Restrictions"
-          items={terms.prohibitions}
-          icon="✕"
-          iconClass="text-red-500"
-          borderClass="border-red-200"
-          titleClass="text-red-800"
-        />
+        <RuleSection title="Restrictions" items={terms.prohibitions} severity="error" icon="✕" />
       )}
       {terms.obligations && terms.obligations.length > 0 && (
-        <RuleSection
-          title="Obligations"
-          items={terms.obligations}
-          icon="!"
-          iconClass="text-amber-600"
-          borderClass="border-amber-200"
-          titleClass="text-amber-800"
-        />
+        <RuleSection title="Obligations" items={terms.obligations} severity="warning" icon="!" />
       )}
 
-      {/* Applicable regulations */}
       {terms.applicableRegulations && terms.applicableRegulations.length > 0 && (
-        <div>
-          <p className="text-xs font-semibold text-gray-700 mb-2">Applicable Regulations</p>
-          <div className="flex flex-wrap gap-2">
+        <Box>
+          <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+            Applicable Regulations
+          </Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
             {terms.applicableRegulations.map(reg => (
-              <span key={reg} className="px-2 py-1 bg-indigo-50 text-indigo-700 text-xs rounded font-medium">
-                {reg}
-              </span>
+              <Chip key={reg} label={reg} size="small" color="secondary" variant="outlined" />
             ))}
-          </div>
-        </div>
+          </Box>
+        </Box>
       )}
 
-      {/* Collapsible ODRL policy */}
       {terms.odrlPolicy && (
-        <details className="border border-gray-200 rounded-md overflow-hidden">
-          <summary className="px-3 py-2 text-xs font-medium text-gray-600 cursor-pointer hover:bg-gray-50 select-none">
-            ODRL Policy (Technical)
-          </summary>
-          <pre className="px-3 py-3 text-xs font-mono text-gray-700 bg-gray-50 overflow-x-auto whitespace-pre-wrap border-t border-gray-200">
-            {JSON.stringify(terms.odrlPolicy, null, 2)}
-          </pre>
-        </details>
+        <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
+          <Box
+            component="details"
+            sx={{ '& summary': { px: 2, py: 1, cursor: 'pointer', userSelect: 'none', fontSize: 13, fontWeight: 500, color: 'text.secondary', '&:hover': { bgcolor: 'grey.50' } } }}
+          >
+            <summary>ODRL Policy (Technical)</summary>
+            <Box
+              component="pre"
+              sx={{ px: 2, py: 1.5, m: 0, fontSize: 12, fontFamily: 'monospace', bgcolor: 'grey.50', borderTop: 1, borderColor: 'divider', overflowX: 'auto', whiteSpace: 'pre-wrap' }}
+            >
+              {JSON.stringify(terms.odrlPolicy, null, 2)}
+            </Box>
+          </Box>
+        </Paper>
       )}
-    </div>
+    </Box>
   );
 }
 
 function RuleSection({
-  title, items, icon, iconClass, borderClass, titleClass,
+  title, items, severity, icon,
 }: {
   title: string;
   items: string[];
+  severity: 'success' | 'error' | 'warning';
   icon: string;
-  iconClass: string;
-  borderClass: string;
-  titleClass: string;
 }) {
   return (
-    <div className={`border ${borderClass} rounded-md p-3`}>
-      <p className={`text-xs font-semibold mb-2 ${titleClass}`}>{title}</p>
-      <ul className="space-y-1.5">
+    <Paper variant="outlined" sx={{ p: 1.5, borderColor: `${severity}.light` }}>
+      <Typography variant="caption" fontWeight={700} color={`${severity}.dark`} sx={{ mb: 1, display: 'block' }}>
+        {title}
+      </Typography>
+      <List dense disablePadding>
         {items.map(item => (
-          <li key={item} className="flex items-start gap-2 text-xs text-gray-700">
-            <span className={`mt-0.5 font-bold flex-shrink-0 ${iconClass}`}>{icon}</span>
-            <span>{item}</span>
-          </li>
+          <ListItem key={item} disableGutters sx={{ py: 0.25, alignItems: 'flex-start' }}>
+            <Typography variant="caption" color={`${severity}.main`} fontWeight={700} sx={{ mr: 1, mt: 0.1, flexShrink: 0 }}>
+              {icon}
+            </Typography>
+            <ListItemText primary={item} primaryTypographyProps={{ variant: 'caption', color: 'text.primary' }} />
+          </ListItem>
         ))}
-      </ul>
-    </div>
+      </List>
+    </Paper>
   );
 }

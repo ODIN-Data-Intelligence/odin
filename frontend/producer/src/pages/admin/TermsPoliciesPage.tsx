@@ -1,15 +1,29 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useParams } from 'react-router-dom';
-import { termsPolicyApi } from '@datacatalog/shared';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import Button from '@mui/material/Button';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import TextField from '@mui/material/TextField';
+import Alert from '@mui/material/Alert';
+import { termsPolicyApi, PageHeader } from '@datacatalog/shared';
 import type { TermsPolicySet } from '@datacatalog/shared';
-import { PageHeader, Button, Badge } from '@datacatalog/shared';
 
-const STATUS_COLORS: Record<TermsPolicySet['status'], string> = {
-  ACTIVE:   'bg-green-100 text-green-700',
-  DRAFT:    'bg-blue-100 text-blue-700',
-  ARCHIVED: 'bg-gray-100 text-gray-500',
+const STATUS_COLORS: Record<TermsPolicySet['status'], 'success' | 'info' | 'default'> = {
+  ACTIVE:   'success',
+  DRAFT:    'info',
+  ARCHIVED: 'default',
 };
 
 function formatDate(iso: string | null) {
@@ -17,10 +31,7 @@ function formatDate(iso: string | null) {
   return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-interface CreateModalProps {
-  onClose: () => void;
-  onCreated: (id: string) => void;
-}
+interface CreateModalProps { onClose: () => void; onCreated: (id: string) => void; }
 
 function CreateModal({ onClose, onCreated }: CreateModalProps) {
   const [name, setName] = useState('');
@@ -41,50 +52,26 @@ function CreateModal({ onClose, onCreated }: CreateModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">New Terms-of-Use Policy</h2>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-            <input
-              type="text"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="e.g. Default Terms Policy"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-            <textarea
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              rows={3}
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-              placeholder="Optional description"
-            />
-          </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
-              Cancel
-            </button>
-            <Button type="submit" disabled={createMut.isPending}>
-              {createMut.isPending ? 'Creating…' : 'Create Policy'}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <form onSubmit={handleSubmit}>
+        <DialogTitle>New Terms-of-Use Policy</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '12px !important' }}>
+          <TextField label="Name" required value={name} onChange={e => setName(e.target.value)} size="small" placeholder="e.g. Default Terms Policy" fullWidth />
+          <TextField label="Description" value={description} onChange={e => setDescription(e.target.value)} size="small" placeholder="Optional description" multiline rows={3} fullWidth />
+          {error && <Alert severity="error">{error}</Alert>}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose} sx={{ textTransform: 'none' }}>Cancel</Button>
+          <Button type="submit" variant="contained" disabled={createMut.isPending} sx={{ textTransform: 'none' }}>
+            {createMut.isPending ? 'Creating…' : 'Create Policy'}
+          </Button>
+        </DialogActions>
+      </form>
+    </Dialog>
   );
 }
 
-interface CloneModalProps {
-  policy: TermsPolicySet;
-  onClose: () => void;
-  onCloned: (id: string) => void;
-}
+interface CloneModalProps { policy: TermsPolicySet; onClose: () => void; onCloned: (id: string) => void; }
 
 function CloneModal({ policy, onClose, onCloned }: CloneModalProps) {
   const [name, setName] = useState(`${policy.name} (copy)`);
@@ -104,32 +91,22 @@ function CloneModal({ policy, onClose, onCloned }: CloneModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-1">Clone Policy</h2>
-        <p className="text-sm text-gray-500 mb-4">Creates a new DRAFT based on "{policy.name}".</p>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">New Policy Name *</label>
-            <input
-              type="text"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
-              Cancel
-            </button>
-            <Button type="submit" disabled={cloneMut.isPending}>
-              {cloneMut.isPending ? 'Cloning…' : 'Clone'}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <form onSubmit={handleSubmit}>
+        <DialogTitle>Clone Policy</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '12px !important' }}>
+          <Typography variant="body2" color="text.secondary">Creates a new DRAFT based on "{policy.name}".</Typography>
+          <TextField label="New Policy Name" required value={name} onChange={e => setName(e.target.value)} size="small" fullWidth />
+          {error && <Alert severity="error">{error}</Alert>}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose} sx={{ textTransform: 'none' }}>Cancel</Button>
+          <Button type="submit" variant="contained" disabled={cloneMut.isPending} sx={{ textTransform: 'none' }}>
+            {cloneMut.isPending ? 'Cloning…' : 'Clone'}
+          </Button>
+        </DialogActions>
+      </form>
+    </Dialog>
   );
 }
 
@@ -150,18 +127,12 @@ export default function TermsPoliciesPage() {
 
   const activateMut = useMutation({
     mutationFn: (id: string) => termsPolicyApi.activate(id),
-    onSuccess: () => {
-      setConfirmActivate(null);
-      qc.invalidateQueries({ queryKey: ['terms-policies'] });
-    },
+    onSuccess: () => { setConfirmActivate(null); qc.invalidateQueries({ queryKey: ['terms-policies'] }); },
   });
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => termsPolicyApi.delete(id),
-    onSuccess: () => {
-      setConfirmDelete(null);
-      qc.invalidateQueries({ queryKey: ['terms-policies'] });
-    },
+    onSuccess: () => { setConfirmDelete(null); qc.invalidateQueries({ queryKey: ['terms-policies'] }); },
   });
 
   function goToDetail(id: string) {
@@ -169,113 +140,87 @@ export default function TermsPoliciesPage() {
   }
 
   return (
-    <div>
+    <Box>
       <PageHeader
         title="Terms-of-Use Policies"
         description="Manage versioned policy sets that govern dataset access terms"
-        actions={<Button onClick={() => setShowCreate(true)}>+ New Policy</Button>}
+        actions={
+          <Button variant="contained" size="small" onClick={() => setShowCreate(true)} sx={{ textTransform: 'none' }}>
+            + New Policy
+          </Button>
+        }
       />
 
-      <div className="p-6">
-        {isLoading && <p className="text-sm text-gray-500">Loading…</p>}
-        {isError && <p className="text-sm text-red-500">Failed to load policies.</p>}
+      <Box sx={{ p: 3 }}>
+        {isLoading && <Typography variant="body2" color="text.secondary">Loading…</Typography>}
+        {isError && <Alert severity="error">Failed to load policies.</Alert>}
 
         {!isLoading && !isError && (
-          <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Name</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Version</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Effective From</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
+          <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow sx={{ bgcolor: 'grey.50' }}>
+                  <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Name</TableCell>
+                  <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Status</TableCell>
+                  <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Version</TableCell>
+                  <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Effective From</TableCell>
+                  <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
                 {policies.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
+                  <TableRow>
+                    <TableCell colSpan={5} sx={{ textAlign: 'center', py: 6, color: 'text.disabled' }}>
                       No policies yet. Create one to get started.
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 )}
                 {policies.map(policy => (
-                  <tr key={policy.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => goToDetail(policy.id)}
-                        className="text-blue-600 hover:underline font-medium text-left"
-                      >
+                  <TableRow key={policy.id} hover>
+                    <TableCell>
+                      <Button variant="text" size="small" onClick={() => goToDetail(policy.id)} sx={{ textTransform: 'none', fontWeight: 600, p: 0, minWidth: 0 }}>
                         {policy.name}
-                      </button>
+                      </Button>
                       {policy.description && (
-                        <p className="text-xs text-gray-400 mt-0.5 truncate max-w-xs">{policy.description}</p>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {policy.description}
+                        </Typography>
                       )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge label={policy.status} className={STATUS_COLORS[policy.status]} />
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">v{policy.version}</td>
-                    <td className="px-4 py-3 text-gray-500">{formatDate(policy.effectiveFrom)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
+                    </TableCell>
+                    <TableCell>
+                      <Chip label={policy.status} color={STATUS_COLORS[policy.status]} size="small" sx={{ height: 18, fontSize: 11 }} />
+                    </TableCell>
+                    <TableCell><Typography variant="body2" color="text.secondary">v{policy.version}</Typography></TableCell>
+                    <TableCell><Typography variant="body2" color="text.secondary">{formatDate(policy.effectiveFrom)}</Typography></TableCell>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', gap: 1 }}>
                         {policy.status === 'DRAFT' && (
                           <>
-                            <button
-                              onClick={() => goToDetail(policy.id)}
-                              className="text-xs text-blue-600 hover:underline"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => setConfirmActivate(policy)}
-                              className="text-xs text-green-600 hover:underline"
-                            >
-                              Activate
-                            </button>
-                            <button
-                              onClick={() => setConfirmDelete(policy)}
-                              className="text-xs text-red-500 hover:underline"
-                            >
-                              Delete
-                            </button>
+                            <Button size="small" sx={{ textTransform: 'none', fontSize: 12, minWidth: 0, p: '2px 6px' }} onClick={() => goToDetail(policy.id)}>Edit</Button>
+                            <Button size="small" color="success" sx={{ textTransform: 'none', fontSize: 12, minWidth: 0, p: '2px 6px' }} onClick={() => setConfirmActivate(policy)}>Activate</Button>
+                            <Button size="small" color="error" sx={{ textTransform: 'none', fontSize: 12, minWidth: 0, p: '2px 6px' }} onClick={() => setConfirmDelete(policy)}>Delete</Button>
                           </>
                         )}
                         {policy.status === 'ACTIVE' && (
-                          <button
-                            onClick={() => setCloneTarget(policy)}
-                            className="text-xs text-purple-600 hover:underline"
-                          >
-                            Clone
-                          </button>
+                          <Button size="small" color="secondary" sx={{ textTransform: 'none', fontSize: 12, minWidth: 0, p: '2px 6px' }} onClick={() => setCloneTarget(policy)}>Clone</Button>
                         )}
                         {policy.status === 'ARCHIVED' && (
-                          <button
-                            onClick={() => goToDetail(policy.id)}
-                            className="text-xs text-gray-500 hover:underline"
-                          >
-                            View
-                          </button>
+                          <Button size="small" sx={{ textTransform: 'none', fontSize: 12, minWidth: 0, p: '2px 6px' }} onClick={() => goToDetail(policy.id)}>View</Button>
                         )}
-                      </div>
-                    </td>
-                  </tr>
+                      </Box>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </TableBody>
+            </Table>
+          </Paper>
         )}
-      </div>
+      </Box>
 
       {showCreate && (
         <CreateModal
           onClose={() => setShowCreate(false)}
-          onCreated={(id) => {
-            setShowCreate(false);
-            qc.invalidateQueries({ queryKey: ['terms-policies'] });
-            goToDetail(id);
-          }}
+          onCreated={(id) => { setShowCreate(false); qc.invalidateQueries({ queryKey: ['terms-policies'] }); goToDetail(id); }}
         />
       )}
 
@@ -283,58 +228,39 @@ export default function TermsPoliciesPage() {
         <CloneModal
           policy={cloneTarget}
           onClose={() => setCloneTarget(null)}
-          onCloned={(id) => {
-            setCloneTarget(null);
-            qc.invalidateQueries({ queryKey: ['terms-policies'] });
-            goToDetail(id);
-          }}
+          onCloned={(id) => { setCloneTarget(null); qc.invalidateQueries({ queryKey: ['terms-policies'] }); goToDetail(id); }}
         />
       )}
 
-      {confirmActivate && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">Activate Policy</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Activate "<strong>{confirmActivate.name}</strong>"? The current ACTIVE policy will be archived.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setConfirmActivate(null)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
-                Cancel
-              </button>
-              <Button
-                onClick={() => activateMut.mutate(confirmActivate.id)}
-                disabled={activateMut.isPending}
-              >
-                {activateMut.isPending ? 'Activating…' : 'Activate'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Dialog open={!!confirmActivate} onClose={() => setConfirmActivate(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Activate Policy</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            Activate "<strong>{confirmActivate?.name}</strong>"? The current ACTIVE policy will be archived.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmActivate(null)} sx={{ textTransform: 'none' }}>Cancel</Button>
+          <Button variant="contained" color="success" disabled={activateMut.isPending} onClick={() => confirmActivate && activateMut.mutate(confirmActivate.id)} sx={{ textTransform: 'none' }}>
+            {activateMut.isPending ? 'Activating…' : 'Activate'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
-      {confirmDelete && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">Delete Policy</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Delete "<strong>{confirmDelete.name}</strong>"? This cannot be undone.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setConfirmDelete(null)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
-                Cancel
-              </button>
-              <button
-                onClick={() => deleteMut.mutate(confirmDelete.id)}
-                disabled={deleteMut.isPending}
-                className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
-              >
-                {deleteMut.isPending ? 'Deleting…' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+      <Dialog open={!!confirmDelete} onClose={() => setConfirmDelete(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Delete Policy</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            Delete "<strong>{confirmDelete?.name}</strong>"? This cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDelete(null)} sx={{ textTransform: 'none' }}>Cancel</Button>
+          <Button variant="contained" color="error" disabled={deleteMut.isPending} onClick={() => confirmDelete && deleteMut.mutate(confirmDelete.id)} sx={{ textTransform: 'none' }}>
+            {deleteMut.isPending ? 'Deleting…' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
   );
 }

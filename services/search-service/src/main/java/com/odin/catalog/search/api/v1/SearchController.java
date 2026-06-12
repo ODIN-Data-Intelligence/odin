@@ -46,6 +46,10 @@ public class SearchController {
                 schema = @Schema(allowableValues = {"DATASET", "DATA_PRODUCT", "DISTRIBUTION"}))
             @RequestParam(required = false) String type,
 
+            @Parameter(description = "Comma-separated entity type filter (e.g. DATASET,DATA_PRODUCT)",
+                example = "DATASET,DATA_PRODUCT")
+            @RequestParam(required = false) String types,
+
             @Parameter(description = "Domain UUID filter", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
             @RequestParam(required = false) String domainId,
 
@@ -82,7 +86,7 @@ public class SearchController {
             @RequestParam(defaultValue = "20") int size) {
 
         String tenantId = TenantContextHolder.get();
-        var result = indexService.search(q, type, domainId, lifecycleStatus, format, hasLineage,
+        var result = indexService.search(q, type, types, domainId, lifecycleStatus, format, hasLineage,
                 tenantId, page, size, keyword, theme, vocabConcept, vocab, semanticType);
         log.debug("action=SEARCH q={} type={} page={} hits={}", q, type, page, result.totalHits());
 

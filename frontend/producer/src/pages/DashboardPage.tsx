@@ -1,5 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import List from '@mui/material/List';
+import ListItem from '@mui/material/ListItem';
+import ListItemText from '@mui/material/ListItemText';
+import Divider from '@mui/material/Divider';
+import Alert from '@mui/material/Alert';
 import { dashboardApi } from '@datacatalog/shared';
 import type { ActivityProposal, ActivityChange } from '@datacatalog/shared';
 import { PageHeader } from '@datacatalog/shared';
@@ -22,69 +31,85 @@ export default function DashboardPage() {
   const changes          = activity?.changes ?? [];
 
   return (
-    <div className="space-y-8 pb-12">
+    <Box sx={{ pb: 6 }}>
       <PageHeader title="Dashboard" description="Overview of your data estate" />
 
       {/* Stat cards */}
-      <div className="px-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <Box sx={{ px: 3, pt: 3, display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2, maxWidth: 600 }}>
         <StatCard label="My Datasets"      value={datasetCount} />
         <StatCard label="My Data Products" value={dataProductCount} />
-      </div>
+      </Box>
 
-      {/* Outstanding tasks */}
-      <Section title="Outstanding Tasks">
-        {pendingRequests.length === 0 ? (
-          <Empty>No outstanding tasks.</Empty>
-        ) : (
-          <ul className="space-y-2">
-            {pendingRequests.map(req => (
-              <li key={req.id} className="bg-white border border-amber-200 rounded-lg p-4 flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium text-gray-800">Ownership transfer request</p>
-                  <p className="text-xs text-gray-500 mt-0.5">
+      <Box sx={{ px: 3, py: 3, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {/* Outstanding tasks */}
+        <Section title="Outstanding Tasks">
+          {pendingRequests.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">No outstanding tasks.</Typography>
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              {pendingRequests.map(req => (
+                <Alert
+                  key={req.id}
+                  severity="warning"
+                  action={
+                    <Typography
+                      component={Link}
+                      to={`datasets/${req.datasetId}`}
+                      variant="caption"
+                      color="primary"
+                      sx={{ textDecoration: 'none', '&:hover': { textDecoration: 'underline' }, whiteSpace: 'nowrap', mt: 0.5 }}
+                    >
+                      Review
+                    </Typography>
+                  }
+                >
+                  <Typography variant="body2" fontWeight={500}>Ownership transfer request</Typography>
+                  <Typography variant="caption" color="text.secondary">
                     You have been proposed as the new owner of a dataset.
                     Requested {new Date(req.createdAt).toLocaleDateString()}.
-                  </p>
-                </div>
-                <Link to={`datasets/${req.datasetId}`} className="shrink-0 text-xs font-medium text-indigo-600 hover:text-indigo-800 underline">
-                  Review
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
+                  </Typography>
+                </Alert>
+              ))}
+            </Box>
+          )}
+        </Section>
 
-      {/* My proposals */}
-      <Section title="My Proposals">
-        {activityLoading ? (
-          <Empty>Loading…</Empty>
-        ) : proposals.length === 0 ? (
-          <Empty>No proposals yet.</Empty>
-        ) : (
-          <ul className="space-y-2">
-            {proposals.map(p => <ProposalRow key={p.id} proposal={p} />)}
-          </ul>
-        )}
-      </Section>
+        {/* My proposals */}
+        <Section title="My Proposals">
+          {activityLoading ? (
+            <Typography variant="body2" color="text.secondary">Loading…</Typography>
+          ) : proposals.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">No proposals yet.</Typography>
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              {proposals.map(p => <ProposalRow key={p.id} proposal={p} />)}
+            </Box>
+          )}
+        </Section>
 
-      {/* My changes */}
-      <Section title="My Changes">
-        {activityLoading ? (
-          <Empty>Loading…</Empty>
-        ) : changes.length === 0 ? (
-          <Empty>No dataset changes yet.</Empty>
-        ) : (
-          <ul className="divide-y divide-gray-100 border border-gray-200 rounded-lg bg-white overflow-hidden">
-            {changes.map(c => <ChangeRow key={c.id} change={c} />)}
-          </ul>
-        )}
-      </Section>
-    </div>
+        {/* My changes */}
+        <Section title="My Changes">
+          {activityLoading ? (
+            <Typography variant="body2" color="text.secondary">Loading…</Typography>
+          ) : changes.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">No dataset changes yet.</Typography>
+          ) : (
+            <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
+              <List dense disablePadding>
+                {changes.map((c, i) => (
+                  <Box key={c.id}>
+                    {i > 0 && <Divider />}
+                    <ChangeRow change={c} />
+                  </Box>
+                ))}
+              </List>
+            </Paper>
+          )}
+        </Section>
+      </Box>
+    </Box>
   );
 }
-
-// ── Proposal row ──────────────────────────────────────────────────────────────
 
 function ProposalRow({ proposal: p }: { proposal: ActivityProposal }) {
   const date = new Date(p.createdAt).toLocaleDateString(undefined, { dateStyle: 'medium' });
@@ -92,53 +117,52 @@ function ProposalRow({ proposal: p }: { proposal: ActivityProposal }) {
     ? new Date(p.resolvedAt).toLocaleDateString(undefined, { dateStyle: 'medium' })
     : null;
 
-  const statusStyles: Record<string, string> = {
-    PENDING:  'bg-amber-100 text-amber-700',
-    APPROVED: 'bg-green-100 text-green-700',
-    REJECTED: 'bg-red-100 text-red-700',
+  const statusColor: Record<string, 'warning' | 'success' | 'error' | 'default'> = {
+    PENDING: 'warning', APPROVED: 'success', REJECTED: 'error',
   };
-
   const roleLabel = p.role === 'PROPOSER' ? 'You proposed' : 'You were nominated';
 
   return (
-    <li className="bg-white border border-gray-200 rounded-lg p-4 space-y-1.5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Link
+    <Paper variant="outlined" sx={{ p: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2, mb: 0.5 }}>
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.25 }}>
+            <Typography
+              component={Link}
               to={`datasets/${p.datasetId}`}
-              className="text-sm font-medium text-gray-900 hover:text-indigo-600 hover:underline truncate"
+              variant="body2"
+              fontWeight={500}
+              color="primary"
+              noWrap
+              sx={{ textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
             >
               {p.datasetTitle}
-            </Link>
-            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${statusStyles[p.status] ?? 'bg-gray-100 text-gray-600'}`}>
-              {p.status}
-            </span>
-          </div>
-          <p className="text-xs text-gray-500 mt-0.5">
+            </Typography>
+            <Chip label={p.status} color={statusColor[p.status] ?? 'default'} size="small" sx={{ height: 18, fontSize: 11 }} />
+          </Box>
+          <Typography variant="caption" color="text.secondary">
             {roleLabel} as owner · {date}
-          </p>
-        </div>
-      </div>
-
+          </Typography>
+        </Box>
+      </Box>
       {p.status !== 'PENDING' && (
-        <div className="text-xs text-gray-500 space-y-0.5 border-t border-gray-100 pt-1.5 mt-1.5">
-          <p>
-            <span className="font-medium text-gray-700">
+        <Box sx={{ mt: 1, pt: 1, borderTop: 1, borderColor: 'divider' }}>
+          <Typography variant="caption" color="text.secondary">
+            <Typography component="span" variant="caption" fontWeight={500} color="text.primary">
               {p.status === 'APPROVED' ? 'Accepted' : 'Declined'}
-            </span>
-            {resolvedDate && <span> on {resolvedDate}</span>}
-          </p>
+            </Typography>
+            {resolvedDate && <> on {resolvedDate}</>}
+          </Typography>
           {p.note && (
-            <p className="italic text-gray-600">"{p.note}"</p>
+            <Typography variant="caption" color="text.secondary" fontStyle="italic" display="block">
+              &quot;{p.note}&quot;
+            </Typography>
           )}
-        </div>
+        </Box>
       )}
-    </li>
+    </Paper>
   );
 }
-
-// ── Change row ────────────────────────────────────────────────────────────────
 
 const EVENT_LABELS: Record<string, string> = {
   CREATED:                   'Created',
@@ -155,41 +179,43 @@ function ChangeRow({ change: c }: { change: ActivityChange }) {
   const label = EVENT_LABELS[c.eventType] ?? c.eventType.toLowerCase().replace(/_/g, ' ');
 
   return (
-    <li className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-gray-50">
-      <div className="min-w-0 flex-1">
-        <Link
-          to={`datasets/${c.datasetId}`}
-          className="text-sm font-medium text-gray-900 hover:text-indigo-600 hover:underline truncate block"
-        >
-          {c.datasetTitle}
-        </Link>
-        <p className="text-xs text-gray-500">{label}</p>
-      </div>
-      <p className="text-xs text-gray-400 shrink-0">{date}</p>
-    </li>
+    <ListItem sx={{ '&:hover': { bgcolor: 'grey.50' } }}>
+      <ListItemText
+        primary={
+          <Typography
+            component={Link}
+            to={`datasets/${c.datasetId}`}
+            variant="body2"
+            fontWeight={500}
+            color="primary"
+            noWrap
+            sx={{ textDecoration: 'none', '&:hover': { textDecoration: 'underline' }, display: 'block' }}
+          >
+            {c.datasetTitle}
+          </Typography>
+        }
+        secondary={label}
+        secondaryTypographyProps={{ variant: 'caption' }}
+      />
+      <Typography variant="caption" color="text.disabled" sx={{ flexShrink: 0, ml: 2 }}>{date}</Typography>
+    </ListItem>
   );
 }
-
-// ── Shared primitives ─────────────────────────────────────────────────────────
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="px-6">
-      <h2 className="text-base font-semibold text-gray-800 mb-3">{title}</h2>
+    <Box>
+      <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1.5 }}>{title}</Typography>
       {children}
-    </div>
+    </Box>
   );
-}
-
-function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="text-sm text-gray-500">{children}</p>;
 }
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-5">
-      <p className="text-sm text-gray-500">{label}</p>
-      <p className="text-3xl font-semibold text-gray-900 mt-1">{value}</p>
-    </div>
+    <Paper variant="outlined" sx={{ p: 2.5 }}>
+      <Typography variant="body2" color="text.secondary">{label}</Typography>
+      <Typography variant="h4" fontWeight={600} sx={{ mt: 0.5 }}>{value}</Typography>
+    </Paper>
   );
 }

@@ -1,117 +1,107 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import TextField from '@mui/material/TextField';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import FormGroup from '@mui/material/FormGroup';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Checkbox from '@mui/material/Checkbox';
+import Button from '@mui/material/Button';
+import Alert from '@mui/material/Alert';
 import { userApi } from '@datacatalog/shared';
 import type { UserInviteRequest } from '@datacatalog/shared';
 
 const ROLES = [
-  { value: 'administrator',  label: 'Administrator' },
+  { value: 'administrator',   label: 'Administrator' },
   { value: 'data-governance', label: 'Data Governance' },
-  { value: 'data-owner',     label: 'Data Owner' },
-  { value: 'data-steward',   label: 'Data Steward' },
+  { value: 'data-owner',      label: 'Data Owner' },
+  { value: 'data-steward',    label: 'Data Steward' },
 ];
 
-interface Props {
-  onClose: () => void;
-}
+interface Props { onClose: () => void; }
 
 export default function UserInviteForm({ onClose }: Props) {
   const qc = useQueryClient();
-  const { register, handleSubmit, formState: { errors } } = useForm<UserInviteRequest>({
+  const { register, handleSubmit, control, formState: { errors } } = useForm<UserInviteRequest>({
     defaultValues: { roles: [] },
   });
 
   const inviteMut = useMutation({
     mutationFn: (values: UserInviteRequest) => userApi.invite(values),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['users'] });
-      onClose();
-    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); onClose(); },
   });
 
   return (
-    <div
-      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
-      onClick={e => e.target === e.currentTarget && onClose()}
-    >
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4">
-        <div className="px-6 py-4 border-b flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Invite User</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
-        </div>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <form onSubmit={handleSubmit(data => inviteMut.mutate(data))}>
+        <DialogTitle>Invite User</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '12px !important' }}>
+          <TextField
+            {...register('email', { required: 'Email is required' })}
+            label="Email"
+            type="email"
+            required
+            size="small"
+            fullWidth
+            placeholder="jane.smith@example.com"
+            error={!!errors.email}
+            helperText={errors.email?.message}
+          />
 
-        <form onSubmit={handleSubmit(data => inviteMut.mutate(data))} className="px-6 py-5 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-            <input
-              type="email"
-              {...register('email', { required: 'Email is required' })}
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              placeholder="jane.smith@example.com"
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+            <TextField {...register('firstName')} label="First name" size="small" fullWidth placeholder="Jane" />
+            <TextField {...register('lastName')} label="Last name" size="small" fullWidth placeholder="Smith" />
+          </Box>
+
+          <Box>
+            <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>Role *</Typography>
+            <Controller
+              name="roles"
+              control={control}
+              rules={{ validate: v => (v && v.length > 0) || 'At least one role is required' }}
+              render={({ field }) => (
+                <FormGroup>
+                  {ROLES.map(r => (
+                    <FormControlLabel
+                      key={r.value}
+                      control={
+                        <Checkbox
+                          size="small"
+                          checked={(field.value ?? []).includes(r.value)}
+                          onChange={e => {
+                            const current = field.value ?? [];
+                            field.onChange(
+                              e.target.checked
+                                ? [...current, r.value]
+                                : current.filter((v: string) => v !== r.value)
+                            );
+                          }}
+                        />
+                      }
+                      label={<Typography variant="body2">{r.label}</Typography>}
+                    />
+                  ))}
+                </FormGroup>
+              )}
             />
-            {errors.email && <p className="text-xs text-red-600 mt-1">{errors.email.message}</p>}
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">First name</label>
-              <input
-                {...register('firstName')}
-                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                placeholder="Jane"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Last name</label>
-              <input
-                {...register('lastName')}
-                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                placeholder="Smith"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Role *</label>
-            <div className="space-y-2">
-              {ROLES.map(r => (
-                <label key={r.value} className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    value={r.value}
-                    {...register('roles', { validate: v => (v && v.length > 0) || 'At least one role is required' })}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className="text-sm text-gray-700">{r.label}</span>
-                </label>
-              ))}
-            </div>
-            {errors.roles && <p className="text-xs text-red-600 mt-1">{errors.roles.message}</p>}
-          </div>
+            {errors.roles && <Typography variant="caption" color="error">{errors.roles.message}</Typography>}
+          </Box>
 
           {inviteMut.isError && (
-            <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
-              Failed to invite user. The email address may already be registered.
-            </p>
+            <Alert severity="error">Failed to invite user. The email address may already be registered.</Alert>
           )}
-
-          <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={inviteMut.isPending}
-              className="px-4 py-2 text-sm text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {inviteMut.isPending ? 'Inviting…' : 'Send Invite'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose} sx={{ textTransform: 'none' }}>Cancel</Button>
+          <Button type="submit" variant="contained" disabled={inviteMut.isPending} sx={{ textTransform: 'none' }}>
+            {inviteMut.isPending ? 'Inviting…' : 'Send Invite'}
+          </Button>
+        </DialogActions>
+      </form>
+    </Dialog>
   );
 }

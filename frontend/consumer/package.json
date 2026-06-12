@@ -13,25 +13,23 @@
   },
   "dependencies": {
     "@datacatalog/shared": "file:../shared",
-    "@tailwindcss/typography": "^0.5.19",
+    "@emotion/react": "^11.13.3",
+    "@emotion/styled": "^11.13.0",
+    "@mui/icons-material": "^6.1.6",
+    "@mui/material": "^6.1.6",
     "@tanstack/react-query": "^5.51.1",
-    "clsx": "^2.1.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^6.24.0",
     "reactflow": "^11.11.4",
     "remark-breaks": "^4.0.0",
-    "tailwind-merge": "^2.4.0",
     "zustand": "^4.5.4"
   },
   "devDependencies": {
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
-    "autoprefixer": "^10.4.19",
-    "postcss": "^8.4.39",
-    "tailwindcss": "^3.4.6",
     "typescript": "^5.5.3",
     "vite": "^5.3.3"
   }

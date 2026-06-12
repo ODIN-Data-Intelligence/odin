@@ -1,19 +1,29 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery, useQueries } from '@tanstack/react-query';
-import { distributionApi, datasetApi } from '@datacatalog/shared';
-import { PageHeader } from '@datacatalog/shared';
-import { cn, formatDate } from '../lib/utils';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import Button from '@mui/material/Button';
+import Skeleton from '@mui/material/Skeleton';
+import { distributionApi, datasetApi, PageHeader } from '@datacatalog/shared';
+import { formatDate } from '../lib/utils';
 
-const FORMAT_COLORS: Record<string, string> = {
-  Parquet:   'bg-orange-100 text-orange-700',
-  CSV:       'bg-green-100 text-green-700',
-  JSON:      'bg-yellow-100 text-yellow-700',
-  Avro:      'bg-purple-100 text-purple-700',
-  ORC:       'bg-cyan-100 text-cyan-700',
-  Kafka:     'bg-pink-100 text-pink-700',
-  Delta:     'bg-indigo-100 text-indigo-700',
-  Snowflake: 'bg-blue-100 text-blue-700',
+const FORMAT_COLORS: Record<string, 'warning' | 'success' | 'secondary' | 'error' | 'info' | 'primary' | 'default'> = {
+  Parquet:   'warning',
+  CSV:       'success',
+  JSON:      'secondary',
+  Avro:      'primary',
+  ORC:       'info',
+  Kafka:     'error',
+  Delta:     'secondary',
+  Snowflake: 'info',
 };
 
 const PAGE_SIZE = 20;
@@ -44,101 +54,87 @@ export default function DistributionsPage() {
   );
 
   return (
-    <div>
-      <PageHeader
-        title="Distributions"
-        description={`${totalElements} distributions across all datasets`}
-      />
+    <Box>
+      <PageHeader title="Distributions" description={`${totalElements} distributions across all datasets`} />
 
-      <div className="p-6">
-        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-          <table className="min-w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Format</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Title</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Dataset</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Media Type</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Updated</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {isLoading && Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i}>
-                  <td className="px-4 py-3"><div className="h-4 w-16 bg-gray-200 rounded animate-pulse" /></td>
-                  <td className="px-4 py-3"><div className="h-4 w-48 bg-gray-200 rounded animate-pulse" /></td>
-                  <td className="px-4 py-3"><div className="h-4 w-24 bg-gray-200 rounded animate-pulse" /></td>
-                  <td className="px-4 py-3"><div className="h-4 w-32 bg-gray-200 rounded animate-pulse" /></td>
-                  <td className="px-4 py-3"><div className="h-4 w-20 bg-gray-200 rounded animate-pulse" /></td>
-                </tr>
+      <Box sx={{ p: 3 }}>
+        <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow sx={{ bgcolor: 'grey.50' }}>
+                <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Format</TableCell>
+                <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Title</TableCell>
+                <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Dataset</TableCell>
+                <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Media Type</TableCell>
+                <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Updated</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {isLoading && [...Array(5)].map((_, i) => (
+                <TableRow key={i}>
+                  {[...Array(5)].map((_, j) => <TableCell key={j}><Skeleton height={20} /></TableCell>)}
+                </TableRow>
               ))}
               {!isLoading && distributions.map(dist => (
-                <tr key={dist.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    {dist.format ? (
-                      <span className={cn('px-2 py-0.5 text-xs rounded font-medium', FORMAT_COLORS[dist.format] ?? 'bg-gray-100 text-gray-600')}>
-                        {dist.format}
-                      </span>
-                    ) : (
-                      <span className="text-gray-400 text-xs">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Link
+                <TableRow key={dist.id} hover>
+                  <TableCell>
+                    {dist.format
+                      ? <Chip label={dist.format} color={FORMAT_COLORS[dist.format] ?? 'default'} size="small" sx={{ height: 18, fontSize: 11 }} />
+                      : <Typography variant="caption" color="text.disabled">—</Typography>}
+                  </TableCell>
+                  <TableCell>
+                    <Typography
+                      component={Link}
                       to={`/${tenant}/datasets/${dist.datasetId}/distributions/${dist.id}`}
-                      className="font-medium text-blue-600 hover:underline"
+                      variant="body2"
+                      fontWeight={600}
+                      color="primary"
+                      sx={{ textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
                     >
                       {dist.title ?? dist.id}
-                    </Link>
+                    </Typography>
                     {dist.description && (
-                      <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{dist.description}</p>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                        {dist.description}
+                      </Typography>
                     )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Link
+                  </TableCell>
+                  <TableCell>
+                    <Typography
+                      component={Link}
                       to={`/${tenant}/datasets/${dist.datasetId}`}
-                      className="text-xs text-blue-600 hover:underline"
+                      variant="caption"
+                      color="primary"
+                      sx={{ textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
                     >
                       {dist.datasetId ? (datasetTitles[dist.datasetId] || dist.datasetId.slice(0, 8) + '…') : '—'}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{dist.mediaType ?? '—'}</td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(dist.updatedAt)}</td>
-                </tr>
+                    </Typography>
+                  </TableCell>
+                  <TableCell><Typography variant="caption" color="text.secondary">{dist.mediaType ?? '—'}</Typography></TableCell>
+                  <TableCell><Typography variant="caption" color="text.secondary">{formatDate(dist.updatedAt)}</Typography></TableCell>
+                </TableRow>
               ))}
               {!isLoading && distributions.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-400">
+                <TableRow>
+                  <TableCell colSpan={5} sx={{ textAlign: 'center', py: 5, color: 'text.disabled' }}>
                     No distributions found.
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               )}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Paper>
 
         {totalPages > 1 && (
-          <div className="flex items-center justify-between mt-4 text-sm text-gray-600">
-            <span>Page {page + 1} of {totalPages}</span>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setPage(p => Math.max(0, p - 1))}
-                disabled={page === 0}
-                className="px-3 py-1 border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50"
-              >
-                Previous
-              </button>
-              <button
-                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-                disabled={page >= totalPages - 1}
-                className="px-3 py-1 border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50"
-              >
-                Next
-              </button>
-            </div>
-          </div>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 2 }}>
+            <Typography variant="body2" color="text.secondary">Page {page + 1} of {totalPages}</Typography>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button size="small" variant="outlined" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} sx={{ textTransform: 'none' }}>Previous</Button>
+              <Button size="small" variant="outlined" onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} sx={{ textTransform: 'none' }}>Next</Button>
+            </Box>
+          </Box>
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }

@@ -1,14 +1,11 @@
-import { cn } from './cn';
+import Chip, { ChipProps } from '@mui/material/Chip';
 
 interface BadgeProps {
   label: string;
-  className?: string;
+  color?: ChipProps['color'];
+  sx?: ChipProps['sx'];
 }
 
-export default function Badge({ label, className }: BadgeProps) {
-  return (
-    <span className={cn('inline-flex items-center px-2 py-0.5 rounded text-xs font-medium', className)}>
-      {label}
-    </span>
-  );
+export default function Badge({ label, color = 'default', sx }: BadgeProps) {
+  return <Chip label={label} color={color} size="small" sx={sx} />;
 }

@@ -1,7 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { searchApi } from '@datacatalog/shared';
-import { PageHeader } from '@datacatalog/shared';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import TextField from '@mui/material/TextField';
+import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import Typography from '@mui/material/Typography';
+import Skeleton from '@mui/material/Skeleton';
+import InputAdornment from '@mui/material/InputAdornment';
+import MenuList from '@mui/material/MenuList';
+import MenuItem from '@mui/material/MenuItem';
+import ClickAwayListener from '@mui/material/ClickAwayListener';
+import SearchIcon from '@mui/icons-material/Search';
+import { searchApi, PageHeader } from '@datacatalog/shared';
 import SearchResultCard from '../components/search/SearchResultCard';
 
 type TypeFilter = '' | 'DATASET' | 'DATA_PRODUCT' | 'DISTRIBUTION';
@@ -31,18 +42,12 @@ export default function SearchPage() {
   const [page, setPage] = useState(0);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const suggestionsRef = useRef<HTMLDivElement>(null);
 
   const debouncedInput = useDebounce(inputValue, 250);
 
   const { data: searchData, isLoading } = useQuery({
     queryKey: ['search', query, type, page],
-    queryFn: () => searchApi.search({
-      q: query || undefined,
-      type: type || undefined,
-      page,
-      size: PAGE_SIZE,
-    }),
+    queryFn: () => searchApi.search({ q: query || undefined, type: type || undefined, page, size: PAGE_SIZE }),
     placeholderData: prev => prev,
   });
 
@@ -70,148 +75,106 @@ export default function SearchPage() {
     inputRef.current?.focus();
   }
 
-  function handleTypeChange(value: TypeFilter) {
-    setType(value);
-    setPage(0);
-  }
-
-  // Close suggestions on outside click
-  useEffect(() => {
-    function onMouseDown(e: MouseEvent) {
-      if (
-        suggestionsRef.current && !suggestionsRef.current.contains(e.target as Node) &&
-        inputRef.current && !inputRef.current.contains(e.target as Node)
-      ) {
-        setShowSuggestions(false);
-      }
-    }
-    document.addEventListener('mousedown', onMouseDown);
-    return () => document.removeEventListener('mousedown', onMouseDown);
-  }, []);
-
   const showDropdown = showSuggestions && suggestions.length > 0;
 
   return (
-    <div>
+    <Box>
       <PageHeader title="Search" description="Find datasets, data products, and distributions across the catalog" />
 
-      <div className="p-6 space-y-4">
+      <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
         {/* Search input */}
-        <div className="flex gap-2 max-w-2xl">
-          <div className="relative flex-1">
-            <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center">
-              <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
-              </svg>
-            </div>
-            <input
-              ref={inputRef}
-              type="search"
-              value={inputValue}
-              onChange={e => {
-                setInputValue(e.target.value);
-                setShowSuggestions(true);
-              }}
-              onKeyDown={e => {
-                if (e.key === 'Enter') handleSearch();
-                if (e.key === 'Escape') setShowSuggestions(false);
-              }}
-              placeholder="Search the catalog…"
-              className="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            {showDropdown && (
-              <div
-                ref={suggestionsRef}
-                className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 overflow-hidden"
-              >
-                {suggestions.map(s => (
-                  <button
-                    key={s}
-                    type="button"
-                    onMouseDown={() => handleSuggestionSelect(s)}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700"
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <button
-            onClick={handleSearch}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
-          >
-            Search
-          </button>
-        </div>
+        <Box sx={{ maxWidth: 640 }}>
+          <ClickAwayListener onClickAway={() => setShowSuggestions(false)}>
+            <Box sx={{ position: 'relative' }}>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <TextField
+                  inputRef={inputRef}
+                  type="search"
+                  value={inputValue}
+                  onChange={e => { setInputValue(e.target.value); setShowSuggestions(true); }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') handleSearch();
+                    if (e.key === 'Escape') setShowSuggestions(false);
+                  }}
+                  placeholder="Search the catalog…"
+                  size="small"
+                  fullWidth
+                  InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" color="disabled" /></InputAdornment> }}
+                />
+                <Button variant="contained" onClick={handleSearch} sx={{ textTransform: 'none', flexShrink: 0 }}>
+                  Search
+                </Button>
+              </Box>
+              {showDropdown && (
+                <Paper
+                  variant="outlined"
+                  sx={{ position: 'absolute', top: '100%', left: 0, right: 0, mt: 0.5, zIndex: 10, overflow: 'hidden' }}
+                >
+                  <MenuList dense>
+                    {suggestions.map(s => (
+                      <MenuItem key={s} onMouseDown={() => handleSuggestionSelect(s)}>
+                        <Typography variant="body2">{s}</Typography>
+                      </MenuItem>
+                    ))}
+                  </MenuList>
+                </Paper>
+              )}
+            </Box>
+          </ClickAwayListener>
+        </Box>
 
-        {/* Type filter pills */}
-        <div className="flex gap-2">
+        {/* Type filter chips */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
           {TYPE_PILLS.map(pill => (
-            <button
+            <Chip
               key={pill.value}
-              onClick={() => handleTypeChange(pill.value)}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                type === pill.value
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {pill.label}
-            </button>
+              label={pill.label}
+              color={type === pill.value ? 'primary' : 'default'}
+              variant={type === pill.value ? 'filled' : 'outlined'}
+              size="small"
+              onClick={() => { setType(pill.value); setPage(0); }}
+              sx={{ cursor: 'pointer' }}
+            />
           ))}
           {total > 0 && (
-            <span className="ml-auto text-sm text-gray-500 self-center">
+            <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
               {total.toLocaleString()} {total === 1 ? 'result' : 'results'}
-            </span>
+            </Typography>
           )}
-        </div>
+        </Box>
 
         {/* Results */}
         {isLoading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="bg-white border border-gray-200 rounded-lg px-5 py-4 animate-pulse">
-                <div className="h-4 bg-gray-200 rounded w-1/3 mb-2" />
-                <div className="h-3 bg-gray-100 rounded w-2/3" />
-              </div>
-            ))}
-          </div>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            {[...Array(5)].map((_, i) => <Skeleton key={i} variant="rounded" height={80} />)}
+          </Box>
         ) : results.length > 0 ? (
-          <div className="space-y-3">
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
             {results.map(r => <SearchResultCard key={r.id} result={r} />)}
-          </div>
+          </Box>
         ) : (
-          <div className="py-16 text-center text-gray-400">
+          <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 8 }}>
             {query
               ? `No results for "${query}"${type ? ` in ${type.replace('_', ' ').toLowerCase()}s` : ''}.`
               : 'Enter a search term or browse by asset type above.'}
-          </div>
+          </Typography>
         )}
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between pt-2 text-sm text-gray-600">
-            <span>Page {page + 1} of {totalPages}</span>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setPage(p => Math.max(0, p - 1))}
-                disabled={page === 0}
-                className="px-3 py-1 border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50"
-              >
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pt: 1 }}>
+            <Typography variant="body2" color="text.secondary">Page {page + 1} of {totalPages}</Typography>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button size="small" variant="outlined" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} sx={{ textTransform: 'none' }}>
                 Previous
-              </button>
-              <button
-                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-                disabled={page >= totalPages - 1}
-                className="px-3 py-1 border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50"
-              >
+              </Button>
+              <Button size="small" variant="outlined" onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} sx={{ textTransform: 'none' }}>
                 Next
-              </button>
-            </div>
-          </div>
+              </Button>
+            </Box>
+          </Box>
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }

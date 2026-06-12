@@ -60,6 +60,10 @@ catalog:
     url: ${CATALOG_SERVICE_URL:http://inventory-service:8001}
     api-key: ${CATALOG_SERVICE_API_KEY:dev-internal}
 
+search:
+  service:
+    url: ${SEARCH_SERVICE_URL:http://search-service:8004}
+
 server:
   port: 8005
 

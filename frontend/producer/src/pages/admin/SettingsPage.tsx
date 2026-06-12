@@ -1,15 +1,22 @@
 import { useQuery } from '@tanstack/react-query';
-import { vocabularyApi } from '@datacatalog/shared';
-import { PageHeader } from '@datacatalog/shared';
-import { Button } from '@datacatalog/shared';
-import { Badge } from '@datacatalog/shared';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import Button from '@mui/material/Button';
+import { vocabularyApi, PageHeader } from '@datacatalog/shared';
 
-const VOCAB_TYPE_COLORS: Record<string, string> = {
-  general: 'bg-gray-100 text-gray-700',
-  financial: 'bg-yellow-100 text-yellow-700',
-  healthcare: 'bg-green-100 text-green-700',
-  geospatial: 'bg-blue-100 text-blue-700',
-  custom: 'bg-purple-100 text-purple-700',
+const VOCAB_TYPE_COLORS: Record<string, 'default' | 'warning' | 'success' | 'info' | 'secondary'> = {
+  general: 'default',
+  financial: 'warning',
+  healthcare: 'success',
+  geospatial: 'info',
+  custom: 'secondary',
 };
 
 export default function SettingsPage() {
@@ -19,54 +26,62 @@ export default function SettingsPage() {
   });
 
   return (
-    <div>
+    <Box>
       <PageHeader title="Settings" description="API keys, LLM providers, vocabulary registry" />
-      <div className="p-6 space-y-8">
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-base font-semibold text-gray-800">Registered Vocabularies</h2>
-            <Button size="sm" variant="secondary">+ Register Vocabulary</Button>
-          </div>
-          <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Prefix</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Base IRI</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
+      <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+            <Typography variant="subtitle2" fontWeight={600}>Registered Vocabularies</Typography>
+            <Button size="small" variant="outlined" sx={{ textTransform: 'none' }}>+ Register Vocabulary</Button>
+          </Box>
+          <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow sx={{ bgcolor: 'grey.50' }}>
+                  <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Name</TableCell>
+                  <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Prefix</TableCell>
+                  <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Type</TableCell>
+                  <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Base IRI</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
                 {vocabs.map(v => (
-                  <tr key={v.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-900">
-                      {v.name}
-                      {v.isSystem && <span className="ml-2 text-xs text-gray-400">(system)</span>}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-gray-600">{v.prefix}</td>
-                    <td className="px-4 py-3">
-                      <Badge label={v.vocabularyType} className={VOCAB_TYPE_COLORS[v.vocabularyType] ?? 'bg-gray-100 text-gray-700'} />
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-500 truncate max-w-xs">{v.baseIri}</td>
-                  </tr>
+                  <TableRow key={v.id} hover>
+                    <TableCell>
+                      <Typography variant="body2" fontWeight={600}>
+                        {v.name}
+                        {v.isSystem && <Typography component="span" variant="caption" color="text.disabled" sx={{ ml: 1 }}>(system)</Typography>}
+                      </Typography>
+                    </TableCell>
+                    <TableCell><Typography variant="caption" fontFamily="monospace" color="text.secondary">{v.prefix}</Typography></TableCell>
+                    <TableCell>
+                      <Chip label={v.vocabularyType} color={VOCAB_TYPE_COLORS[v.vocabularyType] ?? 'default'} size="small" sx={{ height: 18, fontSize: 11 }} />
+                    </TableCell>
+                    <TableCell sx={{ maxWidth: 240 }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {v.baseIri}
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
                 ))}
                 {vocabs.length === 0 && (
-                  <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-400">No vocabularies registered</td></tr>
+                  <TableRow>
+                    <TableCell colSpan={4} sx={{ textAlign: 'center', py: 5, color: 'text.disabled' }}>No vocabularies registered</TableCell>
+                  </TableRow>
                 )}
-              </tbody>
-            </table>
-          </div>
-        </section>
+              </TableBody>
+            </Table>
+          </Paper>
+        </Box>
 
-        <section>
-          <h2 className="text-base font-semibold text-gray-800 mb-3">API Keys</h2>
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <p className="text-sm text-gray-500">API key management will be shown here.</p>
-            <Button size="sm" className="mt-3">Generate API Key</Button>
-          </div>
-        </section>
-      </div>
-    </div>
+        <Box>
+          <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1.5 }}>API Keys</Typography>
+          <Paper variant="outlined" sx={{ p: 2 }}>
+            <Typography variant="body2" color="text.secondary">API key management will be shown here.</Typography>
+            <Button size="small" variant="outlined" sx={{ mt: 1.5, textTransform: 'none' }}>Generate API Key</Button>
+          </Paper>
+        </Box>
+      </Box>
+    </Box>
   );
 }

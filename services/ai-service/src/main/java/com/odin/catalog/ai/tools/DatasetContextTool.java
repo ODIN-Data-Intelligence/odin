@@ -1,24 +1,39 @@
 package com.odin.catalog.ai.tools;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.odin.catalog.ai.client.CatalogServiceClient;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
-import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClient;
 
 import java.util.Comparator;
 import java.util.List;
 
 @Component
-@RequiredArgsConstructor
 public class DatasetContextTool {
 
     private static final Logger log = LoggerFactory.getLogger(DatasetContextTool.class);
 
     private final CatalogServiceClient catalogClient;
+    private final RestClient searchClient;
+
+    public DatasetContextTool(
+            CatalogServiceClient catalogClient,
+            RestClient.Builder restClientBuilder,
+            @Value("${search.service.url:http://search-service:8004}") String searchServiceUrl,
+            @Value("${catalog.service.api-key:dev-internal}") String apiKey) {
+        this.catalogClient = catalogClient;
+        this.searchClient = restClientBuilder.clone()
+            .baseUrl(searchServiceUrl)
+            .defaultHeader("X-API-Key", apiKey)
+            .build();
+    }
 
     @Tool("Retrieve the title, description, keywords, and themes for a dataset by its ID")
     public String getDatasetInfo(@P("UUID of the dataset") String datasetId) {
@@ -102,6 +117,47 @@ public class DatasetContextTool {
         log.debug("step=TOOL_RESULT tool=getLogicalElementsWithVocabulary output={}", result);
         return result;
     }
+
+    @Tool("Search the data catalog for datasets related to the given query or concept. " +
+          "Returns dataset IDs and titles. Call getQueryContext() for each result you need physical schema for " +
+          "before writing any SQL query that references those datasets.")
+    public String findRelatedDatasets(@P("Natural language search query describing the datasets to find") String query) {
+        long start = System.currentTimeMillis();
+        log.info("step=TOOL_CALL tool=findRelatedDatasets query={}", query);
+        try {
+            List<SearchHit> hits = searchClient.get()
+                .uri(uriBuilder -> uriBuilder
+                    .path("/api/v1/search")
+                    .queryParam("q", query)
+                    .queryParam("type", "dataset")
+                    .queryParam("size", 5)
+                    .build())
+                .retrieve()
+                .body(new ParameterizedTypeReference<List<SearchHit>>() {});
+
+            if (hits == null || hits.isEmpty()) {
+                log.info("step=TOOL_RESULT tool=findRelatedDatasets result=NONE elapsed={}ms", elapsed(start));
+                return "No datasets found matching: " + query;
+            }
+
+            StringBuilder sb = new StringBuilder("Found ").append(hits.size()).append(" dataset(s):\n");
+            for (SearchHit h : hits) {
+                sb.append("  - id=").append(h.id()).append("  title=").append(h.title());
+                if (h.description() != null && !h.description().isBlank())
+                    sb.append("  (").append(h.description(), 0, Math.min(80, h.description().length())).append(")");
+                sb.append('\n');
+            }
+            String result = sb.toString().strip();
+            log.info("step=TOOL_RESULT tool=findRelatedDatasets hits={} elapsed={}ms", hits.size(), elapsed(start));
+            return result;
+        } catch (Exception e) {
+            log.warn("step=TOOL_RESULT tool=findRelatedDatasets error={} elapsed={}ms", e.getMessage(), elapsed(start));
+            return "Could not search catalog: " + e.getMessage();
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record SearchHit(String id, String title, String description) {}
 
     private static int statusPriority(String status) {
         return switch (status == null ? "" : status) {

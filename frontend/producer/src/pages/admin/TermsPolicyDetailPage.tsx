@@ -1,6 +1,30 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import TextField from '@mui/material/TextField';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import InputLabel from '@mui/material/InputLabel';
+import FormControl from '@mui/material/FormControl';
+import Alert from '@mui/material/Alert';
+import EditIcon from '@mui/icons-material/Edit';
 import { termsPolicyApi } from '@datacatalog/shared';
 import type {
   TermsPolicyDetail,
@@ -8,20 +32,15 @@ import type {
   TermsRegulationRule,
   TermsRegulationObligation,
 } from '@datacatalog/shared';
-import { Button, Badge } from '@datacatalog/shared';
 
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-const STATUS_COLORS: Record<TermsPolicyDetail['status'], string> = {
-  ACTIVE:   'bg-green-100 text-green-700',
-  DRAFT:    'bg-blue-100 text-blue-700',
-  ARCHIVED: 'bg-gray-100 text-gray-500',
+const STATUS_COLORS: Record<TermsPolicyDetail['status'], 'success' | 'info' | 'default'> = {
+  ACTIVE:   'success',
+  DRAFT:    'info',
+  ARCHIVED: 'default',
 };
 
 const CLASSIFICATIONS = ['PUBLIC', 'INTERNAL', 'CONFIDENTIAL', 'HIGH_CONFIDENTIAL'];
 const SIGNAL_TYPES = ['IRI_CONTAINS', 'KEYWORD', 'LOGICAL_TYPE'];
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function parseLines(text: string): string[] {
   return text.split('\n').map(s => s.trim()).filter(Boolean);
@@ -33,36 +52,40 @@ function joinLines(arr: string[]): string {
 
 function ListCell({ items }: { items: string[] }) {
   const [expanded, setExpanded] = useState(false);
-  if (items.length === 0) return <span className="text-gray-400">—</span>;
+  if (items.length === 0) return <Typography variant="caption" color="text.disabled">—</Typography>;
   if (!expanded) {
     return (
-      <button onClick={() => setExpanded(true)} className="text-xs text-blue-600 hover:underline">
+      <Button variant="text" size="small" sx={{ textTransform: 'none', p: 0, fontSize: 12, minWidth: 0 }} onClick={() => setExpanded(true)}>
         {items.length} item{items.length !== 1 ? 's' : ''}
-      </button>
+      </Button>
     );
   }
   return (
-    <div>
-      <ul className="text-xs text-gray-700 space-y-0.5">
-        {items.map((item, i) => <li key={i} className="leading-snug">• {item}</li>)}
-      </ul>
-      <button onClick={() => setExpanded(false)} className="text-xs text-blue-600 hover:underline mt-1">
+    <Box>
+      <Box component="ul" sx={{ m: 0, pl: 1.5, listStyle: 'none' }}>
+        {items.map((item, i) => (
+          <Box component="li" key={i}>
+            <Typography variant="caption" color="text.secondary">• {item}</Typography>
+          </Box>
+        ))}
+      </Box>
+      <Button variant="text" size="small" sx={{ textTransform: 'none', p: 0, fontSize: 12, minWidth: 0 }} onClick={() => setExpanded(false)}>
         collapse
-      </button>
-    </div>
+      </Button>
+    </Box>
   );
 }
 
-// ── Classification Rule Modal ─────────────────────────────────────────────────
+// ── Classification Rule Dialog ────────────────────────────────────────────────
 
-interface ClassificationRuleModalProps {
+interface ClassificationRuleDialogProps {
   policyId: string;
   existing: TermsClassificationRule | null;
   onClose: () => void;
   onSaved: () => void;
 }
 
-function ClassificationRuleModal({ policyId, existing, onClose, onSaved }: ClassificationRuleModalProps) {
+function ClassificationRuleDialog({ policyId, existing, onClose, onSaved }: ClassificationRuleDialogProps) {
   const [classification, setClassification] = useState(existing?.classification ?? '');
   const [rank, setRank] = useState(String(existing?.rank ?? ''));
   const [accessLevel, setAccessLevel] = useState(existing?.accessLevel ?? '');
@@ -77,130 +100,70 @@ function ClassificationRuleModal({ policyId, existing, onClose, onSaved }: Class
   const saveMut = useMutation({
     mutationFn: () =>
       termsPolicyApi.upsertClassificationRule(policyId, classification, {
-        rank: Number(rank),
-        accessLevel,
-        permissions: parseLines(permissions),
-        prohibitions: parseLines(prohibitions),
-        obligations: parseLines(obligations),
-        odrlPermissions: parseLines(odrlPermissions),
-        odrlProhibitions: parseLines(odrlProhibitions),
-        odrlDuties: parseLines(odrlDuties),
+        rank: Number(rank), accessLevel,
+        permissions: parseLines(permissions), prohibitions: parseLines(prohibitions), obligations: parseLines(obligations),
+        odrlPermissions: parseLines(odrlPermissions), odrlProhibitions: parseLines(odrlProhibitions), odrlDuties: parseLines(odrlDuties),
       }),
-    onSuccess: () => onSaved(),
+    onSuccess: onSaved,
     onError: () => setError('Failed to save. Please try again.'),
   });
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!classification || !rank || !accessLevel) {
-      setError('Classification, rank, and access level are required.');
-      return;
-    }
+    if (!classification || !rank || !accessLevel) { setError('Classification, rank, and access level are required.'); return; }
     setError('');
     saveMut.mutate();
   }
 
-  const textareaClass = 'w-full border border-gray-300 rounded px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none';
-
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-start justify-center z-50 overflow-y-auto py-8">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6 mx-4">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">
-          {existing ? `Edit Rule: ${existing.classification}` : 'Add Classification Rule'}
-        </h2>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Classification *</label>
-              <select
-                value={classification}
-                onChange={e => setClassification(e.target.value)}
-                disabled={!!existing}
-                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
-              >
-                <option value="">Select…</option>
-                {CLASSIFICATIONS.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Rank *</label>
-              <input
-                type="number"
-                value={rank}
-                onChange={e => setRank(e.target.value)}
-                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                min={0}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Access Level *</label>
-              <input
-                type="text"
-                value={accessLevel}
-                onChange={e => setAccessLevel(e.target.value)}
-                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="e.g. OPEN"
-              />
-            </div>
-          </div>
-
-          <p className="text-xs text-gray-500">Enter one item per line for list fields.</p>
-
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Permissions</label>
-              <textarea rows={5} value={permissions} onChange={e => setPermissions(e.target.value)} className={textareaClass} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Prohibitions</label>
-              <textarea rows={5} value={prohibitions} onChange={e => setProhibitions(e.target.value)} className={textareaClass} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Obligations</label>
-              <textarea rows={5} value={obligations} onChange={e => setObligations(e.target.value)} className={textareaClass} />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">ODRL Permissions</label>
-              <textarea rows={4} value={odrlPermissions} onChange={e => setOdrlPermissions(e.target.value)} className={textareaClass} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">ODRL Prohibitions</label>
-              <textarea rows={4} value={odrlProhibitions} onChange={e => setOdrlProhibitions(e.target.value)} className={textareaClass} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">ODRL Duties</label>
-              <textarea rows={4} value={odrlDuties} onChange={e => setOdrlDuties(e.target.value)} className={textareaClass} />
-            </div>
-          </div>
-
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
-              Cancel
-            </button>
-            <Button type="submit" disabled={saveMut.isPending}>
-              {saveMut.isPending ? 'Saving…' : 'Save Rule'}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <Dialog open onClose={onClose} maxWidth="md" fullWidth>
+      <form onSubmit={handleSubmit}>
+        <DialogTitle>{existing ? `Edit Rule: ${existing.classification}` : 'Add Classification Rule'}</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '12px !important' }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 2 }}>
+            <FormControl size="small" required>
+              <InputLabel>Classification</InputLabel>
+              <Select label="Classification" value={classification} onChange={e => setClassification(e.target.value)} disabled={!!existing}>
+                {CLASSIFICATIONS.map(c => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+              </Select>
+            </FormControl>
+            <TextField label="Rank" type="number" value={rank} onChange={e => setRank(e.target.value)} size="small" inputProps={{ min: 0 }} required />
+            <TextField label="Access Level" value={accessLevel} onChange={e => setAccessLevel(e.target.value)} size="small" placeholder="e.g. OPEN" required />
+          </Box>
+          <Typography variant="caption" color="text.secondary">Enter one item per line for list fields.</Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 2 }}>
+            <TextField label="Permissions" value={permissions} onChange={e => setPermissions(e.target.value)} multiline rows={5} size="small" inputProps={{ style: { fontFamily: 'monospace', fontSize: 12 } }} />
+            <TextField label="Prohibitions" value={prohibitions} onChange={e => setProhibitions(e.target.value)} multiline rows={5} size="small" inputProps={{ style: { fontFamily: 'monospace', fontSize: 12 } }} />
+            <TextField label="Obligations" value={obligations} onChange={e => setObligations(e.target.value)} multiline rows={5} size="small" inputProps={{ style: { fontFamily: 'monospace', fontSize: 12 } }} />
+          </Box>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 2 }}>
+            <TextField label="ODRL Permissions" value={odrlPermissions} onChange={e => setOdrlPermissions(e.target.value)} multiline rows={4} size="small" inputProps={{ style: { fontFamily: 'monospace', fontSize: 12 } }} />
+            <TextField label="ODRL Prohibitions" value={odrlProhibitions} onChange={e => setOdrlProhibitions(e.target.value)} multiline rows={4} size="small" inputProps={{ style: { fontFamily: 'monospace', fontSize: 12 } }} />
+            <TextField label="ODRL Duties" value={odrlDuties} onChange={e => setOdrlDuties(e.target.value)} multiline rows={4} size="small" inputProps={{ style: { fontFamily: 'monospace', fontSize: 12 } }} />
+          </Box>
+          {error && <Alert severity="error">{error}</Alert>}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose} sx={{ textTransform: 'none' }}>Cancel</Button>
+          <Button type="submit" variant="contained" disabled={saveMut.isPending} sx={{ textTransform: 'none' }}>
+            {saveMut.isPending ? 'Saving…' : 'Save Rule'}
+          </Button>
+        </DialogActions>
+      </form>
+    </Dialog>
   );
 }
 
-// ── Regulation Rule Modal ─────────────────────────────────────────────────────
+// ── Regulation Rule Dialog ────────────────────────────────────────────────────
 
-interface RegulationRuleModalProps {
+interface RegulationRuleDialogProps {
   policyId: string;
   existing: TermsRegulationRule | null;
   onClose: () => void;
   onSaved: () => void;
 }
 
-function RegulationRuleModal({ policyId, existing, onClose, onSaved }: RegulationRuleModalProps) {
+function RegulationRuleDialog({ policyId, existing, onClose, onSaved }: RegulationRuleDialogProps) {
   const [signalType, setSignalType] = useState(existing?.signalType ?? '');
   const [pattern, setPattern] = useState(existing?.pattern ?? '');
   const [regulationName, setRegulationName] = useState(existing?.regulationName ?? '');
@@ -210,182 +173,93 @@ function RegulationRuleModal({ policyId, existing, onClose, onSaved }: Regulatio
   const saveMut = useMutation({
     mutationFn: () => {
       const body = { signalType, pattern, regulationName, signalLabel };
-      if (existing) {
-        return termsPolicyApi.updateRegulationRule(policyId, existing.id, body);
-      }
-      return termsPolicyApi.addRegulationRule(policyId, body);
+      return existing
+        ? termsPolicyApi.updateRegulationRule(policyId, existing.id, body)
+        : termsPolicyApi.addRegulationRule(policyId, body);
     },
-    onSuccess: () => onSaved(),
+    onSuccess: onSaved,
     onError: () => setError('Failed to save. Please try again.'),
   });
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!signalType || !pattern || !regulationName || !signalLabel) {
-      setError('All fields are required.');
-      return;
-    }
+    if (!signalType || !pattern || !regulationName || !signalLabel) { setError('All fields are required.'); return; }
     setError('');
     saveMut.mutate();
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">
-          {existing ? 'Edit Regulation Rule' : 'Add Regulation Rule'}
-        </h2>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Signal Type *</label>
-            <select
-              value={signalType}
-              onChange={e => setSignalType(e.target.value)}
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Select…</option>
-              {SIGNAL_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Pattern *</label>
-            <input
-              type="text"
-              value={pattern}
-              onChange={e => setPattern(e.target.value)}
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="e.g. fibo-fbc or gdpr"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Regulation Name *</label>
-            <input
-              type="text"
-              value={regulationName}
-              onChange={e => setRegulationName(e.target.value)}
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="e.g. GDPR"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Signal Label *</label>
-            <input
-              type="text"
-              value={signalLabel}
-              onChange={e => setSignalLabel(e.target.value)}
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="e.g. FIBO Banking concepts detected"
-            />
-          </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
-              Cancel
-            </button>
-            <Button type="submit" disabled={saveMut.isPending}>
-              {saveMut.isPending ? 'Saving…' : 'Save Rule'}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <form onSubmit={handleSubmit}>
+        <DialogTitle>{existing ? 'Edit Regulation Rule' : 'Add Regulation Rule'}</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '12px !important' }}>
+          <FormControl size="small" required>
+            <InputLabel>Signal Type</InputLabel>
+            <Select label="Signal Type" value={signalType} onChange={e => setSignalType(e.target.value)}>
+              {SIGNAL_TYPES.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
+            </Select>
+          </FormControl>
+          <TextField label="Pattern" value={pattern} onChange={e => setPattern(e.target.value)} size="small" placeholder="e.g. fibo-fbc or gdpr" required fullWidth />
+          <TextField label="Regulation Name" value={regulationName} onChange={e => setRegulationName(e.target.value)} size="small" placeholder="e.g. GDPR" required fullWidth />
+          <TextField label="Signal Label" value={signalLabel} onChange={e => setSignalLabel(e.target.value)} size="small" placeholder="e.g. FIBO Banking concepts detected" required fullWidth />
+          {error && <Alert severity="error">{error}</Alert>}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose} sx={{ textTransform: 'none' }}>Cancel</Button>
+          <Button type="submit" variant="contained" disabled={saveMut.isPending} sx={{ textTransform: 'none' }}>
+            {saveMut.isPending ? 'Saving…' : 'Save Rule'}
+          </Button>
+        </DialogActions>
+      </form>
+    </Dialog>
   );
 }
 
-// ── Regulation Obligation Modal ───────────────────────────────────────────────
+// ── Regulation Obligation Dialog ──────────────────────────────────────────────
 
-interface RegulationObligationModalProps {
-  policyId: string;
-  onClose: () => void;
-  onSaved: () => void;
-}
-
-function RegulationObligationModal({ policyId, onClose, onSaved }: RegulationObligationModalProps) {
+function RegulationObligationDialog({ policyId, onClose, onSaved }: { policyId: string; onClose: () => void; onSaved: () => void }) {
   const [regulationName, setRegulationName] = useState('');
   const [obligation, setObligation] = useState('');
   const [odrlDuty, setOdrlDuty] = useState('');
   const [error, setError] = useState('');
 
   const saveMut = useMutation({
-    mutationFn: () =>
-      termsPolicyApi.addRegulationObligation(policyId, {
-        regulationName,
-        obligation,
-        odrlDuty: odrlDuty.trim() || null,
-      }),
-    onSuccess: () => onSaved(),
+    mutationFn: () => termsPolicyApi.addRegulationObligation(policyId, { regulationName, obligation, odrlDuty: odrlDuty.trim() || null }),
+    onSuccess: onSaved,
     onError: () => setError('Failed to save. Please try again.'),
   });
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!regulationName || !obligation) {
-      setError('Regulation name and obligation are required.');
-      return;
-    }
+    if (!regulationName || !obligation) { setError('Regulation name and obligation are required.'); return; }
     setError('');
     saveMut.mutate();
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Add Regulation Obligation</h2>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Regulation Name *</label>
-            <input
-              type="text"
-              value={regulationName}
-              onChange={e => setRegulationName(e.target.value)}
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="e.g. GDPR"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Obligation *</label>
-            <textarea
-              value={obligation}
-              onChange={e => setObligation(e.target.value)}
-              rows={3}
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-              placeholder="e.g. Conduct a DPIA before processing"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">ODRL Duty (optional)</label>
-            <input
-              type="text"
-              value={odrlDuty}
-              onChange={e => setOdrlDuty(e.target.value)}
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="e.g. conductDPIA"
-            />
-          </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
-              Cancel
-            </button>
-            <Button type="submit" disabled={saveMut.isPending}>
-              {saveMut.isPending ? 'Saving…' : 'Add Obligation'}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <form onSubmit={handleSubmit}>
+        <DialogTitle>Add Regulation Obligation</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '12px !important' }}>
+          <TextField label="Regulation Name" value={regulationName} onChange={e => setRegulationName(e.target.value)} size="small" placeholder="e.g. GDPR" required fullWidth />
+          <TextField label="Obligation" value={obligation} onChange={e => setObligation(e.target.value)} size="small" multiline rows={3} placeholder="e.g. Conduct a DPIA before processing" required fullWidth />
+          <TextField label="ODRL Duty (optional)" value={odrlDuty} onChange={e => setOdrlDuty(e.target.value)} size="small" placeholder="e.g. conductDPIA" fullWidth />
+          {error && <Alert severity="error">{error}</Alert>}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose} sx={{ textTransform: 'none' }}>Cancel</Button>
+          <Button type="submit" variant="contained" disabled={saveMut.isPending} sx={{ textTransform: 'none' }}>
+            {saveMut.isPending ? 'Saving…' : 'Add Obligation'}
+          </Button>
+        </DialogActions>
+      </form>
+    </Dialog>
   );
 }
 
-// ── Inline name/description editor ───────────────────────────────────────────
+// ── Inline Meta Editor ────────────────────────────────────────────────────────
 
-interface InlineEditProps {
-  policyId: string;
-  policy: TermsPolicyDetail;
-  onSaved: () => void;
-}
-
-function InlineMetaEditor({ policyId, policy, onSaved }: InlineEditProps) {
+function InlineMetaEditor({ policyId, policy, onSaved }: { policyId: string; policy: TermsPolicyDetail; onSaved: () => void }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(policy.name);
   const [description, setDescription] = useState(policy.description ?? '');
@@ -397,60 +271,57 @@ function InlineMetaEditor({ policyId, policy, onSaved }: InlineEditProps) {
 
   if (!editing) {
     return (
-      <div className="flex items-start gap-2">
-        <div>
-          <p className="text-sm text-gray-500 mt-0.5">{policy.description || <span className="italic text-gray-400">No description</span>}</p>
-        </div>
-        <button
-          onClick={() => setEditing(true)}
-          className="ml-1 text-xs text-gray-400 hover:text-gray-600 mt-0.5"
-          title="Edit name and description"
-        >
-          ✏
-        </button>
-      </div>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5 }}>
+        <Typography variant="body2" color="text.secondary">{policy.description || <em>No description</em>}</Typography>
+        <IconButton size="small" onClick={() => setEditing(true)} sx={{ mt: '-2px' }}>
+          <EditIcon sx={{ fontSize: 14 }} />
+        </IconButton>
+      </Box>
     );
   }
 
   return (
-    <div className="flex flex-col gap-2 max-w-lg">
-      <input
-        type="text"
-        value={name}
-        onChange={e => setName(e.target.value)}
-        className="border border-gray-300 rounded px-3 py-1.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
-      />
-      <textarea
-        value={description}
-        onChange={e => setDescription(e.target.value)}
-        rows={2}
-        className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-        placeholder="Description (optional)"
-      />
-      <div className="flex gap-2">
-        <Button onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, maxWidth: 480 }}>
+      <TextField value={name} onChange={e => setName(e.target.value)} size="small" inputProps={{ style: { fontWeight: 600 } }} fullWidth />
+      <TextField value={description} onChange={e => setDescription(e.target.value)} size="small" multiline rows={2} placeholder="Description (optional)" fullWidth />
+      <Box sx={{ display: 'flex', gap: 1 }}>
+        <Button variant="contained" size="small" onClick={() => saveMut.mutate()} disabled={saveMut.isPending} sx={{ textTransform: 'none' }}>
           {saveMut.isPending ? 'Saving…' : 'Save'}
         </Button>
-        <button onClick={() => setEditing(false)} className="text-sm text-gray-500 hover:text-gray-700">
-          Cancel
-        </button>
-      </div>
-    </div>
+        <Button size="small" onClick={() => setEditing(false)} sx={{ textTransform: 'none' }}>Cancel</Button>
+      </Box>
+    </Box>
   );
 }
 
-// ── Tabs ─────────────────────────────────────────────────────────────────────
-
-type Tab = 'classification' | 'regulation' | 'obligations';
-
 // ── Main page ─────────────────────────────────────────────────────────────────
+
+type TabId = 'classification' | 'regulation' | 'obligations';
+
+function ConfirmDialog({ open, title, children, confirmLabel, confirmColor, onClose, onConfirm, isPending }: {
+  open: boolean; title: string; children: React.ReactNode; confirmLabel: string;
+  confirmColor?: 'error' | 'success' | 'primary'; onClose: () => void; onConfirm: () => void; isPending?: boolean;
+}) {
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>{title}</DialogTitle>
+      <DialogContent>{children}</DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} sx={{ textTransform: 'none' }}>Cancel</Button>
+        <Button variant="contained" color={confirmColor ?? 'primary'} disabled={isPending} onClick={onConfirm} sx={{ textTransform: 'none' }}>
+          {isPending ? `${confirmLabel.replace(/^(\w)/, c => c.toUpperCase())}ing…` : confirmLabel}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
 
 export default function TermsPolicyDetailPage() {
   const { tenant, policyId } = useParams<{ tenant: string; policyId: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<Tab>('classification');
+  const [activeTab, setActiveTab] = useState<TabId>('classification');
   const [editClassRule, setEditClassRule] = useState<TermsClassificationRule | null | 'new'>(null);
   const [editRegRule, setEditRegRule] = useState<TermsRegulationRule | null | 'new'>(null);
   const [showAddObligation, setShowAddObligation] = useState(false);
@@ -466,9 +337,7 @@ export default function TermsPolicyDetailPage() {
     enabled: !!policyId,
   });
 
-  function invalidateDetail() {
-    qc.invalidateQueries({ queryKey: ['terms-policy', policyId] });
-  }
+  function invalidateDetail() { qc.invalidateQueries({ queryKey: ['terms-policy', policyId] }); }
 
   const activateMut = useMutation({
     mutationFn: () => termsPolicyApi.activate(policyId!),
@@ -502,401 +371,275 @@ export default function TermsPolicyDetailPage() {
     onSuccess: () => { setConfirmDeleteObligation(null); invalidateDetail(); },
   });
 
-  if (isLoading) return <div className="p-8 text-sm text-gray-500">Loading…</div>;
-  if (isError || !policy) return <div className="p-8 text-sm text-red-500">Failed to load policy.</div>;
+  if (isLoading) return <Typography variant="body2" color="text.secondary" sx={{ p: 4 }}>Loading…</Typography>;
+  if (isError || !policy) return <Alert severity="error" sx={{ m: 3 }}>Failed to load policy.</Alert>;
 
   const isDraft = policy.status === 'DRAFT';
 
-  const tabs: { id: Tab; label: string; count: number }[] = [
+  const tabs: { id: TabId; label: string; count: number }[] = [
     { id: 'classification', label: 'Classification Rules', count: policy.classificationRules.length },
     { id: 'regulation',     label: 'Regulation Rules',     count: policy.regulationRules.length },
     { id: 'obligations',    label: 'Regulation Obligations', count: policy.regulationObligations.length },
   ];
 
   return (
-    <div>
+    <Box>
       {/* Header */}
-      <div className="px-6 pt-6 pb-4 border-b border-gray-200 bg-white">
-        <div className="mb-3">
-          <Link
-            to={`/${tenant}/admin/governance/terms-policies`}
-            className="text-xs text-blue-600 hover:underline"
-          >
-            ← Back to Policies
-          </Link>
-        </div>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <h1 className="text-xl font-semibold text-gray-900">{policy.name}</h1>
-              <Badge label={policy.status} className={STATUS_COLORS[policy.status]} />
-              <span className="text-xs text-gray-400">v{policy.version}</span>
-            </div>
-            {isDraft ? (
-              <InlineMetaEditor policyId={policyId!} policy={policy} onSaved={invalidateDetail} />
-            ) : (
-              <p className="text-sm text-gray-500">{policy.description || <span className="italic text-gray-400">No description</span>}</p>
-            )}
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
+      <Box sx={{ px: 3, pt: 3, pb: 2, borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
+        <Typography
+          component={Link}
+          to={`/${tenant}/admin/governance/terms-policies`}
+          variant="caption"
+          color="primary"
+          sx={{ textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+        >
+          ← Back to Policies
+        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2, mt: 1.5 }}>
+          <Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
+              <Typography variant="h6" fontWeight={600}>{policy.name}</Typography>
+              <Chip label={policy.status} color={STATUS_COLORS[policy.status]} size="small" sx={{ height: 20, fontSize: 11 }} />
+              <Typography variant="caption" color="text.disabled">v{policy.version}</Typography>
+            </Box>
+            {isDraft
+              ? <InlineMetaEditor policyId={policyId!} policy={policy} onSaved={invalidateDetail} />
+              : <Typography variant="body2" color="text.secondary">{policy.description || <em>No description</em>}</Typography>}
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
             {isDraft && (
               <>
-                <Button onClick={() => setConfirmActivate(true)}>Activate</Button>
-                <button
-                  onClick={() => setConfirmDelete(true)}
-                  className="px-3 py-1.5 text-sm text-red-600 border border-red-300 rounded hover:bg-red-50"
-                >
-                  Delete
-                </button>
+                <Button variant="contained" size="small" onClick={() => setConfirmActivate(true)} sx={{ textTransform: 'none' }}>Activate</Button>
+                <Button variant="outlined" color="error" size="small" onClick={() => setConfirmDelete(true)} sx={{ textTransform: 'none' }}>Delete</Button>
               </>
             )}
             {!isDraft && (
-              <button
-                onClick={() => navigate(`/${tenant}/admin/governance/terms-policies`)}
-                className="px-3 py-1.5 text-sm text-purple-600 border border-purple-300 rounded hover:bg-purple-50"
-              >
+              <Button variant="outlined" color="secondary" size="small" onClick={() => navigate(`/${tenant}/admin/governance/terms-policies`)} sx={{ textTransform: 'none' }}>
                 Clone to New Draft
-              </button>
+              </Button>
             )}
-          </div>
-        </div>
-
+          </Box>
+        </Box>
         {!isDraft && (
-          <div className="mt-3 px-4 py-2 bg-amber-50 border border-amber-200 rounded text-sm text-amber-700">
+          <Alert severity="warning" sx={{ mt: 1.5 }}>
             This policy is <strong>{policy.status}</strong> — clone it to make changes.
-          </div>
+          </Alert>
         )}
-      </div>
+      </Box>
 
       {/* Tabs */}
-      <div className="px-6 bg-white border-b border-gray-200">
-        <div className="flex gap-1">
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 1 }}>
+        <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v as TabId)}>
           {tabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === tab.id
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              {tab.label}
-              <span className="ml-1.5 text-xs text-gray-400">({tab.count})</span>
-            </button>
+            <Tab key={tab.id} value={tab.id} label={`${tab.label} (${tab.count})`} sx={{ textTransform: 'none', fontSize: 13 }} />
           ))}
-        </div>
-      </div>
+        </Tabs>
+      </Box>
 
       {/* Tab Content */}
-      <div className="p-6">
-
+      <Box sx={{ p: 3 }}>
         {/* ── Classification Rules ── */}
         {activeTab === 'classification' && (
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-sm font-semibold text-gray-700">Classification Rules</h2>
+          <Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="subtitle2" fontWeight={600}>Classification Rules</Typography>
               {isDraft && (
-                <Button onClick={() => setEditClassRule('new')}>+ Add Rule</Button>
+                <Button variant="contained" size="small" onClick={() => setEditClassRule('new')} sx={{ textTransform: 'none' }}>+ Add Rule</Button>
               )}
-            </div>
-            <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-3 py-2.5 text-left font-medium text-gray-600">Classification</th>
-                    <th className="px-3 py-2.5 text-left font-medium text-gray-600">Rank</th>
-                    <th className="px-3 py-2.5 text-left font-medium text-gray-600">Access Level</th>
-                    <th className="px-3 py-2.5 text-left font-medium text-gray-600">Permissions</th>
-                    <th className="px-3 py-2.5 text-left font-medium text-gray-600">Prohibitions</th>
-                    <th className="px-3 py-2.5 text-left font-medium text-gray-600">Obligations</th>
-                    <th className="px-3 py-2.5 text-left font-medium text-gray-600">ODRL Perms</th>
-                    <th className="px-3 py-2.5 text-left font-medium text-gray-600">ODRL Prohibs</th>
-                    <th className="px-3 py-2.5 text-left font-medium text-gray-600">ODRL Duties</th>
-                    {isDraft && <th className="px-3 py-2.5" />}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
+            </Box>
+            <Paper variant="outlined" sx={{ overflow: 'auto' }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'grey.50' }}>
+                    {['Classification', 'Rank', 'Access Level', 'Permissions', 'Prohibitions', 'Obligations', 'ODRL Perms', 'ODRL Prohibs', 'ODRL Duties'].map(h => (
+                      <TableCell key={h} sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{h}</TableCell>
+                    ))}
+                    {isDraft && <TableCell />}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
                   {policy.classificationRules.length === 0 && (
-                    <tr><td colSpan={isDraft ? 10 : 9} className="px-3 py-6 text-center text-gray-400">No rules defined.</td></tr>
+                    <TableRow><TableCell colSpan={isDraft ? 10 : 9} sx={{ textAlign: 'center', py: 4, color: 'text.disabled' }}>No rules defined.</TableCell></TableRow>
                   )}
                   {policy.classificationRules.map(rule => (
-                    <tr key={rule.id} className="hover:bg-gray-50 align-top">
-                      <td className="px-3 py-2.5 font-medium text-gray-800">{rule.classification}</td>
-                      <td className="px-3 py-2.5 text-gray-600">{rule.rank}</td>
-                      <td className="px-3 py-2.5 text-gray-600">{rule.accessLevel}</td>
-                      <td className="px-3 py-2.5"><ListCell items={rule.permissions} /></td>
-                      <td className="px-3 py-2.5"><ListCell items={rule.prohibitions} /></td>
-                      <td className="px-3 py-2.5"><ListCell items={rule.obligations} /></td>
-                      <td className="px-3 py-2.5"><ListCell items={rule.odrlPermissions} /></td>
-                      <td className="px-3 py-2.5"><ListCell items={rule.odrlProhibitions} /></td>
-                      <td className="px-3 py-2.5"><ListCell items={rule.odrlDuties} /></td>
+                    <TableRow key={rule.id} hover sx={{ verticalAlign: 'top' }}>
+                      <TableCell><Typography variant="body2" fontWeight={600}>{rule.classification}</Typography></TableCell>
+                      <TableCell><Typography variant="body2" color="text.secondary">{rule.rank}</Typography></TableCell>
+                      <TableCell><Typography variant="body2" color="text.secondary">{rule.accessLevel}</Typography></TableCell>
+                      <TableCell><ListCell items={rule.permissions} /></TableCell>
+                      <TableCell><ListCell items={rule.prohibitions} /></TableCell>
+                      <TableCell><ListCell items={rule.obligations} /></TableCell>
+                      <TableCell><ListCell items={rule.odrlPermissions} /></TableCell>
+                      <TableCell><ListCell items={rule.odrlProhibitions} /></TableCell>
+                      <TableCell><ListCell items={rule.odrlDuties} /></TableCell>
                       {isDraft && (
-                        <td className="px-3 py-2.5">
-                          <div className="flex gap-2">
-                            <button onClick={() => setEditClassRule(rule)} className="text-xs text-blue-600 hover:underline">Edit</button>
-                            <button onClick={() => setConfirmDeleteClassRule(rule)} className="text-xs text-red-500 hover:underline">Delete</button>
-                          </div>
-                        </td>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', gap: 0.5 }}>
+                            <Button size="small" sx={{ textTransform: 'none', fontSize: 12, p: 0, minWidth: 0 }} onClick={() => setEditClassRule(rule)}>Edit</Button>
+                            <Button size="small" color="error" sx={{ textTransform: 'none', fontSize: 12, p: 0, minWidth: 0 }} onClick={() => setConfirmDeleteClassRule(rule)}>Delete</Button>
+                          </Box>
+                        </TableCell>
                       )}
-                    </tr>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                </TableBody>
+              </Table>
+            </Paper>
+          </Box>
         )}
 
         {/* ── Regulation Rules ── */}
         {activeTab === 'regulation' && (
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-sm font-semibold text-gray-700">Regulation Detection Rules</h2>
+          <Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="subtitle2" fontWeight={600}>Regulation Detection Rules</Typography>
               {isDraft && (
-                <Button onClick={() => setEditRegRule('new')}>+ Add Rule</Button>
+                <Button variant="contained" size="small" onClick={() => setEditRegRule('new')} sx={{ textTransform: 'none' }}>+ Add Rule</Button>
               )}
-            </div>
-            <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-              <table className="min-w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-4 py-2.5 text-left font-medium text-gray-600">Signal Type</th>
-                    <th className="px-4 py-2.5 text-left font-medium text-gray-600">Pattern</th>
-                    <th className="px-4 py-2.5 text-left font-medium text-gray-600">Regulation Name</th>
-                    <th className="px-4 py-2.5 text-left font-medium text-gray-600">Signal Label</th>
-                    {isDraft && <th className="px-4 py-2.5" />}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
+            </Box>
+            <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'grey.50' }}>
+                    {['Signal Type', 'Pattern', 'Regulation Name', 'Signal Label'].map(h => (
+                      <TableCell key={h} sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>{h}</TableCell>
+                    ))}
+                    {isDraft && <TableCell />}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
                   {policy.regulationRules.length === 0 && (
-                    <tr><td colSpan={isDraft ? 5 : 4} className="px-4 py-6 text-center text-gray-400">No rules defined.</td></tr>
+                    <TableRow><TableCell colSpan={isDraft ? 5 : 4} sx={{ textAlign: 'center', py: 4, color: 'text.disabled' }}>No rules defined.</TableCell></TableRow>
                   )}
                   {policy.regulationRules.map(rule => (
-                    <tr key={rule.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-2.5">
-                        <span className="text-xs font-mono bg-gray-100 px-1.5 py-0.5 rounded">{rule.signalType}</span>
-                      </td>
-                      <td className="px-4 py-2.5 font-mono text-xs text-gray-700">{rule.pattern}</td>
-                      <td className="px-4 py-2.5 font-medium text-gray-800">{rule.regulationName}</td>
-                      <td className="px-4 py-2.5 text-gray-500 text-xs">{rule.signalLabel}</td>
+                    <TableRow key={rule.id} hover>
+                      <TableCell>
+                        <Chip label={rule.signalType} size="small" sx={{ height: 18, fontSize: 11, fontFamily: 'monospace' }} />
+                      </TableCell>
+                      <TableCell><Typography variant="caption" fontFamily="monospace" color="text.secondary">{rule.pattern}</Typography></TableCell>
+                      <TableCell><Typography variant="body2" fontWeight={600}>{rule.regulationName}</Typography></TableCell>
+                      <TableCell><Typography variant="caption" color="text.secondary">{rule.signalLabel}</Typography></TableCell>
                       {isDraft && (
-                        <td className="px-4 py-2.5">
-                          <div className="flex gap-2">
-                            <button onClick={() => setEditRegRule(rule)} className="text-xs text-blue-600 hover:underline">Edit</button>
-                            <button onClick={() => setConfirmDeleteRegRule(rule)} className="text-xs text-red-500 hover:underline">Delete</button>
-                          </div>
-                        </td>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', gap: 0.5 }}>
+                            <Button size="small" sx={{ textTransform: 'none', fontSize: 12, p: 0, minWidth: 0 }} onClick={() => setEditRegRule(rule)}>Edit</Button>
+                            <Button size="small" color="error" sx={{ textTransform: 'none', fontSize: 12, p: 0, minWidth: 0 }} onClick={() => setConfirmDeleteRegRule(rule)}>Delete</Button>
+                          </Box>
+                        </TableCell>
                       )}
-                    </tr>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                </TableBody>
+              </Table>
+            </Paper>
+          </Box>
         )}
 
         {/* ── Regulation Obligations ── */}
         {activeTab === 'obligations' && (
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-sm font-semibold text-gray-700">Regulation Obligations</h2>
+          <Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="subtitle2" fontWeight={600}>Regulation Obligations</Typography>
               {isDraft && (
-                <Button onClick={() => setShowAddObligation(true)}>+ Add Obligation</Button>
+                <Button variant="contained" size="small" onClick={() => setShowAddObligation(true)} sx={{ textTransform: 'none' }}>+ Add Obligation</Button>
               )}
-            </div>
-            <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-              <table className="min-w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-4 py-2.5 text-left font-medium text-gray-600">Regulation</th>
-                    <th className="px-4 py-2.5 text-left font-medium text-gray-600">Obligation</th>
-                    <th className="px-4 py-2.5 text-left font-medium text-gray-600">ODRL Duty</th>
-                    {isDraft && <th className="px-4 py-2.5" />}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
+            </Box>
+            <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'grey.50' }}>
+                    {['Regulation', 'Obligation', 'ODRL Duty'].map(h => (
+                      <TableCell key={h} sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>{h}</TableCell>
+                    ))}
+                    {isDraft && <TableCell />}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
                   {policy.regulationObligations.length === 0 && (
-                    <tr><td colSpan={isDraft ? 4 : 3} className="px-4 py-6 text-center text-gray-400">No obligations defined.</td></tr>
+                    <TableRow><TableCell colSpan={isDraft ? 4 : 3} sx={{ textAlign: 'center', py: 4, color: 'text.disabled' }}>No obligations defined.</TableCell></TableRow>
                   )}
                   {policy.regulationObligations.map(obl => (
-                    <tr key={obl.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-2.5 font-medium text-gray-800">{obl.regulationName}</td>
-                      <td className="px-4 py-2.5 text-gray-600 text-xs leading-relaxed max-w-sm">{obl.obligation}</td>
-                      <td className="px-4 py-2.5">
+                    <TableRow key={obl.id} hover>
+                      <TableCell><Typography variant="body2" fontWeight={600}>{obl.regulationName}</Typography></TableCell>
+                      <TableCell sx={{ maxWidth: 320 }}>
+                        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.5 }}>{obl.obligation}</Typography>
+                      </TableCell>
+                      <TableCell>
                         {obl.odrlDuty
-                          ? <span className="text-xs font-mono bg-gray-100 px-1.5 py-0.5 rounded">{obl.odrlDuty}</span>
-                          : <span className="text-gray-400">—</span>}
-                      </td>
+                          ? <Chip label={obl.odrlDuty} size="small" sx={{ height: 18, fontSize: 11, fontFamily: 'monospace' }} />
+                          : <Typography variant="caption" color="text.disabled">—</Typography>}
+                      </TableCell>
                       {isDraft && (
-                        <td className="px-4 py-2.5">
-                          <button onClick={() => setConfirmDeleteObligation(obl)} className="text-xs text-red-500 hover:underline">
-                            Delete
-                          </button>
-                        </td>
+                        <TableCell>
+                          <Button size="small" color="error" sx={{ textTransform: 'none', fontSize: 12, p: 0, minWidth: 0 }} onClick={() => setConfirmDeleteObligation(obl)}>Delete</Button>
+                        </TableCell>
                       )}
-                    </tr>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                </TableBody>
+              </Table>
+            </Paper>
+          </Box>
         )}
-      </div>
+      </Box>
 
-      {/* ── Modals ── */}
+      {/* ── Dialogs ── */}
 
-      {editClassRule && editClassRule !== 'new' && (
-        <ClassificationRuleModal
+      {editClassRule !== null && (
+        <ClassificationRuleDialog
           policyId={policyId!}
-          existing={editClassRule}
-          onClose={() => setEditClassRule(null)}
-          onSaved={() => { setEditClassRule(null); invalidateDetail(); }}
-        />
-      )}
-      {editClassRule === 'new' && (
-        <ClassificationRuleModal
-          policyId={policyId!}
-          existing={null}
+          existing={editClassRule === 'new' ? null : editClassRule}
           onClose={() => setEditClassRule(null)}
           onSaved={() => { setEditClassRule(null); invalidateDetail(); }}
         />
       )}
 
-      {editRegRule && editRegRule !== 'new' && (
-        <RegulationRuleModal
+      {editRegRule !== null && (
+        <RegulationRuleDialog
           policyId={policyId!}
-          existing={editRegRule}
-          onClose={() => setEditRegRule(null)}
-          onSaved={() => { setEditRegRule(null); invalidateDetail(); }}
-        />
-      )}
-      {editRegRule === 'new' && (
-        <RegulationRuleModal
-          policyId={policyId!}
-          existing={null}
+          existing={editRegRule === 'new' ? null : editRegRule}
           onClose={() => setEditRegRule(null)}
           onSaved={() => { setEditRegRule(null); invalidateDetail(); }}
         />
       )}
 
       {showAddObligation && (
-        <RegulationObligationModal
+        <RegulationObligationDialog
           policyId={policyId!}
           onClose={() => setShowAddObligation(false)}
           onSaved={() => { setShowAddObligation(false); invalidateDetail(); }}
         />
       )}
 
-      {confirmActivate && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">Activate Policy</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Activate "<strong>{policy.name}</strong>"? The current ACTIVE policy will be archived.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setConfirmActivate(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
-                Cancel
-              </button>
-              <Button onClick={() => activateMut.mutate()} disabled={activateMut.isPending}>
-                {activateMut.isPending ? 'Activating…' : 'Activate'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog open={confirmActivate} title="Activate Policy" confirmLabel="Activate" confirmColor="success" isPending={activateMut.isPending} onClose={() => setConfirmActivate(false)} onConfirm={() => activateMut.mutate()}>
+        <Typography variant="body2" color="text.secondary">
+          Activate "<strong>{policy.name}</strong>"? The current ACTIVE policy will be archived.
+        </Typography>
+      </ConfirmDialog>
 
-      {confirmDelete && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">Delete Policy</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Delete "<strong>{policy.name}</strong>"? This cannot be undone.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setConfirmDelete(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
-                Cancel
-              </button>
-              <button
-                onClick={() => deleteMut.mutate()}
-                disabled={deleteMut.isPending}
-                className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
-              >
-                {deleteMut.isPending ? 'Deleting…' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog open={confirmDelete} title="Delete Policy" confirmLabel="Delete" confirmColor="error" isPending={deleteMut.isPending} onClose={() => setConfirmDelete(false)} onConfirm={() => deleteMut.mutate()}>
+        <Typography variant="body2" color="text.secondary">
+          Delete "<strong>{policy.name}</strong>"? This cannot be undone.
+        </Typography>
+      </ConfirmDialog>
 
-      {confirmDeleteClassRule && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">Delete Classification Rule</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Delete the rule for <strong>{confirmDeleteClassRule.classification}</strong>?
-            </p>
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setConfirmDeleteClassRule(null)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
-                Cancel
-              </button>
-              <button
-                onClick={() => deleteClassRuleMut.mutate(confirmDeleteClassRule.classification)}
-                disabled={deleteClassRuleMut.isPending}
-                className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
-              >
-                {deleteClassRuleMut.isPending ? 'Deleting…' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog open={!!confirmDeleteClassRule} title="Delete Classification Rule" confirmLabel="Delete" confirmColor="error" isPending={deleteClassRuleMut.isPending} onClose={() => setConfirmDeleteClassRule(null)} onConfirm={() => confirmDeleteClassRule && deleteClassRuleMut.mutate(confirmDeleteClassRule.classification)}>
+        <Typography variant="body2" color="text.secondary">
+          Delete the rule for <strong>{confirmDeleteClassRule?.classification}</strong>?
+        </Typography>
+      </ConfirmDialog>
 
-      {confirmDeleteRegRule && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">Delete Regulation Rule</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Delete the <strong>{confirmDeleteRegRule.regulationName}</strong> detection rule?
-            </p>
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setConfirmDeleteRegRule(null)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
-                Cancel
-              </button>
-              <button
-                onClick={() => deleteRegRuleMut.mutate(confirmDeleteRegRule.id)}
-                disabled={deleteRegRuleMut.isPending}
-                className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
-              >
-                {deleteRegRuleMut.isPending ? 'Deleting…' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog open={!!confirmDeleteRegRule} title="Delete Regulation Rule" confirmLabel="Delete" confirmColor="error" isPending={deleteRegRuleMut.isPending} onClose={() => setConfirmDeleteRegRule(null)} onConfirm={() => confirmDeleteRegRule && deleteRegRuleMut.mutate(confirmDeleteRegRule.id)}>
+        <Typography variant="body2" color="text.secondary">
+          Delete the <strong>{confirmDeleteRegRule?.regulationName}</strong> detection rule?
+        </Typography>
+      </ConfirmDialog>
 
-      {confirmDeleteObligation && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">Delete Obligation</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Delete the <strong>{confirmDeleteObligation.regulationName}</strong> obligation?
-            </p>
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setConfirmDeleteObligation(null)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
-                Cancel
-              </button>
-              <button
-                onClick={() => deleteObligationMut.mutate(confirmDeleteObligation.id)}
-                disabled={deleteObligationMut.isPending}
-                className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
-              >
-                {deleteObligationMut.isPending ? 'Deleting…' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+      <ConfirmDialog open={!!confirmDeleteObligation} title="Delete Obligation" confirmLabel="Delete" confirmColor="error" isPending={deleteObligationMut.isPending} onClose={() => setConfirmDeleteObligation(null)} onConfirm={() => confirmDeleteObligation && deleteObligationMut.mutate(confirmDeleteObligation.id)}>
+        <Typography variant="body2" color="text.secondary">
+          Delete the <strong>{confirmDeleteObligation?.regulationName}</strong> obligation?
+        </Typography>
+      </ConfirmDialog>
+    </Box>
   );
 }

@@ -16,6 +16,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -47,7 +48,7 @@ public class OpenSearchIndexService {
         }
     }
 
-    public SearchResult search(String query, String type, String domainId,
+    public SearchResult search(String query, String type, String types, String domainId,
                                 String lifecycleStatus, String format,
                                 Boolean hasLineage, String tenantId, int page, int size,
                                 String keyword, String theme, String vocabConcept, String vocab,
@@ -60,10 +61,20 @@ public class OpenSearchIndexService {
             }
             filters.add(Query.of(q -> q.term(t -> t.field("isDeleted").value(FieldValue.of(false)))));
 
-            if (type != null) filters.add(Query.of(q -> q.term(t -> t.field("entityType").value(FieldValue.of(type)))));
+            if (types != null) {
+                List<Query> typeTerms = Arrays.stream(types.split(","))
+                    .map(String::trim).filter(s -> !s.isEmpty())
+                    .map(v -> Query.of(q -> q.term(t -> t.field("entityType").value(FieldValue.of(v)))))
+                    .collect(Collectors.toList());
+                if (!typeTerms.isEmpty()) {
+                    filters.add(Query.of(q -> q.bool(b -> b.should(typeTerms).minimumShouldMatch("1"))));
+                }
+            } else if (type != null) {
+                filters.add(Query.of(q -> q.term(t -> t.field("entityType").value(FieldValue.of(type)))));
+            }
             if (domainId != null) filters.add(Query.of(q -> q.term(t -> t.field("domainId").value(FieldValue.of(domainId)))));
             if (lifecycleStatus != null) filters.add(Query.of(q -> q.term(t -> t.field("lifecycleStatus").value(FieldValue.of(lifecycleStatus)))));
-            if (format != null) filters.add(Query.of(q -> q.term(t -> t.field("format").value(FieldValue.of(format)))));
+            if (format != null) filters.add(Query.of(q -> q.term(t -> t.field("distributionFormats.keyword").value(FieldValue.of(format)))));
             if (hasLineage != null) filters.add(Query.of(q -> q.term(t -> t.field("hasLineage").value(FieldValue.of(hasLineage)))));
             if (keyword != null) filters.add(Query.of(q -> q.term(t -> t.field("keywords.keyword").value(FieldValue.of(keyword)))));
             if (theme != null) filters.add(Query.of(q -> q.term(t -> t.field("themes").value(FieldValue.of(theme)))));
@@ -87,7 +98,7 @@ public class OpenSearchIndexService {
 
             Map<String, Aggregation> aggs = new LinkedHashMap<>();
             aggs.put("entityTypes",       Aggregation.of(a -> a.terms(t -> t.field("entityType").size(10))));
-            aggs.put("formats",           Aggregation.of(a -> a.terms(t -> t.field("format").size(20))));
+            aggs.put("formats",           Aggregation.of(a -> a.terms(t -> t.field("distributionFormats.keyword").size(20))));
             aggs.put("lifecycleStatuses", Aggregation.of(a -> a.terms(t -> t.field("lifecycleStatus").size(10))));
             aggs.put("vocabularyTypes",   Aggregation.of(a -> a.terms(t -> t.field("vocabularyTypes.keyword").size(10))));
             aggs.put("fiboConcepts",      Aggregation.of(a -> a.terms(t -> t.field("fiboConcepts.keyword").size(20))));

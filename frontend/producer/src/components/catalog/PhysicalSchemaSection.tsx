@@ -1,6 +1,25 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import Button from '@mui/material/Button';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Checkbox from '@mui/material/Checkbox';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import LinearProgress from '@mui/material/LinearProgress';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import { datasetApi, logicalModelApi, logicalElementApi } from '@datacatalog/shared';
 import type { CsvwColumn, LogicalDataElement, ColumnElementSuggestion } from '@datacatalog/shared';
 
@@ -11,16 +30,7 @@ interface Props {
   canAction: boolean;
 }
 
-// ── Suggest Mappings Modal ────────────────────────────────────────────────────
-
-function SuggestMappingsModal({
-  suggestions,
-  columns,
-  elements,
-  onApply,
-  onClose,
-  isPending,
-}: {
+function SuggestMappingsModal({ suggestions, columns, elements, onApply, onClose, isPending }: {
   suggestions: ColumnElementSuggestion[];
   columns: CsvwColumn[];
   elements: LogicalDataElement[];
@@ -40,146 +50,104 @@ function SuggestMappingsModal({
     });
 
   const toggleAll = () =>
-    setChecked(prev =>
-      prev.size === suggestions.length ? new Set() : new Set(suggestions.map(s => s.columnId))
-    );
+    setChecked(prev => prev.size === suggestions.length ? new Set() : new Set(suggestions.map(s => s.columnId)));
 
   const colMap = new Map(columns.map(c => [c.id, c]));
   const elMap = new Map(elements.map(e => [e.id, e]));
   const selected = suggestions.filter(s => checked.has(s.columnId));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 flex flex-col max-h-[80vh]">
-        {/* Header */}
-        <div className="px-6 py-4 border-b flex items-center justify-between">
-          <div>
-            <h2 className="text-base font-semibold text-gray-900">AI Mapping Suggestions</h2>
-            <p className="text-xs text-gray-500 mt-0.5">
-              {suggestions.length} suggestion{suggestions.length !== 1 ? 's' : ''} based on column name similarity
-            </p>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
-        </div>
-
-        {/* Body */}
-        <div className="overflow-y-auto flex-1">
-          {suggestions.length === 0 ? (
-            <p className="px-6 py-8 text-sm text-gray-400 text-center">
-              No unmapped columns could be matched to logical elements.
-            </p>
-          ) : (
-            <table className="min-w-full text-sm">
-              <thead className="sticky top-0 bg-gray-50 border-b border-gray-100">
-                <tr>
-                  <th className="pl-6 pr-3 py-2.5 w-8">
-                    <input
-                      type="checkbox"
+    <Dialog open onClose={onClose} maxWidth="md" fullWidth>
+      <DialogTitle>
+        AI Mapping Suggestions
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+          {suggestions.length} suggestion{suggestions.length !== 1 ? 's' : ''} based on column name similarity
+        </Typography>
+      </DialogTitle>
+      <DialogContent sx={{ p: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '60vh' }}>
+        {suggestions.length === 0 ? (
+          <Typography variant="body2" color="text.secondary" sx={{ px: 3, py: 5, textAlign: 'center' }}>
+            No unmapped columns could be matched to logical elements.
+          </Typography>
+        ) : (
+          <Box sx={{ overflow: 'auto', flex: 1 }}>
+            <Table size="small" stickyHeader>
+              <TableHead>
+                <TableRow>
+                  <TableCell padding="checkbox" sx={{ pl: 3 }}>
+                    <Checkbox
+                      size="small"
                       checked={checked.size === suggestions.length}
+                      indeterminate={checked.size > 0 && checked.size < suggestions.length}
                       onChange={toggleAll}
-                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                     />
-                  </th>
-                  <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500">Physical Column</th>
-                  <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500">Suggested Logical Element</th>
-                  <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500">Confidence</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 600, fontSize: 11 }}>Physical Column</TableCell>
+                  <TableCell sx={{ fontWeight: 600, fontSize: 11 }}>Suggested Logical Element</TableCell>
+                  <TableCell sx={{ fontWeight: 600, fontSize: 11 }}>Confidence</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
                 {suggestions.map(s => {
                   const col = colMap.get(s.columnId);
                   const el = elMap.get(s.suggestedElementId);
                   const pct = Math.round(s.confidence * 100);
                   const isChecked = checked.has(s.columnId);
                   return (
-                    <tr
+                    <TableRow
                       key={s.columnId}
                       onClick={() => toggle(s.columnId)}
-                      className={`cursor-pointer transition-colors ${isChecked ? 'bg-purple-50' : 'hover:bg-gray-50'}`}
+                      sx={{ cursor: 'pointer', bgcolor: isChecked ? 'secondary.50' : undefined }}
+                      hover
                     >
-                      <td className="pl-6 pr-3 py-3" onClick={e => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => toggle(s.columnId)}
-                          className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                        />
-                      </td>
-                      <td className="px-3 py-3">
-                        <span className="font-mono text-gray-900">{col?.name ?? s.columnId}</span>
-                        {col?.datatype && (
-                          <span className="ml-2 px-1 py-0.5 bg-blue-50 text-blue-600 rounded text-xs font-mono">
-                            {col.datatype}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-3">
-                        <span className="font-medium text-gray-800">{el?.name ?? s.suggestedElementName}</span>
-                        {el?.logicalType && (
-                          <span className="ml-2 text-xs text-gray-400">{el.logicalType}</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 h-1.5 rounded-full bg-gray-200 overflow-hidden">
-                            <div
-                              className={`h-full rounded-full ${pct >= 70 ? 'bg-green-500' : pct >= 40 ? 'bg-yellow-400' : 'bg-orange-400'}`}
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                          <span className={`text-xs font-medium ${pct >= 70 ? 'text-green-700' : pct >= 40 ? 'text-yellow-700' : 'text-orange-600'}`}>
+                      <TableCell padding="checkbox" sx={{ pl: 3 }} onClick={e => e.stopPropagation()}>
+                        <Checkbox size="small" checked={isChecked} onChange={() => toggle(s.columnId)} />
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="caption" fontFamily="monospace" fontWeight={600}>{col?.name ?? s.columnId}</Typography>
+                        {col?.datatype && <Chip label={col.datatype} size="small" color="info" sx={{ ml: 1, height: 16, fontSize: 10, fontFamily: 'monospace' }} />}
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" fontWeight={600}>{el?.name ?? s.suggestedElementName}</Typography>
+                        {el?.logicalType && <Typography variant="caption" color="text.secondary"> {el.logicalType}</Typography>}
+                      </TableCell>
+                      <TableCell sx={{ minWidth: 100 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <LinearProgress
+                            variant="determinate"
+                            value={pct}
+                            color={pct >= 70 ? 'success' : pct >= 40 ? 'warning' : 'error'}
+                            sx={{ flex: 1, borderRadius: 1, height: 4 }}
+                          />
+                          <Typography variant="caption" fontWeight={500} color={pct >= 70 ? 'success.main' : pct >= 40 ? 'warning.main' : 'error.main'}>
                             {pct}%
-                          </span>
-                        </div>
-                      </td>
-                    </tr>
+                          </Typography>
+                        </Box>
+                      </TableCell>
+                    </TableRow>
                   );
                 })}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="px-6 py-4 border-t bg-gray-50 flex items-center justify-between gap-3">
-          <p className="text-xs text-gray-500">
-            {checked.size} of {suggestions.length} selected
-          </p>
-          <div className="flex gap-2">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-200 rounded-lg hover:bg-gray-100"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => onApply(selected)}
-              disabled={isPending || selected.length === 0}
-              className="px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 font-medium"
-            >
-              {isPending ? 'Applying…' : `Apply ${selected.length} mapping${selected.length !== 1 ? 's' : ''}`}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+              </TableBody>
+            </Table>
+          </Box>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ justifyContent: 'space-between', px: 3 }}>
+        <Typography variant="caption" color="text.secondary">{checked.size} of {suggestions.length} selected</Typography>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button onClick={onClose} sx={{ textTransform: 'none' }}>Cancel</Button>
+          <Button variant="contained" color="secondary" onClick={() => onApply(selected)} disabled={isPending || selected.length === 0} sx={{ textTransform: 'none' }}>
+            {isPending ? 'Applying…' : `Apply ${selected.length} mapping${selected.length !== 1 ? 's' : ''}`}
+          </Button>
+        </Box>
+      </DialogActions>
+    </Dialog>
   );
 }
 
-// ── Mapping cell ──────────────────────────────────────────────────────────────
-
-function MappingCell({
-  col,
-  elements,
-  canAction,
-  onBind,
-  onUnbind,
-}: {
-  col: CsvwColumn;
-  elements: LogicalDataElement[];
-  canAction: boolean;
-  onBind: (elementId: string, colId: string) => void;
-  onUnbind: (elementId: string) => void;
+function MappingCell({ col, elements, canAction, onBind, onUnbind }: {
+  col: CsvwColumn; elements: LogicalDataElement[]; canAction: boolean;
+  onBind: (elementId: string, colId: string) => void; onUnbind: (elementId: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [selected, setSelected] = useState('');
@@ -187,65 +155,45 @@ function MappingCell({
   if (col.logicalDataElementId && !editing) {
     const el = elements.find(e => e.id === col.logicalDataElementId);
     return (
-      <div className="flex items-center gap-2">
-        <span className="text-green-700 font-medium">{el?.name ?? '✓ Mapped'}</span>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Typography variant="caption" color="success.main" fontWeight={600}>{el?.name ?? '✓ Mapped'}</Typography>
         {canAction && (
           <>
-            <button
-              onClick={() => { setSelected(col.logicalDataElementId!); setEditing(true); }}
-              className="text-xs text-blue-600 hover:text-blue-700"
-            >
-              Change
-            </button>
-            <button
-              onClick={() => onUnbind(col.logicalDataElementId!)}
-              className="text-xs text-red-500 hover:text-red-600"
-            >
-              Unmap
-            </button>
+            <Button size="small" sx={{ textTransform: 'none', fontSize: 11, p: 0, minWidth: 0 }} onClick={() => { setSelected(col.logicalDataElementId!); setEditing(true); }}>Change</Button>
+            <Button size="small" color="error" sx={{ textTransform: 'none', fontSize: 11, p: 0, minWidth: 0 }} onClick={() => onUnbind(col.logicalDataElementId!)}>Unmap</Button>
           </>
         )}
-      </div>
+      </Box>
     );
   }
 
-  if (!canAction) {
-    return <span className="text-gray-300">—</span>;
-  }
+  if (!canAction) return <Typography variant="caption" color="text.disabled">—</Typography>;
 
   return (
-    <div className="flex items-center gap-1.5">
-      <select
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+      <Select
         value={selected}
         onChange={e => setSelected(e.target.value)}
-        className="border border-gray-200 rounded px-1.5 py-0.5 text-gray-600 max-w-[160px] focus:outline-none focus:ring-1 focus:ring-blue-400"
+        size="small"
+        displayEmpty
+        sx={{ fontSize: 12, minWidth: 160, height: 24, '.MuiSelect-select': { py: 0 } }}
       >
-        <option value="">— select —</option>
-        {elements.map(e => (
-          <option key={e.id} value={e.id}>{e.name}</option>
-        ))}
-      </select>
+        <MenuItem value=""><em>— select —</em></MenuItem>
+        {elements.map(e => <MenuItem key={e.id} value={e.id} sx={{ fontSize: 12 }}>{e.name}</MenuItem>)}
+      </Select>
       {selected && (
-        <button
-          onClick={() => { onBind(selected, col.id); setSelected(''); setEditing(false); }}
-          className="text-blue-600 hover:text-blue-700 text-xs font-medium"
-        >
+        <Button size="small" sx={{ textTransform: 'none', fontSize: 11, p: '0 4px', minWidth: 0 }} onClick={() => { onBind(selected, col.id); setSelected(''); setEditing(false); }}>
           Bind
-        </button>
+        </Button>
       )}
       {editing && (
-        <button
-          onClick={() => { setEditing(false); setSelected(''); }}
-          className="text-gray-400 hover:text-gray-600 text-xs"
-        >
+        <Button size="small" sx={{ textTransform: 'none', fontSize: 11, p: '0 4px', minWidth: 0 }} onClick={() => { setEditing(false); setSelected(''); }}>
           Cancel
-        </button>
+        </Button>
       )}
-    </div>
+    </Box>
   );
 }
-
-// ── Main section ──────────────────────────────────────────────────────────────
 
 export default function PhysicalSchemaSection({ distributionId, datasetId, tenant, canAction }: Props) {
   const qc = useQueryClient();
@@ -310,65 +258,72 @@ export default function PhysicalSchemaSection({ distributionId, datasetId, tenan
         />
       )}
 
-      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between gap-4">
-          <p className="text-sm font-semibold text-gray-800">
+      <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
+        <Box sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: 'divider', bgcolor: 'grey.50', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+          <Typography variant="body2" fontWeight={600}>
             Physical Schema
-            {columns.length > 0 && <span className="ml-2 text-gray-400 font-normal text-xs">({columns.length} columns)</span>}
-          </p>
-          <div className="flex items-center gap-3">
+            {columns.length > 0 && <Typography component="span" variant="caption" color="text.disabled" sx={{ ml: 1 }}>({columns.length} columns)</Typography>}
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
             {hasElements && columns.length > 0 && canAction && (
-              <button
+              <Button
+                size="small"
+                color="secondary"
+                startIcon={<AutoAwesomeIcon sx={{ fontSize: '14px !important' }} />}
                 onClick={() => suggestMut.mutate()}
                 disabled={suggestMut.isPending}
-                className="text-xs text-purple-700 hover:text-purple-900 font-medium disabled:opacity-50"
+                sx={{ textTransform: 'none', fontSize: 12 }}
               >
-                {suggestMut.isPending ? 'Analysing…' : '✦ AI Suggest Mappings'}
-              </button>
+                {suggestMut.isPending ? 'Analysing…' : 'AI Suggest Mappings'}
+              </Button>
             )}
             {!hasElements && logicalModels.length === 0 && columns.length > 0 && (
-              <p className="text-xs text-gray-400">
+              <Typography variant="caption" color="text.secondary">
                 No logical model —{' '}
-                <Link to={`/${tenant}/datasets/${datasetId}`} className="text-blue-600 hover:underline">
+                <Typography
+                  component={Link}
+                  to={`/${tenant}/datasets/${datasetId}`}
+                  variant="caption"
+                  color="primary"
+                  sx={{ textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+                >
                   create one on the Schema tab
-                </Link>
-              </p>
+                </Typography>
+              </Typography>
             )}
-          </div>
-        </div>
+          </Box>
+        </Box>
 
         {columns.length === 0 ? (
-          <p className="px-4 py-3 text-sm text-gray-400">No physical schema available.</p>
+          <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 2 }}>No physical schema available.</Typography>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-xs">
-              <thead>
-                <tr className="border-b border-gray-100 bg-gray-50">
-                  <th className="px-4 py-2 text-left text-gray-500 font-medium w-8">#</th>
-                  <th className="px-4 py-2 text-left text-gray-500 font-medium">Column</th>
-                  <th className="px-4 py-2 text-left text-gray-500 font-medium">Type</th>
-                  <th className="px-4 py-2 text-left text-gray-500 font-medium">Nullable</th>
-                  <th className="px-4 py-2 text-left text-gray-500 font-medium">Description</th>
-                  <th className="px-4 py-2 text-left text-gray-500 font-medium">Logical Data Element</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
+          <Box sx={{ overflowX: 'auto' }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow sx={{ bgcolor: 'grey.50' }}>
+                  <TableCell sx={{ fontWeight: 600, fontSize: 11, width: 32 }}>#</TableCell>
+                  <TableCell sx={{ fontWeight: 600, fontSize: 11 }}>Column</TableCell>
+                  <TableCell sx={{ fontWeight: 600, fontSize: 11 }}>Type</TableCell>
+                  <TableCell sx={{ fontWeight: 600, fontSize: 11 }}>Nullable</TableCell>
+                  <TableCell sx={{ fontWeight: 600, fontSize: 11 }}>Description</TableCell>
+                  <TableCell sx={{ fontWeight: 600, fontSize: 11 }}>Logical Data Element</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
                 {columns.map((col: CsvwColumn) => (
-                  <tr key={col.id} className="hover:bg-gray-50 align-top">
-                    <td className="px-4 py-2.5 text-gray-400">{col.ordinal}</td>
-                    <td className="px-4 py-2.5 font-mono font-medium text-gray-900">{col.name}</td>
-                    <td className="px-4 py-2.5">
-                      {col.datatype && (
-                        <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded font-mono">{col.datatype}</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5">
+                  <TableRow key={col.id} hover sx={{ verticalAlign: 'top' }}>
+                    <TableCell><Typography variant="caption" color="text.disabled">{col.ordinal}</Typography></TableCell>
+                    <TableCell><Typography variant="caption" fontFamily="monospace" fontWeight={600}>{col.name}</Typography></TableCell>
+                    <TableCell>
+                      {col.datatype && <Chip label={col.datatype} size="small" color="info" sx={{ height: 16, fontSize: 10, fontFamily: 'monospace' }} />}
+                    </TableCell>
+                    <TableCell>
                       {col.required
-                        ? <span className="text-red-600 font-medium">NOT NULL</span>
-                        : <span className="text-gray-400">nullable</span>}
-                    </td>
-                    <td className="px-4 py-2.5 text-gray-500">{col.description ?? ''}</td>
-                    <td className="px-4 py-2.5">
+                        ? <Typography variant="caption" color="error" fontWeight={600}>NOT NULL</Typography>
+                        : <Typography variant="caption" color="text.disabled">nullable</Typography>}
+                    </TableCell>
+                    <TableCell><Typography variant="caption" color="text.secondary">{col.description ?? ''}</Typography></TableCell>
+                    <TableCell>
                       {hasElements ? (
                         <MappingCell
                           col={col}
@@ -378,16 +333,16 @@ export default function PhysicalSchemaSection({ distributionId, datasetId, tenan
                           onUnbind={(elementId) => unbindMut.mutate(elementId)}
                         />
                       ) : (
-                        <span className="text-gray-300">—</span>
+                        <Typography variant="caption" color="text.disabled">—</Typography>
                       )}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </TableBody>
+            </Table>
+          </Box>
         )}
-      </div>
+      </Paper>
     </>
   );
 }
