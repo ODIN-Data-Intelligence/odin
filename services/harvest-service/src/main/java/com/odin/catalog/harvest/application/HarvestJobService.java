@@ -3,6 +3,8 @@ package com.odin.catalog.harvest.application;
 import com.odin.catalog.harvest.api.v1.dto.HarvestJobRequest;
 import com.odin.catalog.harvest.api.v1.dto.HarvestJobResponse;
 import com.odin.catalog.harvest.api.v1.dto.HarvestRunResponse;
+import com.odin.catalog.harvest.batch.HarvestJobLauncher;
+import com.odin.catalog.harvest.domain.run.HarvestRun;
 import com.odin.catalog.harvest.infrastructure.jpa.entity.HarvestJobEntity;
 import com.odin.catalog.harvest.infrastructure.jpa.entity.HarvestRunEntity;
 import com.odin.catalog.harvest.infrastructure.jpa.repository.HarvestJobRepository;
@@ -26,6 +28,8 @@ public class HarvestJobService {
 
     private final HarvestJobRepository jobRepository;
     private final HarvestRunRepository runRepository;
+    private final HarvestSourceService sourceService;
+    private final HarvestJobLauncher launcher;
 
     @Transactional(readOnly = true)
     public List<HarvestJobResponse> list(UUID sourceId) {
@@ -86,7 +90,15 @@ public class HarvestJobService {
         run.setStatus("pending");
         run.setTriggeredBy("api");
         run.setFullRefresh(job.isFullRefresh());
-        return toRunResponse(runRepository.save(run));
+        HarvestRunEntity saved = runRepository.save(run);
+
+        HarvestRun domainRun = new HarvestRun(
+            saved.getId(), saved.getJobId(), saved.getSourceId(),
+            saved.getStatus(), saved.getTriggeredBy(), saved.getStartedAt(), saved.isFullRefresh()
+        );
+        launcher.launch(domainRun, sourceService.toSource(sourceService.findOrThrow(job.getSourceId())));
+
+        return toRunResponse(saved);
     }
 
     private HarvestJobResponse toResponse(HarvestJobEntity e) {

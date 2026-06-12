@@ -6,6 +6,8 @@ import com.odin.catalog.harvest.domain.run.HarvestRun;
 import com.odin.catalog.harvest.domain.source.HarvestSource;
 import com.odin.catalog.harvest.infrastructure.jpa.repository.HarvestRunRepository;
 import com.odin.catalog.harvest.infrastructure.kafka.HarvestEventProducer;
+import com.odin.catalog.harvest.connector.HarvestDistribution;
+import com.odin.catalog.shared.models.events.HarvestDistributionPayload;
 import com.odin.catalog.shared.models.events.HarvestEntityDiscoveredPayload;
 import com.odin.catalog.shared.models.events.HarvestRunStatusPayload;
 import lombok.RequiredArgsConstructor;
@@ -79,6 +81,11 @@ public class HarvestJobLauncher {
 
     private void publishEntity(HarvestEntity entity, HarvestSource source, HarvestRun run) {
         // Publish to harvest.entities.discovered
+        List<HarvestDistributionPayload> distributions = entity.distributions() == null ? null
+            : entity.distributions().stream()
+                .map(d -> new HarvestDistributionPayload(d.title(), d.downloadUrl(), d.accessUrl(), d.format(), d.mediaType()))
+                .toList();
+
         var payload = new HarvestEntityDiscoveredPayload(
             run.id().toString(),
             source.id().toString(),
@@ -92,6 +99,7 @@ public class HarvestJobLauncher {
             entity.mediaType(),
             entity.keywords(),
             entity.themes(),
+            distributions,
             entity.columns(),
             entity.rawPayload()
         );

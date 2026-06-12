@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useForm, Controller } from 'react-hook-form';
 import Dialog from '@mui/material/Dialog';
@@ -13,7 +12,7 @@ import FormControl from '@mui/material/FormControl';
 import Button from '@mui/material/Button';
 import Alert from '@mui/material/Alert';
 import { harvestSourceApi } from '@datacatalog/shared';
-import type { SourceType } from '@datacatalog/shared';
+import type { HarvestSource, SourceType } from '@datacatalog/shared';
 
 const SOURCE_TYPES: { value: SourceType; label: string }[] = [
   { value: 'dcat_http', label: 'DCAT HTTP' },
@@ -31,25 +30,44 @@ interface FormValues {
   schemaFilter?: string;
 }
 
-interface Props { onClose: () => void; }
+interface Props {
+  onClose: () => void;
+  source?: HarvestSource;
+}
 
-export default function HarvestSourceForm({ onClose }: Props) {
-  const { register, handleSubmit, control, watch } = useForm<FormValues>({ defaultValues: { sourceType: 'dcat_http' } });
+export default function HarvestSourceForm({ onClose, source }: Props) {
+  const isEdit = !!source;
+
+  const { register, handleSubmit, control, watch } = useForm<FormValues>({
+    defaultValues: source
+      ? {
+          name: source.name,
+          sourceType: source.sourceType,
+          baseUrl: source.baseUrl ?? '',
+          region: source.region ?? '',
+          databaseName: source.databaseName ?? '',
+          schemaFilter: source.schemaFilter?.join(', ') ?? '',
+        }
+      : { sourceType: 'dcat_http' },
+  });
+
   const sourceType = watch('sourceType');
 
-  const createMut = useMutation({
-    mutationFn: (values: FormValues) =>
-      harvestSourceApi.create({
+  const saveMut = useMutation({
+    mutationFn: (values: FormValues) => {
+      const body = {
         ...values,
         schemaFilter: values.schemaFilter ? values.schemaFilter.split(',').map(s => s.trim()) : [],
-      }),
+      };
+      return isEdit ? harvestSourceApi.update(source!.id, body) : harvestSourceApi.create(body);
+    },
     onSuccess: onClose,
   });
 
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
-      <form onSubmit={handleSubmit(data => createMut.mutate(data))}>
-        <DialogTitle>Add Harvest Source</DialogTitle>
+      <form onSubmit={handleSubmit(data => saveMut.mutate(data))}>
+        <DialogTitle>{isEdit ? 'Edit Harvest Source' : 'Add Harvest Source'}</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '12px !important' }}>
           <TextField {...register('name', { required: true })} label="Name" required size="small" fullWidth placeholder="Production Snowflake" />
 
@@ -59,7 +77,7 @@ export default function HarvestSourceForm({ onClose }: Props) {
             render={({ field }) => (
               <FormControl size="small" fullWidth required>
                 <InputLabel>Source Type</InputLabel>
-                <Select label="Source Type" {...field}>
+                <Select label="Source Type" {...field} disabled={isEdit}>
                   {SOURCE_TYPES.map(t => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
                 </Select>
               </FormControl>
@@ -88,12 +106,12 @@ export default function HarvestSourceForm({ onClose }: Props) {
             </>
           )}
 
-          {createMut.isError && <Alert severity="error">Error: {String(createMut.error)}</Alert>}
+          {saveMut.isError && <Alert severity="error">Error: {String(saveMut.error)}</Alert>}
         </DialogContent>
         <DialogActions>
           <Button onClick={onClose} sx={{ textTransform: 'none' }}>Cancel</Button>
-          <Button type="submit" variant="contained" disabled={createMut.isPending} sx={{ textTransform: 'none' }}>
-            {createMut.isPending ? 'Saving...' : 'Add Source'}
+          <Button type="submit" variant="contained" disabled={saveMut.isPending} sx={{ textTransform: 'none' }}>
+            {saveMut.isPending ? 'Saving...' : isEdit ? 'Save Changes' : 'Add Source'}
           </Button>
         </DialogActions>
       </form>

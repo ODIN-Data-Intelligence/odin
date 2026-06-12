@@ -80,7 +80,7 @@ public class SnowflakeConnector implements HarvestConnector {
                     sourceKey,
                     isView ? HarvestEntityType.VIEW : HarvestEntityType.DATASET,
                     sourceUri, tableName, null, null, null,
-                    List.of(), List.of(), columns, ddl, null
+                    List.of(), List.of(), List.of(), columns, ddl, null
                 ));
             }
         }

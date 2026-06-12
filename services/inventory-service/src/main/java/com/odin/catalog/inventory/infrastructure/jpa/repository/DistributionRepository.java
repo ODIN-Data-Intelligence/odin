@@ -15,5 +15,9 @@ public interface DistributionRepository extends JpaRepository<DistributionEntity
 
     List<DistributionEntity> findByDatasetIdAndIsDeletedFalse(UUID datasetId);
 
+    Optional<DistributionEntity> findByDatasetIdAndDownloadUrlAndIsDeletedFalse(UUID datasetId, String downloadUrl);
+
+    Optional<DistributionEntity> findByDatasetIdAndAccessUrlAndIsDeletedFalse(UUID datasetId, String accessUrl);
+
     Page<DistributionEntity> findByTenantIdAndIsDeletedFalse(UUID tenantId, Pageable pageable);
 }
