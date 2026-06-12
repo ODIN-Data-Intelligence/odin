@@ -1,5 +1,14 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import Button from '@mui/material/Button';
+import Paper from '@mui/material/Paper';
+import Alert from '@mui/material/Alert';
+import TextField from '@mui/material/TextField';
+import Collapse from '@mui/material/Collapse';
+import Divider from '@mui/material/Divider';
 import { policyApi } from '@datacatalog/shared';
 import type { PolicyComponentSummary, EvaluationDecision } from '@datacatalog/shared';
 import { useAuthStore } from '../../store/authStore';
@@ -8,12 +17,12 @@ interface Props {
   datasetId: string;
 }
 
-const PIECE_TYPE_COLORS: Record<string, string> = {
-  CLASSIFICATION: 'bg-blue-50 text-blue-700 border-blue-200',
-  REGULATION:     'bg-purple-50 text-purple-700 border-purple-200',
-  CONTRACTUAL:    'bg-amber-50 text-amber-700 border-amber-200',
-  LOGICAL_TYPE:   'bg-teal-50 text-teal-700 border-teal-200',
-  CUSTOM:         'bg-gray-50 text-gray-700 border-gray-200',
+const PIECE_TYPE_COLORS: Record<string, 'primary' | 'secondary' | 'warning' | 'info' | 'default'> = {
+  CLASSIFICATION: 'primary',
+  REGULATION:     'secondary',
+  CONTRACTUAL:    'warning',
+  LOGICAL_TYPE:   'info',
+  CUSTOM:         'default',
 };
 
 export default function PolicyPanel({ datasetId }: Props) {
@@ -51,9 +60,7 @@ export default function PolicyPanel({ datasetId }: Props) {
   const upsertMut = useMutation({
     mutationFn: (json: string) => policyApi.upsertPolicy(datasetId, { policyJson: json, policyLevel: 'A' }),
     onSuccess: () => {
-      setShowOverride(false);
-      setOverrideJson('');
-      setOverrideErr('');
+      setShowOverride(false); setOverrideJson(''); setOverrideErr('');
       qc.invalidateQueries({ queryKey: ['policy-components', datasetId] });
       qc.invalidateQueries({ queryKey: ['policy-evaluations', datasetId] });
     },
@@ -80,11 +87,7 @@ export default function PolicyPanel({ datasetId }: Props) {
   const notRegistered = !loadingComponents && (componentsError || !components);
 
   function togglePiece(id: string) {
-    setExpandedPieces(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
+    setExpandedPieces(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
 
   function handleOverrideSave() {
@@ -94,289 +97,222 @@ export default function PolicyPanel({ datasetId }: Props) {
   }
 
   function handleEvaluate() {
-    setMContextErr('');
-    setEvalResult(null);
+    setMContextErr(''); setEvalResult(null);
     let parsed: Record<string, unknown>;
     try { parsed = JSON.parse(mContext); } catch { setMContextErr('Invalid JSON.'); return; }
     evaluateMut.mutate(parsed);
   }
 
-  const pieceTypeColor = (t: string) => PIECE_TYPE_COLORS[t] ?? PIECE_TYPE_COLORS.CUSTOM;
-
   return (
-    <div className="space-y-3">
-      {/* Section header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-gray-800">ODRL Policy Enforcement</p>
-          <p className="text-xs text-gray-500 mt-0.5">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2 }}>
+        <Box>
+          <Typography variant="body2" fontWeight={600} color="text.primary">ODRL Policy Enforcement</Typography>
+          <Typography variant="caption" color="text.secondary">
             Policy pieces registered with the enforcement engine (ODRE). Evaluated at request time.
-          </p>
-        </div>
-        <span className={`flex-shrink-0 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-          notRegistered
-            ? 'bg-gray-100 text-gray-500'
-            : 'bg-green-100 text-green-700'
-        }`}>
-          {notRegistered ? 'Not registered' : 'Active'}
-        </span>
-      </div>
+          </Typography>
+        </Box>
+        <Chip
+          label={notRegistered ? 'Not registered' : 'Active'}
+          color={notRegistered ? 'default' : 'success'}
+          size="small"
+          sx={{ flexShrink: 0, height: 20, fontSize: 11 }}
+        />
+      </Box>
 
-      {loadingComponents && <p className="text-xs text-gray-400 py-2">Loading…</p>}
+      {loadingComponents && <Typography variant="caption" color="text.disabled">Loading…</Typography>}
 
       {notRegistered && !loadingComponents && (
-        <div className="border border-gray-200 rounded-lg px-4 py-4 text-sm text-gray-500">
-          <p>No policy is registered with the enforcement engine for this dataset.</p>
-          <p className="mt-1 text-xs text-gray-400">
+        <Paper variant="outlined" sx={{ p: 2 }}>
+          <Typography variant="body2" color="text.secondary">No policy is registered with the enforcement engine for this dataset.</Typography>
+          <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 0.5 }}>
             Accept the Terms of Use on this dataset to auto-register the derived policy, or use the Override option below.
-          </p>
+          </Typography>
           {canManage && (
-            <button
-              onClick={() => setShowOverride(v => !v)}
-              className="mt-3 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700"
-            >
+            <Button size="small" variant="contained" onClick={() => setShowOverride(v => !v)} sx={{ mt: 1.5, textTransform: 'none', fontSize: 11 }}>
               Override Policy
-            </button>
+            </Button>
           )}
-        </div>
+        </Paper>
+      )}
+
+      {notRegistered && showOverride && canManage && (
+        <OverridePanel
+          value={overrideJson}
+          onChange={setOverrideJson}
+          error={overrideErr}
+          isPending={upsertMut.isPending}
+          onSave={handleOverrideSave}
+          onClose={() => { setShowOverride(false); setOverrideErr(''); }}
+        />
       )}
 
       {components && (
-        <div className="border border-gray-200 rounded-lg overflow-hidden text-sm">
-          {/* Policy pieces */}
-          <div className="divide-y divide-gray-100">
-            {components.components.length === 0 && (
-              <p className="px-4 py-3 text-xs text-gray-400 italic">
-                No policy pieces linked. Policy was set manually — see assembled ODRL below.
-              </p>
-            )}
-            {components.components.map((piece) => (
-              <PieceRow
-                key={piece.pieceId}
-                piece={piece}
-                expanded={expandedPieces.has(piece.pieceId)}
-                onToggle={() => togglePiece(piece.pieceId)}
-                colorClass={pieceTypeColor(piece.pieceType)}
-              />
-            ))}
-          </div>
+        <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
+          {components.components.length === 0 && (
+            <Typography variant="caption" color="text.disabled" sx={{ px: 2, py: 1.5, fontStyle: 'italic', display: 'block' }}>
+              No policy pieces linked. Policy was set manually — see assembled ODRL below.
+            </Typography>
+          )}
+          {components.components.map((piece) => (
+            <PieceRow
+              key={piece.pieceId}
+              piece={piece}
+              expanded={expandedPieces.has(piece.pieceId)}
+              onToggle={() => togglePiece(piece.pieceId)}
+              color={PIECE_TYPE_COLORS[piece.pieceType] ?? 'default'}
+            />
+          ))}
 
-          {/* Assembled ODRL toggle */}
-          <div className="border-t border-gray-100">
-            <button
+          <Divider />
+          <Box>
+            <Box
+              component="button"
               onClick={() => setShowAssembled(v => !v)}
-              className="w-full flex items-center justify-between px-4 py-2.5 text-xs text-gray-500 hover:bg-gray-50"
+              sx={{
+                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                px: 2, py: 1.25, bgcolor: 'transparent', border: 'none', cursor: 'pointer',
+                '&:hover': { bgcolor: 'grey.50' },
+              }}
             >
-              <span className="font-medium">Assembled ODRL Policy</span>
-              <span>{showAssembled ? '▲' : '▼'}</span>
-            </button>
-            {showAssembled && (
-              <pre className="px-4 pb-4 text-xs text-gray-700 overflow-x-auto bg-gray-50 leading-relaxed">
+              <Typography variant="caption" fontWeight={600} color="text.secondary">Assembled ODRL Policy</Typography>
+              <Typography variant="caption" color="text.disabled">{showAssembled ? '▲' : '▼'}</Typography>
+            </Box>
+            <Collapse in={showAssembled}>
+              <Box component="pre" sx={{ px: 2, pb: 2, typography: 'caption', color: 'text.secondary', overflowX: 'auto', bgcolor: 'grey.50', m: 0 }}>
                 {JSON.stringify(components.assembledPolicy, null, 2)}
-              </pre>
-            )}
-          </div>
+              </Box>
+            </Collapse>
+          </Box>
 
-          {/* Action bar */}
           {canManage && (
-            <div className="border-t border-gray-200 bg-gray-50 px-4 py-3 flex items-center gap-2 flex-wrap">
-              <button
-                onClick={() => { setShowEvaluate(v => !v); setEvalResult(null); }}
-                className="px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700"
-              >
-                Evaluate
-              </button>
-              <button
-                onClick={() => {
-                  setShowOverride(v => !v);
-                  if (!showOverride) {
-                    setOverrideJson(JSON.stringify(components.assembledPolicy, null, 2));
-                  }
-                }}
-                className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
-              >
-                Override Policy
-              </button>
-              {confirmDelete ? (
-                <span className="flex items-center gap-2 ml-auto">
-                  <span className="text-xs text-gray-600">Delete policy record?</span>
-                  <button
-                    onClick={() => deleteMut.mutate()}
-                    disabled={deleteMut.isPending}
-                    className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded hover:bg-red-700 disabled:opacity-50"
-                  >
-                    {deleteMut.isPending ? 'Deleting…' : 'Confirm Delete'}
-                  </button>
-                  <button
-                    onClick={() => setConfirmDelete(false)}
-                    className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-                </span>
-              ) : (
-                <button
-                  onClick={() => setConfirmDelete(true)}
-                  className="ml-auto px-3 py-1.5 text-xs font-medium text-red-600 bg-white border border-red-200 rounded hover:bg-red-50"
+            <>
+              <Divider />
+              <Box sx={{ bgcolor: 'grey.50', px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                <Button size="small" variant="contained" color="primary" onClick={() => { setShowEvaluate(v => !v); setEvalResult(null); }} sx={{ textTransform: 'none', fontSize: 11 }}>
+                  Evaluate
+                </Button>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => { setShowOverride(v => !v); if (!showOverride) setOverrideJson(JSON.stringify(components.assembledPolicy, null, 2)); }}
+                  sx={{ textTransform: 'none', fontSize: 11 }}
                 >
-                  Delete Policy
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* Evaluate panel */}
-          {showEvaluate && canManage && (
-            <div className="border-t border-gray-200 px-4 py-4 space-y-3 bg-indigo-50">
-              <p className="text-xs font-medium text-gray-700">
-                Run ODRE enforcement — provide runtime context (M map):
-              </p>
-              <textarea
-                value={mContext}
-                onChange={e => setMContext(e.target.value)}
-                rows={4}
-                className="w-full font-mono text-xs border border-gray-300 rounded p-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
-              />
-              {mContextErr && <p className="text-xs text-red-600">{mContextErr}</p>}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleEvaluate}
-                  disabled={evaluateMut.isPending}
-                  className="px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700 disabled:opacity-50"
-                >
-                  {evaluateMut.isPending ? 'Evaluating…' : 'Run Evaluation'}
-                </button>
-                {evaluateMut.isError && (
-                  <p className="text-xs text-red-600">Evaluation failed.</p>
+                  Override Policy
+                </Button>
+                {confirmDelete ? (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 'auto' }}>
+                    <Typography variant="caption" color="text.secondary">Delete policy record?</Typography>
+                    <Button size="small" variant="contained" color="error" disabled={deleteMut.isPending} onClick={() => deleteMut.mutate()} sx={{ textTransform: 'none', fontSize: 11 }}>
+                      {deleteMut.isPending ? 'Deleting…' : 'Confirm Delete'}
+                    </Button>
+                    <Button size="small" variant="outlined" onClick={() => setConfirmDelete(false)} sx={{ textTransform: 'none', fontSize: 11 }}>Cancel</Button>
+                  </Box>
+                ) : (
+                  <Button size="small" variant="outlined" color="error" onClick={() => setConfirmDelete(true)} sx={{ textTransform: 'none', fontSize: 11, ml: 'auto' }}>
+                    Delete Policy
+                  </Button>
                 )}
-              </div>
-              {evalResult && (
-                <EvalResultBlock granted={evalResult.granted} decisions={evalResult.decisions} />
-              )}
-            </div>
+              </Box>
+            </>
           )}
 
-          {/* Override panel */}
+          {showEvaluate && canManage && (
+            <>
+              <Divider />
+              <Box sx={{ bgcolor: 'primary.50', px: 2, py: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                <Typography variant="caption" fontWeight={600} color="text.secondary">
+                  Run ODRE enforcement — provide runtime context (M map):
+                </Typography>
+                <TextField
+                  value={mContext}
+                  onChange={e => setMContext(e.target.value)}
+                  multiline
+                  rows={4}
+                  size="small"
+                  fullWidth
+                  inputProps={{ style: { fontFamily: 'monospace', fontSize: 12 } }}
+                  error={!!mContextErr}
+                  helperText={mContextErr}
+                />
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Button size="small" variant="contained" disabled={evaluateMut.isPending} onClick={handleEvaluate} sx={{ textTransform: 'none', fontSize: 11 }}>
+                    {evaluateMut.isPending ? 'Evaluating…' : 'Run Evaluation'}
+                  </Button>
+                  {evaluateMut.isError && <Typography variant="caption" color="error">Evaluation failed.</Typography>}
+                </Box>
+                {evalResult && <EvalResultBlock granted={evalResult.granted} decisions={evalResult.decisions} />}
+              </Box>
+            </>
+          )}
+
           {showOverride && canManage && (
-            <div className="border-t border-gray-200 px-4 py-4 space-y-3 bg-amber-50">
-              <p className="text-xs font-medium text-gray-700">
-                Paste a complete ODRL Set document to override the assembled policy:
-              </p>
-              <textarea
-                value={overrideJson}
-                onChange={e => setOverrideJson(e.target.value)}
-                rows={10}
-                className="w-full font-mono text-xs border border-gray-300 rounded p-2 bg-white focus:outline-none focus:ring-2 focus:ring-amber-300"
-                placeholder={'{\n  "@context": "http://www.w3.org/ns/odrl.jsonld",\n  "@type": "Set",\n  "uid": "...",\n  "permission": [...]\n}'}
-              />
-              {overrideErr && <p className="text-xs text-red-600">{overrideErr}</p>}
-              <div className="flex gap-2">
-                <button
-                  onClick={handleOverrideSave}
-                  disabled={upsertMut.isPending}
-                  className="px-3 py-1.5 text-xs font-medium text-white bg-amber-600 rounded hover:bg-amber-700 disabled:opacity-50"
-                >
-                  {upsertMut.isPending ? 'Saving…' : 'Save Override'}
-                </button>
-                <button
-                  onClick={() => { setShowOverride(false); setOverrideErr(''); }}
-                  className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
+            <>
+              <Divider />
+              <Box sx={{ bgcolor: 'warning.50', px: 2, py: 2 }}>
+                <OverridePanel
+                  value={overrideJson}
+                  onChange={setOverrideJson}
+                  error={overrideErr}
+                  isPending={upsertMut.isPending}
+                  onSave={handleOverrideSave}
+                  onClose={() => { setShowOverride(false); setOverrideErr(''); }}
+                />
+              </Box>
+            </>
           )}
-        </div>
+        </Paper>
       )}
 
-      {/* Override panel for not-registered state */}
-      {notRegistered && showOverride && canManage && (
-        <div className="border border-gray-200 rounded-lg px-4 py-4 space-y-3 bg-amber-50 text-sm">
-          <p className="text-xs font-medium text-gray-700">
-            Paste a complete ODRL Set document:
-          </p>
-          <textarea
-            value={overrideJson}
-            onChange={e => setOverrideJson(e.target.value)}
-            rows={10}
-            className="w-full font-mono text-xs border border-gray-300 rounded p-2 bg-white focus:outline-none focus:ring-2 focus:ring-amber-300"
-            placeholder={'{\n  "@context": "http://www.w3.org/ns/odrl.jsonld",\n  "@type": "Set",\n  "uid": "...",\n  "permission": [...]\n}'}
-          />
-          {overrideErr && <p className="text-xs text-red-600">{overrideErr}</p>}
-          <div className="flex gap-2">
-            <button
-              onClick={handleOverrideSave}
-              disabled={upsertMut.isPending}
-              className="px-3 py-1.5 text-xs font-medium text-white bg-amber-600 rounded hover:bg-amber-700 disabled:opacity-50"
-            >
-              {upsertMut.isPending ? 'Saving…' : 'Save'}
-            </button>
-            <button
-              onClick={() => { setShowOverride(false); setOverrideErr(''); }}
-              className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Recent evaluations */}
       {!loadingEvals && evaluations && evaluations.content.length > 0 && (
-        <div className="space-y-1.5">
-          <p className="text-xs font-medium text-gray-600">Recent Evaluations</p>
-          <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 overflow-hidden text-xs">
+        <Box>
+          <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>Recent Evaluations</Typography>
+          <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
             {evaluations.content.map(entry => (
-              <div key={entry.id} className="flex items-center justify-between px-3 py-2 gap-2">
-                <span className="font-mono text-gray-500 truncate">{entry.id.slice(0, 8)}…</span>
-                <span className="text-gray-400 uppercase tracking-wide">{entry.action}</span>
-                <span className={`px-2 py-0.5 rounded-full font-semibold ${
-                  entry.granted ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                }`}>
-                  {entry.granted ? 'Granted' : 'Denied'}
-                </span>
-                <span className="text-gray-400 flex-shrink-0">
+              <Box key={entry.id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1.5, py: 1, gap: 1.5, borderBottom: 1, borderColor: 'divider', '&:last-child': { borderBottom: 'none' } }}>
+                <Typography variant="caption" fontFamily="monospace" color="text.secondary">{entry.id.slice(0, 8)}…</Typography>
+                <Typography variant="caption" color="text.disabled" sx={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>{entry.action}</Typography>
+                <Chip label={entry.granted ? 'Granted' : 'Denied'} color={entry.granted ? 'success' : 'error'} size="small" sx={{ height: 18, fontSize: 10 }} />
+                <Typography variant="caption" color="text.disabled" sx={{ flexShrink: 0 }}>
                   {new Date(entry.createdAt).toLocaleString()}
-                </span>
-              </div>
+                </Typography>
+              </Box>
             ))}
-          </div>
-        </div>
+          </Paper>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }
 
-function PieceRow({
-  piece, expanded, onToggle, colorClass,
-}: {
-  piece: PolicyComponentSummary;
-  expanded: boolean;
-  onToggle: () => void;
-  colorClass: string;
+function PieceRow({ piece, expanded, onToggle, color }: {
+  piece: PolicyComponentSummary; expanded: boolean; onToggle: () => void;
+  color: 'primary' | 'secondary' | 'warning' | 'info' | 'default';
 }) {
   return (
-    <div>
-      <button
+    <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+      <Box
+        component="button"
         onClick={onToggle}
-        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+        sx={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1.5,
+          textAlign: 'left', bgcolor: 'transparent', border: 'none', cursor: 'pointer',
+          '&:hover': { bgcolor: 'grey.50' },
+        }}
       >
-        <span className={`flex-shrink-0 px-2 py-0.5 rounded border text-xs font-semibold ${colorClass}`}>
-          {piece.pieceType}
-        </span>
-        <span className="flex-1 text-sm text-gray-800 truncate">
+        <Chip label={piece.pieceType} color={color} size="small" sx={{ height: 20, fontSize: 10, fontWeight: 600, flexShrink: 0 }} />
+        <Typography variant="body2" color="text.primary" sx={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {piece.label ?? piece.dimensionKey}
-        </span>
-        <span className="flex-shrink-0 text-xs text-gray-400 font-mono">{piece.policyLevel}</span>
-        <span className="flex-shrink-0 text-gray-400 text-xs">{expanded ? '▲' : '▼'}</span>
-      </button>
-      {expanded && (
-        <div className="px-4 pb-3 pt-0 bg-gray-50 border-t border-gray-100">
+        </Typography>
+        <Typography variant="caption" color="text.disabled" fontFamily="monospace" sx={{ flexShrink: 0 }}>{piece.policyLevel}</Typography>
+        <Typography variant="caption" color="text.disabled" sx={{ flexShrink: 0 }}>{expanded ? '▲' : '▼'}</Typography>
+      </Box>
+      <Collapse in={expanded}>
+        <Box sx={{ px: 2, pb: 1.5, bgcolor: 'grey.50', borderTop: 1, borderColor: 'divider' }}>
           <OdrlFragment fragment={piece.policyFragment} />
-        </div>
-      )}
-    </div>
+        </Box>
+      </Collapse>
+    </Box>
   );
 }
 
@@ -386,52 +322,81 @@ function OdrlFragment({ fragment }: { fragment: Record<string, unknown> }) {
   const obligations  = (fragment.obligation  as { action: string }[] | undefined) ?? [];
 
   return (
-    <div className="mt-2 space-y-1.5 text-xs">
+    <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
       {permissions.length > 0 && (
-        <div className="flex items-start gap-2">
-          <span className="flex-shrink-0 font-semibold text-green-700 w-20">Permitted</span>
-          <span className="text-gray-600">{permissions.map(r => r.action).join(', ')}</span>
-        </div>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+          <Typography variant="caption" fontWeight={600} color="success.main" sx={{ minWidth: 70 }}>Permitted</Typography>
+          <Typography variant="caption" color="text.secondary">{permissions.map(r => r.action).join(', ')}</Typography>
+        </Box>
       )}
       {prohibitions.length > 0 && (
-        <div className="flex items-start gap-2">
-          <span className="flex-shrink-0 font-semibold text-red-700 w-20">Prohibited</span>
-          <span className="text-gray-600">{prohibitions.map(r => r.action).join(', ')}</span>
-        </div>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+          <Typography variant="caption" fontWeight={600} color="error.main" sx={{ minWidth: 70 }}>Prohibited</Typography>
+          <Typography variant="caption" color="text.secondary">{prohibitions.map(r => r.action).join(', ')}</Typography>
+        </Box>
       )}
       {obligations.length > 0 && (
-        <div className="flex items-start gap-2">
-          <span className="flex-shrink-0 font-semibold text-amber-700 w-20">Obligated</span>
-          <span className="text-gray-600">{obligations.map(r => r.action).join(', ')}</span>
-        </div>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+          <Typography variant="caption" fontWeight={600} color="warning.main" sx={{ minWidth: 70 }}>Obligated</Typography>
+          <Typography variant="caption" color="text.secondary">{obligations.map(r => r.action).join(', ')}</Typography>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }
 
 function EvalResultBlock({ granted, decisions }: { granted: boolean; decisions: EvaluationDecision[] }) {
   return (
-    <div className={`rounded-lg border px-4 py-3 text-xs space-y-2 ${
-      granted ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'
-    }`}>
-      <div className="flex items-center gap-2">
-        <span className={`text-sm font-bold ${granted ? 'text-green-700' : 'text-red-700'}`}>
-          {granted ? '✓ Access Granted' : '✗ Access Denied'}
-        </span>
-      </div>
+    <Paper variant="outlined" sx={{ px: 2, py: 1.5, bgcolor: granted ? 'success.50' : 'error.50', borderColor: granted ? 'success.200' : 'error.200' }}>
+      <Typography variant="body2" fontWeight={700} color={granted ? 'success.main' : 'error.main'} sx={{ mb: 1 }}>
+        {granted ? '✓ Access Granted' : '✗ Access Denied'}
+      </Typography>
       {decisions.length > 0 && (
-        <div className="space-y-1">
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
           {decisions.map((d, i) => (
-            <div key={i} className="flex items-center gap-2 text-gray-600">
-              <span className="font-mono bg-white border border-gray-200 rounded px-1.5 py-0.5">{d.action}</span>
-              <span className="text-gray-400">→</span>
-              <span className={d.delegated ? 'text-amber-600 italic' : 'text-gray-700'}>
+            <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box component="code" sx={{ typography: 'caption', bgcolor: 'background.paper', border: 1, borderColor: 'divider', px: 0.75, py: 0.25, borderRadius: 0.5 }}>
+                {d.action}
+              </Box>
+              <Typography variant="caption" color="text.disabled">→</Typography>
+              <Typography variant="caption" color={d.delegated ? 'warning.main' : 'text.secondary'} sx={{ fontStyle: d.delegated ? 'italic' : 'normal' }}>
                 {d.delegated ? `delegate (${d.result})` : d.result}
-              </span>
-            </div>
+              </Typography>
+            </Box>
           ))}
-        </div>
+        </Box>
       )}
-    </div>
+    </Paper>
+  );
+}
+
+function OverridePanel({ value, onChange, error, isPending, onSave, onClose }: {
+  value: string; onChange: (v: string) => void; error: string;
+  isPending: boolean; onSave: () => void; onClose: () => void;
+}) {
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      <Typography variant="caption" fontWeight={600} color="text.secondary">
+        Paste a complete ODRL Set document to override the assembled policy:
+      </Typography>
+      <TextField
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        multiline
+        rows={10}
+        size="small"
+        fullWidth
+        placeholder={'{\n  "@context": "http://www.w3.org/ns/odrl.jsonld",\n  "@type": "Set",\n  "uid": "...",\n  "permission": [...]\n}'}
+        inputProps={{ style: { fontFamily: 'monospace', fontSize: 12 } }}
+        error={!!error}
+        helperText={error}
+      />
+      <Box sx={{ display: 'flex', gap: 1 }}>
+        <Button size="small" variant="contained" color="warning" disabled={isPending} onClick={onSave} sx={{ textTransform: 'none', fontSize: 11 }}>
+          {isPending ? 'Saving…' : 'Save Override'}
+        </Button>
+        <Button size="small" variant="outlined" onClick={onClose} sx={{ textTransform: 'none', fontSize: 11 }}>Cancel</Button>
+      </Box>
+    </Box>
   );
 }

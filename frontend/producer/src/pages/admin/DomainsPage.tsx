@@ -1,13 +1,17 @@
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
 import { PageHeader } from '@datacatalog/shared';
-import { Button } from '@datacatalog/shared';
 
 export default function DomainsPage() {
   return (
-    <div>
-      <PageHeader title="Domains" description="Manage organizational domains" actions={<Button>+ Add Domain</Button>} />
-      <div className="p-6">
-        <p className="text-sm text-gray-500">Domain hierarchy will be shown here.</p>
-      </div>
-    </div>
+    <Box>
+      <PageHeader title="Domains" description="Manage organizational domains" actions={
+        <Button variant="contained" size="small" sx={{ textTransform: 'none' }}>+ Add Domain</Button>
+      } />
+      <Box sx={{ p: 3 }}>
+        <Typography variant="body2" color="text.secondary">Domain hierarchy will be shown here.</Typography>
+      </Box>
+    </Box>
   );
 }

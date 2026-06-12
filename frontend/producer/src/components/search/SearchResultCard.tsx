@@ -1,11 +1,21 @@
 import { Link, useParams } from 'react-router-dom';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
 import type { SearchResult } from '@datacatalog/shared';
 import { formatDate, LIFECYCLE_COLORS } from '../../lib/utils';
 
-const TYPE_BADGE: Record<string, { label: string; cls: string }> = {
-  DATASET:      { label: 'Dataset',      cls: 'bg-blue-100 text-blue-700' },
-  DATA_PRODUCT: { label: 'Data Product', cls: 'bg-purple-100 text-purple-700' },
-  DISTRIBUTION: { label: 'Distribution', cls: 'bg-gray-100 text-gray-600' },
+const TYPE_COLORS: Record<string, 'primary' | 'secondary' | 'default'> = {
+  DATASET:      'primary',
+  DATA_PRODUCT: 'secondary',
+  DISTRIBUTION: 'default',
+};
+
+const TYPE_LABELS: Record<string, string> = {
+  DATASET:      'Dataset',
+  DATA_PRODUCT: 'Data Product',
+  DISTRIBUTION: 'Distribution',
 };
 
 interface Props {
@@ -14,62 +24,75 @@ interface Props {
 
 export default function SearchResultCard({ result }: Props) {
   const { tenant } = useParams();
-  const badge = TYPE_BADGE[result.entityType] ?? TYPE_BADGE.DATASET;
 
   const href = (() => {
     if (result.entityType === 'DATASET') return `/${tenant}/datasets/${result.id}`;
     if (result.entityType === 'DATA_PRODUCT') return `/${tenant}/data-products/${result.id}`;
-    // Distributions have no datasetId in the search result — link to datasets list
     return `/${tenant}/datasets`;
   })();
 
   const lifecycle = result.lifecycleStatus;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg px-5 py-4 hover:border-blue-300 hover:shadow-sm transition-all">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          {/* Row 1: title + type badge */}
-          <div className="flex items-center gap-2 mb-1">
-            <Link
+    <Paper
+      variant="outlined"
+      sx={{ px: 2.5, py: 2, '&:hover': { borderColor: 'primary.light', boxShadow: 1 }, transition: 'border-color 0.15s, box-shadow 0.15s' }}
+    >
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2 }}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5, flexWrap: 'wrap' }}>
+            <Typography
+              component={Link}
               to={href}
-              className="text-sm font-semibold text-blue-600 hover:underline truncate"
+              variant="body2"
+              fontWeight={600}
+              color="primary"
+              noWrap
+              sx={{ textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
             >
               {result.title}
-            </Link>
-            <span className={`shrink-0 px-2 py-0.5 rounded text-xs font-medium ${badge.cls}`}>
-              {badge.label}
-            </span>
+            </Typography>
+            <Chip
+              label={TYPE_LABELS[result.entityType] ?? result.entityType}
+              color={TYPE_COLORS[result.entityType] ?? 'default'}
+              size="small"
+              sx={{ height: 18, fontSize: 11, flexShrink: 0 }}
+            />
             {result.format && (
-              <span className="shrink-0 px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">
-                {result.format}
-              </span>
+              <Chip label={result.format} size="small" variant="outlined" sx={{ height: 18, fontSize: 11, flexShrink: 0 }} />
             )}
-          </div>
+          </Box>
 
-          {/* Row 2: description */}
           {result.description && (
-            <p className="text-xs text-gray-500 line-clamp-1 mb-2">{result.description}</p>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden', mb: 1 }}
+            >
+              {result.description}
+            </Typography>
           )}
 
-          {/* Row 3: keywords + lifecycle + date */}
-          <div className="flex items-center gap-2 flex-wrap">
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
             {(result.keywords ?? []).slice(0, 4).map(kw => (
-              <span key={kw} className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">
-                {kw}
-              </span>
+              <Chip key={kw} label={kw} size="small" variant="outlined" sx={{ height: 18, fontSize: 11 }} />
             ))}
             {lifecycle && (
-              <span className={`px-2 py-0.5 rounded text-xs font-medium ${LIFECYCLE_COLORS[lifecycle] ?? 'bg-gray-100 text-gray-600'}`}>
-                {lifecycle}
-              </span>
+              <Chip
+                label={lifecycle}
+                color={LIFECYCLE_COLORS[lifecycle] ?? 'default'}
+                size="small"
+                sx={{ height: 18, fontSize: 11 }}
+              />
             )}
             {result.updatedAt && (
-              <span className="text-xs text-gray-400 ml-auto">{formatDate(result.updatedAt)}</span>
+              <Typography variant="caption" color="text.disabled" sx={{ ml: 'auto' }}>
+                {formatDate(result.updatedAt)}
+              </Typography>
             )}
-          </div>
-        </div>
-      </div>
-    </div>
+          </Box>
+        </Box>
+      </Box>
+    </Paper>
   );
 }

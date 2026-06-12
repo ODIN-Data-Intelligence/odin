@@ -1,8 +1,5 @@
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
+export function cn(...inputs: (string | undefined | null | false)[]): string {
+  return inputs.filter(Boolean).join(' ');
 }
 
 export function formatDate(iso?: string): string {
@@ -15,18 +12,18 @@ export function formatDateTime(iso?: string): string {
   return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso));
 }
 
-export const LIFECYCLE_COLORS: Record<string, string> = {
-  Ideation: 'bg-gray-100 text-gray-700',
-  Design: 'bg-blue-100 text-blue-700',
-  Build: 'bg-yellow-100 text-yellow-700',
-  Deploy: 'bg-purple-100 text-purple-700',
-  Consume: 'bg-green-100 text-green-700',
+export const LIFECYCLE_COLORS: Record<string, 'default' | 'primary' | 'success' | 'warning' | 'error' | 'info' | 'secondary'> = {
+  Ideation: 'default',
+  Design:   'info',
+  Build:    'warning',
+  Deploy:   'secondary',
+  Consume:  'success',
 };
 
-export const RUN_STATUS_COLORS: Record<string, string> = {
-  pending: 'bg-gray-100 text-gray-700',
-  running: 'bg-blue-100 text-blue-700',
-  completed: 'bg-green-100 text-green-700',
-  failed: 'bg-red-100 text-red-700',
-  cancelled: 'bg-yellow-100 text-yellow-700',
+export const RUN_STATUS_COLORS: Record<string, 'default' | 'primary' | 'success' | 'warning' | 'error' | 'info'> = {
+  pending:   'default',
+  running:   'primary',
+  completed: 'success',
+  failed:    'error',
+  cancelled: 'warning',
 };

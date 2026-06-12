@@ -1,6 +1,17 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import TextField from '@mui/material/TextField';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import InputLabel from '@mui/material/InputLabel';
+import FormControl from '@mui/material/FormControl';
+import Button from '@mui/material/Button';
+import Alert from '@mui/material/Alert';
 import { harvestSourceApi } from '@datacatalog/shared';
 import type { SourceType } from '@datacatalog/shared';
 
@@ -20,12 +31,10 @@ interface FormValues {
   schemaFilter?: string;
 }
 
-interface Props {
-  onClose: () => void;
-}
+interface Props { onClose: () => void; }
 
 export default function HarvestSourceForm({ onClose }: Props) {
-  const { register, handleSubmit, watch, formState: { errors } } = useForm<FormValues>({ defaultValues: { sourceType: 'dcat_http' } });
+  const { register, handleSubmit, control, watch } = useForm<FormValues>({ defaultValues: { sourceType: 'dcat_http' } });
   const sourceType = watch('sourceType');
 
   const createMut = useMutation({
@@ -38,65 +47,56 @@ export default function HarvestSourceForm({ onClose }: Props) {
   });
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4">
-        <div className="px-6 py-4 border-b flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Add Harvest Source</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-        </div>
-        <form onSubmit={handleSubmit(data => createMut.mutate(data))} className="px-6 py-5 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-            <input {...register('name', { required: true })} className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Production Snowflake" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Source Type *</label>
-            <select {...register('sourceType')} className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-              {SOURCE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
-          </div>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <form onSubmit={handleSubmit(data => createMut.mutate(data))}>
+        <DialogTitle>Add Harvest Source</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '12px !important' }}>
+          <TextField {...register('name', { required: true })} label="Name" required size="small" fullWidth placeholder="Production Snowflake" />
 
-          {(sourceType === 'dcat_http') && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Base URL *</label>
-              <input {...register('baseUrl')} className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="https://catalog.example.com/dcat" />
-            </div>
+          <Controller
+            name="sourceType"
+            control={control}
+            render={({ field }) => (
+              <FormControl size="small" fullWidth required>
+                <InputLabel>Source Type</InputLabel>
+                <Select label="Source Type" {...field}>
+                  {SOURCE_TYPES.map(t => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
+                </Select>
+              </FormControl>
+            )}
+          />
+
+          {sourceType === 'dcat_http' && (
+            <TextField {...register('baseUrl')} label="Base URL" size="small" fullWidth placeholder="https://catalog.example.com/dcat" />
           )}
 
           {sourceType === 'aws_glue' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">AWS Region *</label>
-              <input {...register('region')} className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="us-east-1" />
-            </div>
+            <TextField {...register('region')} label="AWS Region" size="small" fullWidth placeholder="us-east-1" />
           )}
 
           {(sourceType === 'snowflake' || sourceType === 'teradata') && (
             <>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">JDBC URL / Account *</label>
-                <input {...register('baseUrl')} className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder={sourceType === 'snowflake' ? 'account.snowflakecomputing.com' : 'jdbc:teradata://host'} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Database</label>
-                <input {...register('databaseName')} className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="MY_DATABASE" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Schema Filter (comma-separated)</label>
-                <input {...register('schemaFilter')} className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="PUBLIC,ANALYTICS" />
-              </div>
+              <TextField
+                {...register('baseUrl')}
+                label="JDBC URL / Account"
+                size="small"
+                fullWidth
+                placeholder={sourceType === 'snowflake' ? 'account.snowflakecomputing.com' : 'jdbc:teradata://host'}
+              />
+              <TextField {...register('databaseName')} label="Database" size="small" fullWidth placeholder="MY_DATABASE" />
+              <TextField {...register('schemaFilter')} label="Schema Filter" size="small" fullWidth placeholder="PUBLIC,ANALYTICS" helperText="comma-separated" />
             </>
           )}
 
-          {createMut.error && <p className="text-xs text-red-600">Error: {String(createMut.error)}</p>}
-
-          <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
-            <button type="submit" disabled={createMut.isPending} className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-              {createMut.isPending ? 'Saving...' : 'Add Source'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+          {createMut.isError && <Alert severity="error">Error: {String(createMut.error)}</Alert>}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose} sx={{ textTransform: 'none' }}>Cancel</Button>
+          <Button type="submit" variant="contained" disabled={createMut.isPending} sx={{ textTransform: 'none' }}>
+            {createMut.isPending ? 'Saving...' : 'Add Source'}
+          </Button>
+        </DialogActions>
+      </form>
+    </Dialog>
   );
 }

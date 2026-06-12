@@ -1,12 +1,17 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
-import { dataProductApi } from '@datacatalog/shared';
-import { PageHeader } from '@datacatalog/shared';
-import { Button } from '@datacatalog/shared';
-import { Badge } from '@datacatalog/shared';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Grid2 from '@mui/material/Grid2';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import Button from '@mui/material/Button';
+import { dataProductApi, PageHeader } from '@datacatalog/shared';
 import { LIFECYCLE_COLORS, formatDate } from '../lib/utils';
 import DataProductWizard from '../components/catalog/DataProductWizard';
+
+const LIFECYCLE_STAGES = ['', 'Ideation', 'Design', 'Build', 'Deploy', 'Consume'];
 
 export default function DataProductsPage() {
   const { tenant } = useParams();
@@ -20,59 +25,83 @@ export default function DataProductsPage() {
   const products = productPage?.content ?? [];
 
   return (
-    <div>
+    <Box>
       <PageHeader
         title="Data Products"
         description="Browse and manage data products across your organization"
-        actions={<Button onClick={() => setShowWizard(true)}>+ New Data Product</Button>}
+        actions={
+          <Button variant="contained" size="small" onClick={() => setShowWizard(true)} sx={{ textTransform: 'none' }}>
+            + New Data Product
+          </Button>
+        }
       />
 
-      <div className="p-6">
-        <div className="flex gap-2 mb-4 flex-wrap">
-          {['', 'Ideation', 'Design', 'Build', 'Deploy', 'Consume'].map(s => (
-            <button
+      <Box sx={{ p: 3 }}>
+        <Box sx={{ display: 'flex', gap: 1, mb: 2.5, flexWrap: 'wrap' }}>
+          {LIFECYCLE_STAGES.map(s => (
+            <Chip
               key={s}
+              label={s || 'All'}
+              color={lifecycleFilter === s ? 'primary' : 'default'}
+              variant={lifecycleFilter === s ? 'filled' : 'outlined'}
+              size="small"
               onClick={() => setLifecycleFilter(s)}
-              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${lifecycleFilter === s ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'}`}
-            >
-              {s || 'All'}
-            </button>
+              sx={{ cursor: 'pointer' }}
+            />
           ))}
-        </div>
+        </Box>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <Grid2 container spacing={2}>
           {products.map(dp => (
-            <Link
-              key={dp.id}
-              to={`/${tenant}/data-products/${dp.id}`}
-              className="bg-white border border-gray-200 rounded-lg p-4 hover:border-blue-400 hover:shadow-sm transition-all"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <h3 className="font-medium text-gray-900 line-clamp-2">{dp.title}</h3>
-                <Badge label={dp.lifecycleStatus} className={LIFECYCLE_COLORS[dp.lifecycleStatus]} />
-              </div>
-              {dp.description && (
-                <p className="mt-2 text-sm text-gray-500 line-clamp-2">{dp.description}</p>
-              )}
-              {dp.keywords && dp.keywords.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {dp.keywords.slice(0, 3).map(kw => (
-                    <span key={kw} className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">{kw}</span>
-                  ))}
-                </div>
-              )}
-              <p className="mt-3 text-xs text-gray-400">Updated {formatDate(dp.updatedAt)}</p>
-            </Link>
+            <Grid2 key={dp.id} size={{ xs: 12, md: 6, xl: 4 }}>
+              <Paper
+                variant="outlined"
+                component={Link}
+                to={`/${tenant}/data-products/${dp.id}`}
+                sx={{ p: 2, display: 'block', textDecoration: 'none', '&:hover': { borderColor: 'primary.light', boxShadow: 1 }, transition: 'border-color 0.15s, box-shadow 0.15s', height: '100%' }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1, mb: 1 }}>
+                  <Typography variant="body2" fontWeight={600} sx={{ minWidth: 0, flex: 1 }}>
+                    {dp.title}
+                  </Typography>
+                  <Chip
+                    label={dp.lifecycleStatus}
+                    color={LIFECYCLE_COLORS[dp.lifecycleStatus] ?? 'default'}
+                    size="small"
+                    sx={{ height: 18, fontSize: 11, flexShrink: 0 }}
+                  />
+                </Box>
+                {dp.description && (
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', mb: 1 }}
+                  >
+                    {dp.description}
+                  </Typography>
+                )}
+                {dp.keywords && dp.keywords.length > 0 && (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1 }}>
+                    {dp.keywords.slice(0, 3).map(kw => (
+                      <Chip key={kw} label={kw} size="small" variant="outlined" sx={{ height: 18, fontSize: 11 }} />
+                    ))}
+                  </Box>
+                )}
+                <Typography variant="caption" color="text.disabled">Updated {formatDate(dp.updatedAt)}</Typography>
+              </Paper>
+            </Grid2>
           ))}
           {products.length === 0 && (
-            <p className="col-span-3 text-sm text-gray-400 text-center py-12">
-              No data products found. Create your first one.
-            </p>
+            <Grid2 size={12}>
+              <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 8 }}>
+                No data products found. Create your first one.
+              </Typography>
+            </Grid2>
           )}
-        </div>
-      </div>
+        </Grid2>
+      </Box>
 
       {showWizard && <DataProductWizard onClose={() => { setShowWizard(false); refetch(); }} />}
-    </div>
+    </Box>
   );
 }

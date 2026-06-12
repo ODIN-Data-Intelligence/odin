@@ -1,8 +1,18 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import Button from '@mui/material/Button';
+import Paper from '@mui/material/Paper';
+import Alert from '@mui/material/Alert';
+import CircularProgress from '@mui/material/CircularProgress';
+import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import CloseIcon from '@mui/icons-material/Close';
 import { datasetApi, preferredLabel, useIriTranslations } from '@datacatalog/shared';
 import type { AcceptedSemanticTag, RecommendedSemanticType } from '@datacatalog/shared';
-import { Button } from '@datacatalog/shared';
 
 interface Props {
   datasetId: string;
@@ -42,7 +52,6 @@ export default function SemanticContextPanel({ datasetId, canAction }: Props) {
     r => !dismissed.has(r.type) && !acceptedTypes.has(r.type)
   ) ?? [];
 
-  // Translate all vocabulary hint IRIs from recommendations and accepted tags
   const hintIris = [
     ...(recommendation?.types ?? []).map(r => r.vocabularyHint).filter(Boolean) as string[],
     ...(ctx?.acceptedTags ?? []).map(t => t.vocabularyIri).filter(Boolean) as string[],
@@ -50,57 +59,53 @@ export default function SemanticContextPanel({ datasetId, canAction }: Props) {
   const hintTranslations = useIriTranslations(hintIris);
 
   return (
-    <div className="space-y-5">
-      {/* Header row */}
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Semantic Types</p>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          Semantic Types
+        </Typography>
         {recommending ? (
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            <svg className="animate-spin h-4 w-4 text-blue-500" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-            </svg>
-            Analysing dataset…
-          </div>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <CircularProgress size={14} color="primary" />
+            <Typography variant="caption" color="text.secondary">Analysing dataset…</Typography>
+          </Box>
         ) : canAction ? (
           <Button
-            size="sm"
-            variant="secondary"
+            size="small"
+            variant="outlined"
+            startIcon={<AutoAwesomeIcon sx={{ fontSize: '14px !important' }} />}
             onClick={() => { reset(); setDismissed(new Set()); getRecommendations(); }}
+            sx={{ textTransform: 'none', fontSize: 11 }}
           >
             {recommendation ? 'Refresh AI Recommendations' : 'Get AI Recommendations'}
           </Button>
         ) : null}
-      </div>
+      </Box>
 
-      {/* Vocab-derived semantic types */}
-      {ctxLoading && <p className="text-xs text-gray-400">Loading…</p>}
+      {ctxLoading && <Typography variant="caption" color="text.disabled">Loading…</Typography>}
 
       {ctx && ctx.semanticTypes.length === 0 && ctx.acceptedTags.length === 0 && !ctxLoading && (
-        <p className="text-xs text-gray-400 italic">
+        <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
           No semantic types yet — publish a logical model with exactMatch or closeMatch vocabulary mappings,
           or accept an AI recommendation below.
-        </p>
+        </Typography>
       )}
 
       {ctx && ctx.semanticTypes.length > 0 && (
-        <div>
-          <p className="text-xs text-gray-400 mb-1.5">From vocabulary mappings</p>
-          <div className="flex flex-wrap gap-1.5">
+        <Box>
+          <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mb: 0.75 }}>From vocabulary mappings</Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
             {ctx.semanticTypes.map(t => (
-              <span key={t} className="px-2 py-0.5 bg-violet-100 text-violet-700 text-xs rounded font-medium">
-                {t}
-              </span>
+              <Chip key={t} label={t} size="small" color="secondary" sx={{ height: 20, fontSize: 11 }} />
             ))}
-          </div>
-        </div>
+          </Box>
+        </Box>
       )}
 
-      {/* Accepted AI tags */}
       {ctx && ctx.acceptedTags.length > 0 && (
-        <div>
-          <p className="text-xs text-gray-400 mb-1.5">Accepted AI recommendations</p>
-          <div className="flex flex-wrap gap-1.5">
+        <Box>
+          <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mb: 0.75 }}>Accepted AI recommendations</Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
             {ctx.acceptedTags.map(tag => (
               <AcceptedTagBadge
                 key={tag.id}
@@ -110,36 +115,33 @@ export default function SemanticContextPanel({ datasetId, canAction }: Props) {
                 deleting={deleteMutation.isPending}
               />
             ))}
-          </div>
-        </div>
+          </Box>
+        </Box>
       )}
 
-      {/* Vocab coverage summary */}
       {ctx && (ctx.logicalElementNames.length > 0 || ctx.vocabConceptLabels.length > 0) && (
-        <div className="text-xs text-gray-400 space-y-0.5">
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
           {ctx.logicalElementNames.length > 0 && (
-            <p>{ctx.logicalElementNames.length} logical element{ctx.logicalElementNames.length !== 1 ? 's' : ''} across published models</p>
+            <Typography variant="caption" color="text.disabled">
+              {ctx.logicalElementNames.length} logical element{ctx.logicalElementNames.length !== 1 ? 's' : ''} across published models
+            </Typography>
           )}
           {ctx.vocabConceptLabels.length > 0 && (
-            <p>{ctx.vocabConceptLabels.length} vocabulary concept{ctx.vocabConceptLabels.length !== 1 ? 's' : ''} mapped</p>
+            <Typography variant="caption" color="text.disabled">
+              {ctx.vocabConceptLabels.length} vocabulary concept{ctx.vocabConceptLabels.length !== 1 ? 's' : ''} mapped
+            </Typography>
           )}
-        </div>
+        </Box>
       )}
 
-      {/* AI recommendation error */}
-      {isError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
-          AI service is unavailable. Please try again later.
-        </div>
-      )}
+      {isError && <Alert severity="error">AI service is unavailable. Please try again later.</Alert>}
 
-      {/* AI recommendations */}
       {recommendation && visibleRecs.length > 0 && (
-        <div>
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+        <Box>
+          <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', mb: 1 }}>
             AI Recommendations
-          </p>
-          <div className="space-y-2">
+          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {visibleRecs.map(rec => (
               <RecommendationCard
                 key={rec.type}
@@ -151,97 +153,74 @@ export default function SemanticContextPanel({ datasetId, canAction }: Props) {
                 onDismiss={() => dismiss(rec.type)}
               />
             ))}
-          </div>
-        </div>
+          </Box>
+        </Box>
       )}
 
       {recommendation && visibleRecs.length === 0 && !isError && (
-        <p className="text-xs text-gray-400 italic">All recommendations reviewed.</p>
+        <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>All recommendations reviewed.</Typography>
       )}
-    </div>
+    </Box>
   );
 }
 
-function AcceptedTagBadge({
-  tag, canAction, onDelete, deleting,
-}: {
-  tag: AcceptedSemanticTag;
-  canAction: boolean;
-  onDelete: () => void;
-  deleting: boolean;
+function AcceptedTagBadge({ tag, canAction, onDelete, deleting }: {
+  tag: AcceptedSemanticTag; canAction: boolean; onDelete: () => void; deleting: boolean;
 }) {
-  const hintColor = tag.vocabularyIri?.includes('edmcouncil.org/fibo')
-    ? 'bg-blue-100 text-blue-700'
+  const color = tag.vocabularyIri?.includes('edmcouncil.org/fibo')
+    ? 'primary' as const
     : tag.vocabularyIri?.includes('schema.org')
-    ? 'bg-green-100 text-green-700'
-    : 'bg-amber-100 text-amber-700';
+    ? 'success' as const
+    : 'warning' as const;
 
   return (
-    <span
-      title={tag.vocabularyIri ?? undefined}
-      className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded font-medium ${hintColor}`}
-    >
-      {tag.type}
-      {canAction && (
-        <button
-          onClick={onDelete}
-          disabled={deleting}
-          className="ml-0.5 opacity-60 hover:opacity-100"
-          aria-label={`Remove ${tag.type}`}
-        >
-          ×
-        </button>
-      )}
-    </span>
+    <Tooltip title={tag.vocabularyIri ?? ''}>
+      <Chip
+        label={tag.type}
+        size="small"
+        color={color}
+        onDelete={canAction ? onDelete : undefined}
+        disabled={deleting}
+        sx={{ height: 20, fontSize: 11 }}
+      />
+    </Tooltip>
   );
 }
 
-function RecommendationCard({
-  rec, hintLabel, canAction, accepting, onAccept, onDismiss,
-}: {
-  rec: RecommendedSemanticType;
-  hintLabel?: string;
-  canAction: boolean;
-  accepting: boolean;
-  onAccept: () => void;
-  onDismiss: () => void;
+function RecommendationCard({ rec, hintLabel, canAction, accepting, onAccept, onDismiss }: {
+  rec: RecommendedSemanticType; hintLabel?: string;
+  canAction: boolean; accepting: boolean;
+  onAccept: () => void; onDismiss: () => void;
 }) {
   const hintColor = rec.vocabularyHint?.includes('edmcouncil.org/fibo')
-    ? 'text-blue-600'
+    ? 'primary.main'
     : rec.vocabularyHint?.includes('schema.org')
-    ? 'text-green-600'
-    : 'text-gray-500';
+    ? 'success.main'
+    : 'text.secondary';
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-3 flex items-start gap-3">
-      <div className="flex-1 min-w-0 space-y-1">
-        <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded font-medium">
-          {rec.type}
-        </span>
-        <p className="text-xs text-gray-600">{rec.rationale}</p>
+    <Paper variant="outlined" sx={{ p: 1.5, display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Chip label={rec.type} size="small" color="warning" sx={{ mb: 0.5, height: 20, fontSize: 11 }} />
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{rec.rationale}</Typography>
         {hintLabel && (
-          <p className={`text-xs truncate ${hintColor}`} title={rec.vocabularyHint}>
+          <Typography variant="caption" color={hintColor} sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={rec.vocabularyHint}>
             {hintLabel}
-          </p>
+          </Typography>
         )}
-      </div>
-      <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
+      </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0, mt: 0.25 }}>
         {canAction ? (
-          <Button size="sm" onClick={onAccept} disabled={accepting}>
+          <Button size="small" variant="contained" onClick={onAccept} disabled={accepting} sx={{ textTransform: 'none', fontSize: 11 }}>
             Accept
           </Button>
         ) : (
-          <span className="text-xs text-gray-400 italic">Owner only</span>
+          <Typography variant="caption" color="text.disabled" sx={{ fontStyle: 'italic' }}>Owner only</Typography>
         )}
-        <button
-          onClick={onDismiss}
-          className="text-gray-300 hover:text-gray-500 p-1"
-          title="Dismiss"
-          aria-label="Dismiss recommendation"
-        >
-          ✕
-        </button>
-      </div>
-    </div>
+        <Tooltip title="Dismiss">
+          <IconButton size="small" onClick={onDismiss}><CloseIcon sx={{ fontSize: 14 }} /></IconButton>
+        </Tooltip>
+      </Box>
+    </Paper>
   );
 }

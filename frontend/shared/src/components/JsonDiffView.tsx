@@ -1,3 +1,11 @@
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Table from '@mui/material/Table';
+import TableHead from '@mui/material/TableHead';
+import TableBody from '@mui/material/TableBody';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
+
 interface DiffEntry {
   key: string;
   before: unknown;
@@ -42,25 +50,11 @@ function renderValue(v: unknown): string {
   return String(v);
 }
 
-const STATUS_ROW: Record<DiffEntry['status'], string> = {
-  changed:   'bg-amber-50',
-  added:     'bg-green-50',
-  removed:   'bg-red-50',
-  unchanged: '',
-};
-
-const STATUS_CELL_BEFORE: Record<DiffEntry['status'], string> = {
-  changed:   'text-red-700',
-  removed:   'text-red-700 line-through',
-  added:     'text-gray-300',
-  unchanged: 'text-gray-700',
-};
-
-const STATUS_CELL_AFTER: Record<DiffEntry['status'], string> = {
-  changed:   'text-green-700 font-medium',
-  added:     'text-green-700 font-medium',
-  removed:   'text-gray-300',
-  unchanged: 'text-gray-700',
+const ROW_BG: Record<DiffEntry['status'], string> = {
+  changed:   'warning.50',
+  added:     'success.50',
+  removed:   'error.50',
+  unchanged: 'transparent',
 };
 
 interface JsonDiffViewProps {
@@ -80,51 +74,53 @@ export default function JsonDiffView({ before, after }: JsonDiffViewProps) {
   const unchanged = diff.filter(d => d.status === 'unchanged');
 
   if (!before && !after) {
-    return <p className="text-xs text-gray-400 italic">No snapshot available</p>;
+    return <Typography variant="caption" color="text.disabled" fontStyle="italic">No snapshot available</Typography>;
   }
 
   return (
-    <div className="overflow-x-auto rounded border border-gray-200 text-xs">
-      <table className="w-full border-collapse">
-        <thead>
-          <tr className="bg-gray-50 border-b border-gray-200">
-            <th className="px-3 py-2 text-left font-medium text-gray-500 w-1/4">Field</th>
-            <th className="px-3 py-2 text-left font-medium text-gray-500 w-[37.5%]">Before</th>
-            <th className="px-3 py-2 text-left font-medium text-gray-500 w-[37.5%]">After</th>
-          </tr>
-        </thead>
-        <tbody>
+    <Box sx={{ overflowX: 'auto', border: 1, borderColor: 'divider', borderRadius: 1 }}>
+      <Table size="small">
+        <TableHead>
+          <TableRow sx={{ bgcolor: 'grey.50' }}>
+            <TableCell sx={{ fontWeight: 600, width: '25%' }}>Field</TableCell>
+            <TableCell sx={{ fontWeight: 600, width: '37.5%' }}>Before</TableCell>
+            <TableCell sx={{ fontWeight: 600, width: '37.5%' }}>After</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
           {changed.map(entry => (
-            <tr key={entry.key} className={STATUS_ROW[entry.status]}>
-              <td className="px-3 py-1.5 font-medium text-gray-600 border-b border-gray-100">{entry.key}</td>
-              <td className={`px-3 py-1.5 border-b border-gray-100 font-mono ${STATUS_CELL_BEFORE[entry.status]}`}>
-                {renderValue(entry.before)}
-              </td>
-              <td className={`px-3 py-1.5 border-b border-gray-100 font-mono ${STATUS_CELL_AFTER[entry.status]}`}>
-                {renderValue(entry.after)}
-              </td>
-            </tr>
+            <TableRow key={entry.key} sx={{ bgcolor: ROW_BG[entry.status] }}>
+              <TableCell sx={{ fontWeight: 500 }}>{entry.key}</TableCell>
+              <TableCell sx={{
+                fontFamily: 'monospace',
+                fontSize: 12,
+                color: entry.status === 'changed' || entry.status === 'removed' ? 'error.main' : 'text.disabled',
+                textDecoration: entry.status === 'removed' ? 'line-through' : 'none',
+              }}>{renderValue(entry.before)}</TableCell>
+              <TableCell sx={{
+                fontFamily: 'monospace',
+                fontSize: 12,
+                color: entry.status === 'changed' || entry.status === 'added' ? 'success.main' : 'text.disabled',
+                fontWeight: entry.status !== 'unchanged' ? 500 : 400,
+              }}>{renderValue(entry.after)}</TableCell>
+            </TableRow>
           ))}
           {unchanged.length > 0 && changed.length > 0 && (
-            <tr>
-              <td colSpan={3} className="px-3 py-1 text-gray-400 text-xs bg-gray-50 border-b border-gray-100">
+            <TableRow>
+              <TableCell colSpan={3} sx={{ bgcolor: 'grey.50', color: 'text.disabled', fontSize: 12, py: 0.75 }}>
                 {unchanged.length} unchanged {unchanged.length === 1 ? 'field' : 'fields'}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           )}
           {unchanged.map(entry => (
-            <tr key={entry.key} className="opacity-50">
-              <td className="px-3 py-1.5 font-medium text-gray-500 border-b border-gray-100">{entry.key}</td>
-              <td className="px-3 py-1.5 border-b border-gray-100 font-mono text-gray-500">
-                {renderValue(entry.before)}
-              </td>
-              <td className="px-3 py-1.5 border-b border-gray-100 font-mono text-gray-500">
-                {renderValue(entry.after)}
-              </td>
-            </tr>
+            <TableRow key={entry.key} sx={{ opacity: 0.5 }}>
+              <TableCell sx={{ fontWeight: 500, color: 'text.secondary' }}>{entry.key}</TableCell>
+              <TableCell sx={{ fontFamily: 'monospace', fontSize: 12, color: 'text.secondary' }}>{renderValue(entry.before)}</TableCell>
+              <TableCell sx={{ fontFamily: 'monospace', fontSize: 12, color: 'text.secondary' }}>{renderValue(entry.after)}</TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
-    </div>
+        </TableBody>
+      </Table>
+    </Box>
   );
 }

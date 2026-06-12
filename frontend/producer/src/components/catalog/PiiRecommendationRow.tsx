@@ -1,4 +1,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import Button from '@mui/material/Button';
 import { logicalElementApi } from '@datacatalog/shared';
 import type { LogicalDataElement } from '@datacatalog/shared';
 
@@ -18,63 +24,43 @@ export default function PiiRecommendationRow({ element, modelId, canAction }: Pr
     );
   };
 
-  const accept = useMutation({
-    mutationFn: () => logicalElementApi.acceptPii(element.id),
-    onSuccess: applyUpdate,
-  });
-
-  const reject = useMutation({
-    mutationFn: () => logicalElementApi.rejectPii(element.id),
-    onSuccess: applyUpdate,
-  });
-
+  const accept = useMutation({ mutationFn: () => logicalElementApi.acceptPii(element.id), onSuccess: applyUpdate });
+  const reject = useMutation({ mutationFn: () => logicalElementApi.rejectPii(element.id), onSuccess: applyUpdate });
   const isPending = accept.isPending || reject.isPending;
 
   const pii = element.recommendedIsPersonalInformation;
   const direct = element.recommendedIsDirectIdentifier;
 
   return (
-    <tr className="bg-rose-50 border-t border-rose-200">
-      <td colSpan={7} className="px-4 py-3">
-        <div className="flex items-start gap-4">
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-rose-900 mb-1">AI PII Recommendation</p>
-            <div className="flex items-center gap-3 mb-1">
-              <span className="text-sm text-rose-800">Personal Information:</span>
-              <span className={`px-2 py-0.5 rounded text-xs font-semibold ${pii ? 'bg-rose-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
-                {pii ? 'YES' : 'NO'}
-              </span>
-              <span className="text-sm text-rose-800">Direct Identifier:</span>
-              <span className={`px-2 py-0.5 rounded text-xs font-semibold ${direct ? 'bg-amber-500 text-white' : 'bg-gray-200 text-gray-600'}`}>
-                {direct ? 'YES' : 'NO'}
-              </span>
-            </div>
+    <TableRow sx={{ bgcolor: 'error.50', borderTop: 1, borderColor: 'error.200' }}>
+      <TableCell colSpan={7} sx={{ py: 1.5, px: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="caption" fontWeight={600} color="error.dark" sx={{ display: 'block', mb: 0.5 }}>AI PII Recommendation</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
+              <Typography variant="caption" color="error.dark">Personal Information:</Typography>
+              <Chip label={pii ? 'YES' : 'NO'} size="small" color={pii ? 'error' : 'default'} sx={{ height: 18, fontSize: 11, fontWeight: 700 }} />
+              <Typography variant="caption" color="error.dark">Direct Identifier:</Typography>
+              <Chip label={direct ? 'YES' : 'NO'} size="small" color={direct ? 'warning' : 'default'} sx={{ height: 18, fontSize: 11, fontWeight: 700 }} />
+            </Box>
             {element.piiRecommendationReasoning && (
-              <p className="text-xs text-rose-700 italic">{element.piiRecommendationReasoning}</p>
+              <Typography variant="caption" color="error.dark" sx={{ fontStyle: 'italic' }}>{element.piiRecommendationReasoning}</Typography>
             )}
-          </div>
+          </Box>
           {canAction ? (
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={() => accept.mutate()}
-                disabled={isPending}
-                className="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+              <Button size="small" variant="contained" color="success" disabled={isPending} onClick={() => accept.mutate()} sx={{ textTransform: 'none', fontSize: 11 }}>
                 {accept.isPending ? 'Accepting…' : 'Accept'}
-              </button>
-              <button
-                onClick={() => reject.mutate()}
-                disabled={isPending}
-                className="px-3 py-1.5 bg-white text-gray-700 text-xs font-medium rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+              </Button>
+              <Button size="small" variant="outlined" disabled={isPending} onClick={() => reject.mutate()} sx={{ textTransform: 'none', fontSize: 11 }}>
                 {reject.isPending ? 'Rejecting…' : 'Reject'}
-              </button>
-            </div>
+              </Button>
+            </Box>
           ) : (
-            <p className="text-xs text-rose-600 italic shrink-0">Owner only</p>
+            <Typography variant="caption" color="error.main" sx={{ fontStyle: 'italic', flexShrink: 0 }}>Owner only</Typography>
           )}
-        </div>
-      </td>
-    </tr>
+        </Box>
+      </TableCell>
+    </TableRow>
   );
 }

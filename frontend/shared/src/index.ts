@@ -16,3 +16,4 @@ export * from './api/identity';
 export * from './types/bookmarks';
 export * from './api/bookmarks';
 export * from './components';
+export * from './theme';

@@ -1,14 +1,20 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import Button from '@mui/material/Button';
 import { logicalElementApi, iriFragment } from '@datacatalog/shared';
 import type { LogicalDataElement } from '@datacatalog/shared';
 
-const MATCH_TYPE_COLORS: Record<string, { base: string; selected: string }> = {
-  exactMatch:   { base: 'bg-green-50 text-green-700 border-green-200',  selected: 'bg-green-200 text-green-900 border-green-400 ring-2 ring-green-400' },
-  closeMatch:   { base: 'bg-blue-50 text-blue-700 border-blue-200',    selected: 'bg-blue-200 text-blue-900 border-blue-400 ring-2 ring-blue-400' },
-  relatedMatch: { base: 'bg-purple-50 text-purple-700 border-purple-200', selected: 'bg-purple-200 text-purple-900 border-purple-400 ring-2 ring-purple-400' },
-  broadMatch:   { base: 'bg-orange-50 text-orange-700 border-orange-200', selected: 'bg-orange-200 text-orange-900 border-orange-400 ring-2 ring-orange-400' },
-  narrowMatch:  { base: 'bg-yellow-50 text-yellow-700 border-yellow-200', selected: 'bg-yellow-200 text-yellow-900 border-yellow-400 ring-2 ring-yellow-400' },
+const MATCH_TYPE_COLORS: Record<string, 'success' | 'primary' | 'secondary' | 'warning' | 'info'> = {
+  exactMatch: 'success',
+  closeMatch: 'primary',
+  relatedMatch: 'secondary',
+  broadMatch: 'warning',
+  narrowMatch: 'info',
 };
 
 interface Props {
@@ -29,115 +35,80 @@ export default function VocabRecommendationRow({ element, modelId, canAction }: 
 
   const recommendations = element.recommendedVocabMappings ?? [];
   const allIris = recommendations.map(r => r.conceptIri);
-
   const [selected, setSelected] = useState<Set<string>>(new Set(allIris));
 
-  const accept = useMutation({
-    mutationFn: (iris: string[]) => logicalElementApi.acceptVocabConcepts(element.id, iris),
-    onSuccess: applyUpdate,
-  });
-
-  const reject = useMutation({
-    mutationFn: () => logicalElementApi.rejectVocabConcepts(element.id),
-    onSuccess: applyUpdate,
-  });
-
+  const accept = useMutation({ mutationFn: (iris: string[]) => logicalElementApi.acceptVocabConcepts(element.id, iris), onSuccess: applyUpdate });
+  const reject = useMutation({ mutationFn: () => logicalElementApi.rejectVocabConcepts(element.id), onSuccess: applyUpdate });
   const isPending = accept.isPending || reject.isPending;
 
   function toggle(iri: string) {
-    setSelected(prev => {
-      const next = new Set(prev);
-      next.has(iri) ? next.delete(iri) : next.add(iri);
-      return next;
-    });
+    setSelected(prev => { const n = new Set(prev); n.has(iri) ? n.delete(iri) : n.add(iri); return n; });
   }
 
   const noneSelected = selected.size === 0;
-  const allSelected  = selected.size === allIris.length;
+  const allSelected = selected.size === allIris.length;
 
   return (
-    <tr className="bg-violet-50 border-t border-violet-200">
-      <td colSpan={6} className="px-4 py-3">
-        <div className="flex items-start gap-4">
-          <div className="flex-1 min-w-0 space-y-2">
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-medium text-violet-900">AI Vocabulary Suggestions</p>
-              {canAction && (
-                <span className="text-xs text-violet-500">Click concepts to select</span>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-2">
+    <TableRow sx={{ bgcolor: 'secondary.50', borderTop: 1, borderColor: 'secondary.200' }}>
+      <TableCell colSpan={7} sx={{ py: 1.5, px: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+              <Typography variant="caption" fontWeight={600} color="secondary.dark">AI Vocabulary Suggestions</Typography>
+              {canAction && <Typography variant="caption" color="secondary.main">Click concepts to select</Typography>}
+            </Box>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
               {recommendations.map((rec, i) => {
-                const colors = MATCH_TYPE_COLORS[rec.matchType] ?? {
-                  base: 'bg-gray-50 text-gray-700 border-gray-200',
-                  selected: 'bg-gray-200 text-gray-900 border-gray-400 ring-2 ring-gray-400',
-                };
                 const isSelected = selected.has(rec.conceptIri);
                 const label = rec.conceptLabel || iriFragment(rec.conceptIri);
+                const color = MATCH_TYPE_COLORS[rec.matchType] ?? 'default';
                 return (
-                  <button
+                  <Box
                     key={i}
-                    type="button"
-                    disabled={!canAction || isPending}
-                    onClick={() => toggle(rec.conceptIri)}
+                    component="button"
+                    onClick={() => canAction && !isPending && toggle(rec.conceptIri)}
                     title={rec.reasoning ?? rec.conceptIri}
-                    className={`inline-flex flex-col items-start px-2 py-1 rounded border text-xs font-medium text-left transition-all
-                      ${isSelected ? colors.selected : colors.base}
-                      ${canAction && !isPending ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}
-                    `}
+                    sx={{
+                      display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start',
+                      px: 1, py: 0.5, borderRadius: 1, border: 1,
+                      cursor: canAction && !isPending ? 'pointer' : 'default',
+                      opacity: isSelected ? 1 : 0.55,
+                      bgcolor: isSelected ? `${color}.light` : 'background.paper',
+                      borderColor: isSelected ? `${color}.main` : 'divider',
+                      transition: 'opacity 0.15s',
+                      background: 'none',
+                      '&:hover': canAction && !isPending ? { opacity: 1 } : {},
+                    }}
                   >
-                    <span className="flex items-center gap-1">
-                      {canAction && (
-                        <span className={`w-3 h-3 rounded-sm border flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-current border-current' : 'border-current opacity-40'}`}>
-                          {isSelected && (
-                            <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
-                              <path d="M1.5 4L3 5.5L6.5 2" stroke="white" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                          )}
-                        </span>
-                      )}
-                      {label}
-                    </span>
-                    <span className="font-normal opacity-70">{iriFragment(rec.conceptIri)}</span>
+                    <Typography variant="caption" fontWeight={600} sx={{ lineHeight: 1.3 }}>{label}</Typography>
+                    <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.65, lineHeight: 1.2 }}>{iriFragment(rec.conceptIri)}</Typography>
                     {rec.matchType && (
-                      <span className="font-normal opacity-60 capitalize">
+                      <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.55, lineHeight: 1.2, textTransform: 'capitalize' }}>
                         {rec.matchType.replace(/Match$/, ' match')}
-                      </span>
+                      </Typography>
                     )}
-                  </button>
+                  </Box>
                 );
               })}
-            </div>
+            </Box>
             {element.vocabMappingReasoning && (
-              <p className="text-xs text-violet-700 italic">{element.vocabMappingReasoning}</p>
+              <Typography variant="caption" color="secondary.dark" sx={{ fontStyle: 'italic', display: 'block', mt: 0.5 }}>{element.vocabMappingReasoning}</Typography>
             )}
-          </div>
+          </Box>
           {canAction ? (
-            <div className="flex flex-col gap-1.5 shrink-0 min-w-[110px]">
-              <button
-                onClick={() => accept.mutate([...selected])}
-                disabled={isPending || noneSelected}
-                className="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-center"
-              >
-                {accept.isPending
-                  ? 'Accepting…'
-                  : allSelected
-                  ? 'Accept All'
-                  : `Accept (${selected.size})`}
-              </button>
-              <button
-                onClick={() => reject.mutate()}
-                disabled={isPending}
-                className="px-3 py-1.5 bg-white text-gray-700 text-xs font-medium rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-center"
-              >
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, flexShrink: 0, minWidth: 110 }}>
+              <Button size="small" variant="contained" color="success" disabled={isPending || noneSelected} onClick={() => accept.mutate([...selected])} sx={{ textTransform: 'none', fontSize: 11 }}>
+                {accept.isPending ? 'Accepting…' : allSelected ? 'Accept All' : `Accept (${selected.size})`}
+              </Button>
+              <Button size="small" variant="outlined" disabled={isPending} onClick={() => reject.mutate()} sx={{ textTransform: 'none', fontSize: 11 }}>
                 {reject.isPending ? 'Rejecting…' : 'Reject All'}
-              </button>
-            </div>
+              </Button>
+            </Box>
           ) : (
-            <p className="text-xs text-violet-600 italic shrink-0">Owner only</p>
+            <Typography variant="caption" color="secondary.main" sx={{ fontStyle: 'italic', flexShrink: 0 }}>Owner only</Typography>
           )}
-        </div>
-      </td>
-    </tr>
+        </Box>
+      </TableCell>
+    </TableRow>
   );
 }

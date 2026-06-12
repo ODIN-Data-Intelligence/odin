@@ -1,5 +1,15 @@
 import { useState, useEffect, useRef, forwardRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Paper from '@mui/material/Paper';
+import InputBase from '@mui/material/InputBase';
+import IconButton from '@mui/material/IconButton';
+import Button from '@mui/material/Button';
+import Divider from '@mui/material/Divider';
+import MenuItem from '@mui/material/MenuItem';
+import MenuList from '@mui/material/MenuList';
+import ClickAwayListener from '@mui/material/ClickAwayListener';
+import SearchIcon from '@mui/icons-material/Search';
+import ClearIcon from '@mui/icons-material/Clear';
 import { searchApi } from '@datacatalog/shared';
 import { useSearchStore } from '../store/searchStore';
 
@@ -34,12 +44,21 @@ const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function SearchBa
   }
 
   return (
-    <div className="relative w-full">
-      <div className={`flex items-center border-2 rounded-xl bg-white transition-all ${large ? 'border-gray-200 focus-within:border-blue-500 shadow-md' : 'border-gray-300 focus-within:border-blue-500'}`}>
-        <span className="pl-4 text-gray-400 text-lg">🔍</span>
-        <input
-          ref={ref}
-          type="text"
+    <ClickAwayListener onClickAway={() => setShowSuggestions(false)}>
+      <Paper
+        elevation={large ? 3 : 1}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          borderRadius: 3,
+          px: 1,
+          py: large ? 0.75 : 0.25,
+          position: 'relative',
+        }}
+      >
+        <SearchIcon color="action" sx={{ ml: 0.5, mr: 0.5 }} />
+        <InputBase
+          inputRef={ref}
           value={localQuery}
           onChange={e => setLocalQuery(e.target.value)}
           onKeyDown={e => {
@@ -47,35 +66,44 @@ const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function SearchBa
             if (e.key === 'Escape') setShowSuggestions(false);
           }}
           onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
-          onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
           placeholder="Search datasets, data products, schemas..."
-          className={`flex-1 px-4 bg-transparent focus:outline-none text-gray-900 placeholder-gray-400 ${large ? 'py-4 text-lg' : 'py-2.5 text-sm'}`}
+          sx={{ flex: 1, fontSize: large ? 18 : 14, py: large ? 0.5 : 0 }}
+          inputProps={{ 'aria-label': 'search' }}
         />
         {localQuery && (
-          <button onClick={() => { setLocalQuery(''); setQuery(''); }} className="pr-3 text-gray-400 hover:text-gray-600 text-lg">&times;</button>
+          <>
+            <IconButton size="small" onClick={() => { setLocalQuery(''); setQuery(''); }}>
+              <ClearIcon fontSize="small" />
+            </IconButton>
+            <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+          </>
         )}
-        <button
+        <Button
+          variant="contained"
+          size={large ? 'medium' : 'small'}
           onClick={() => submit(localQuery)}
-          className={`mr-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors ${large ? 'px-5 py-2.5' : 'px-3 py-1.5 text-sm'}`}
+          disableElevation
+          sx={{ borderRadius: 2, ml: 0.5 }}
         >
           Search
-        </button>
-      </div>
+        </Button>
 
-      {showSuggestions && suggestions.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 overflow-hidden">
-          {suggestions.map(s => (
-            <button
-              key={s}
-              onMouseDown={() => submit(s)}
-              className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 flex items-center gap-2"
-            >
-              <span className="text-gray-400">🔍</span> {s}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+        {showSuggestions && suggestions.length > 0 && (
+          <Paper
+            elevation={4}
+            sx={{ position: 'absolute', top: '100%', left: 0, right: 0, mt: 0.5, zIndex: 20, borderRadius: 2, overflow: 'hidden' }}
+          >
+            <MenuList dense>
+              {suggestions.map(s => (
+                <MenuItem key={s} onMouseDown={() => submit(s)} sx={{ gap: 1, fontSize: 14 }}>
+                  <SearchIcon fontSize="small" color="action" /> {s}
+                </MenuItem>
+              ))}
+            </MenuList>
+          </Paper>
+        )}
+      </Paper>
+    </ClickAwayListener>
   );
 });
 

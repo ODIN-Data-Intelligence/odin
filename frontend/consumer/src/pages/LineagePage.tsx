@@ -1,6 +1,17 @@
 import { useState, useCallback } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
+import TextField from '@mui/material/TextField';
+import Button from '@mui/material/Button';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import InputLabel from '@mui/material/InputLabel';
+import FormControl from '@mui/material/FormControl';
+import Alert from '@mui/material/Alert';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { lineageApi, logicalModelApi, logicalElementApi } from '@datacatalog/shared';
 import type { LineageGraph as LineageGraphData, LineageNode, LineageEdge } from '@datacatalog/shared';
 import ReactFlow, { Background, Controls, MiniMap, Handle, Position, type Node, type Edge, type NodeMouseHandler, type NodeProps } from 'reactflow';
@@ -344,69 +355,82 @@ export default function LineagePage() {
   }, [navigate]);
 
   return (
-    <div className="flex flex-col h-screen">
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
       {/* Header */}
-      <div className="bg-white border-b px-6 py-3 flex items-center gap-4 flex-shrink-0">
-        <Link to="/search" className="text-sm text-gray-500 hover:text-gray-700">← Back to search</Link>
-        <div className="h-4 w-px bg-gray-200" />
-        <h1 className="text-sm font-semibold text-gray-800">Lineage Explorer</h1>
+      <Paper square elevation={0} sx={{ borderBottom: 1, borderColor: 'divider', px: 3, py: 1.5, display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+        <Button
+          component={Link}
+          to="/search"
+          startIcon={<ArrowBackIcon fontSize="small" />}
+          size="small"
+          sx={{ fontSize: 13, textTransform: 'none', color: 'text.secondary' }}
+        >
+          Back to search
+        </Button>
+        <Box sx={{ width: 1, height: 16, bgcolor: 'divider' }} />
+        <Typography variant="body2" fontWeight={600} color="text.primary">Lineage Explorer</Typography>
         {direction === 'both' && flowElements && (
-          <span className="text-xs text-gray-400 ml-2">
-            upstream ← <span className="font-medium text-blue-600">dataset</span> → downstream
-          </span>
+          <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+            upstream ← <Box component="span" sx={{ fontWeight: 600, color: 'primary.main' }}>dataset</Box> → downstream
+          </Typography>
         )}
-      </div>
+      </Paper>
 
       {/* Controls */}
-      <div className="bg-white border-b px-6 py-3 flex items-end gap-3 flex-shrink-0">
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Namespace</label>
-          <input
-            value={namespace}
-            onChange={e => setNamespace(e.target.value)}
-            placeholder="e.g. snowflake://my-account/mydb"
-            className="border border-gray-300 rounded px-3 py-1.5 text-sm w-72 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Dataset name</label>
-          <input
-            value={name}
-            onChange={e => setName(e.target.value)}
-            placeholder="e.g. trades"
-            className="border border-gray-300 rounded px-3 py-1.5 text-sm w-52 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Direction</label>
-          <select
+      <Paper square elevation={0} sx={{ borderBottom: 1, borderColor: 'divider', px: 3, py: 2, display: 'flex', alignItems: 'flex-end', gap: 2, flexShrink: 0, flexWrap: 'wrap' }}>
+        <TextField
+          label="Namespace"
+          value={namespace}
+          onChange={e => setNamespace(e.target.value)}
+          placeholder="e.g. snowflake://my-account/mydb"
+          size="small"
+          sx={{ width: 320 }}
+          variant="outlined"
+        />
+        <TextField
+          label="Dataset name"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder="e.g. trades"
+          size="small"
+          sx={{ width: 220 }}
+          variant="outlined"
+        />
+        <FormControl size="small" sx={{ minWidth: 140 }}>
+          <InputLabel>Direction</InputLabel>
+          <Select
+            label="Direction"
             value={direction}
             onChange={e => setDirection(e.target.value as Direction)}
-            className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="downstream">Downstream</option>
-            <option value="upstream">Upstream</option>
-            <option value="both">Both</option>
-          </select>
-        </div>
-        <div>
-          <button
+            <MenuItem value="downstream">Downstream</MenuItem>
+            <MenuItem value="upstream">Upstream</MenuItem>
+            <MenuItem value="both">Both</MenuItem>
+          </Select>
+        </FormControl>
+        <Box>
+          <Button
+            variant="contained"
             onClick={handleExplore}
             disabled={!namespace || !name}
-            className="px-4 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+            sx={{ textTransform: 'none' }}
           >
             Explore
-          </button>
-          {lookupError && <p className="text-xs text-red-500 mt-1">Dataset not found in lineage graph</p>}
-        </div>
-      </div>
+          </Button>
+          {lookupError && (
+            <Alert severity="error" sx={{ mt: 0.75, py: 0.25, fontSize: 12 }}>
+              Dataset not found in lineage graph
+            </Alert>
+          )}
+        </Box>
+      </Paper>
 
       {/* Graph */}
-      <div className="flex-1 relative bg-gray-50">
+      <Box sx={{ flex: 1, position: 'relative', bgcolor: 'grey.50' }}>
         {isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center text-sm text-gray-500">
-            Loading lineage...
-          </div>
+          <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Typography variant="body2" color="text.secondary">Loading lineage...</Typography>
+          </Box>
         )}
         {flowElements && (
           <ReactFlow
@@ -426,11 +450,13 @@ export default function LineagePage() {
           </ReactFlow>
         )}
         {!flowElements && !isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center text-sm text-gray-400">
-            Enter a dataset namespace and name to explore its lineage
-          </div>
+          <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Typography variant="body2" color="text.secondary">
+              Enter a dataset namespace and name to explore its lineage
+            </Typography>
+          </Box>
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }

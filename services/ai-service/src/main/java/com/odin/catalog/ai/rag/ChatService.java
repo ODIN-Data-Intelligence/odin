@@ -20,7 +20,9 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.SequencedCollection;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -49,20 +51,21 @@ public class ChatService {
 
     private Flux<String> buildAndStream(UUID conversationId, MessageRequest request, long requestStart) {
         // ── Step 1: persist user message ─────────────────────────────────────
-        log.info("step=USER_MESSAGE_RECEIVED content.length={} focusDatasetId={}",
-            request.content().length(), request.focusDatasetId());
+        List<String> focusIds = resolveDatasetIds(request);
+        log.info("step=USER_MESSAGE_RECEIVED content.length={} focusDatasetIds={}",
+            request.content().length(), focusIds);
         saveMessage(conversationId, "user", request.content());
 
         // ── Step 2: focused tool-chain context ───────────────────────────────
         String focusedContext = "";
-        if (request.focusDatasetId() != null && !request.focusDatasetId().isBlank()) {
+        if (!focusIds.isEmpty()) {
             long t = System.currentTimeMillis();
-            log.info("step=FOCUSED_CONTEXT_START datasetId={}", request.focusDatasetId());
+            log.info("step=FOCUSED_CONTEXT_START datasetCount={} ids={}", focusIds.size(), focusIds);
             focusedContext = datasetContextService.buildFocusedContext(
-                request.focusDatasetId(), request.content(), conversationId.toString()
+                focusIds, request.content(), conversationId.toString()
             );
-            log.info("step=FOCUSED_CONTEXT_COMPLETE datasetId={} result.length={} elapsed={}ms",
-                request.focusDatasetId(), focusedContext.length(), elapsed(t));
+            log.info("step=FOCUSED_CONTEXT_COMPLETE datasetCount={} result.length={} elapsed={}ms",
+                focusIds.size(), focusedContext.length(), elapsed(t));
         }
 
         // ── Step 3: RAG retrieval ────────────────────────────────────────────
@@ -162,12 +165,24 @@ public class ChatService {
         });
     }
 
+    /** Union of focusDatasetId (compat) + focusDatasetIds, deduplicated, blanks removed. */
+    private static List<String> resolveDatasetIds(MessageRequest request) {
+        LinkedHashSet<String> ids = new LinkedHashSet<>();
+        if (request.focusDatasetId() != null && !request.focusDatasetId().isBlank())
+            ids.add(request.focusDatasetId());
+        if (request.focusDatasetIds() != null)
+            request.focusDatasetIds().stream()
+                .filter(id -> id != null && !id.isBlank())
+                .forEach(ids::add);
+        return new ArrayList<>(ids);
+    }
+
     private String buildSystemPrompt(String focusedContext, String ragContext) {
         if (!focusedContext.isBlank()) {
             return """
                 You are an AI assistant for a data catalog. Help users discover, understand, and use datasets.
 
-                DATASET CURRENTLY BEING VIEWED BY THE USER:
+                DATASET CONTEXT (schema, columns, and join hints for focused datasets):
                 %s
 
                 Use the above dataset as the primary context when relevant to the question. \

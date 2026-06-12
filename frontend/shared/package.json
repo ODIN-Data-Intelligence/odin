@@ -11,7 +11,11 @@
   },
   "peerDependencies": {
     "react": ">=18",
-    "react-router-dom": ">=6"
+    "react-router-dom": ">=6",
+    "@mui/material": ">=6",
+    "@emotion/react": ">=11",
+    "@emotion/styled": ">=11",
+    "@mui/icons-material": ">=6"
   },
   "scripts": {
     "test": "vitest run",

@@ -1,6 +1,23 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Skeleton from '@mui/material/Skeleton';
+import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
+import Button from '@mui/material/Button';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import DownloadIcon from '@mui/icons-material/Download';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import CheckIcon from '@mui/icons-material/Check';
 import { datasetApi, logicalModelApi, logicalElementApi } from '@datacatalog/shared';
 import type { Distribution, CsvwColumn, LogicalDataElement } from '@datacatalog/shared';
 
@@ -11,24 +28,14 @@ function useDistributionSchema(distId: string) {
   });
 }
 
-const FORMAT_COLORS: Record<string, string> = {
-  Snowflake:  'bg-blue-100 text-blue-800',
-  Parquet:    'bg-yellow-100 text-yellow-800',
-  CSV:        'bg-green-100 text-green-800',
-  JSON:       'bg-purple-100 text-purple-800',
-  Kafka:      'bg-orange-100 text-orange-800',
-  'ISO 20022 XML': 'bg-red-100 text-red-800',
-  XML:        'bg-red-100 text-red-800',
-};
-
-const FORMAT_ICON: Record<string, string> = {
-  Snowflake: '❄',
-  Parquet:   '⬡',
-  CSV:       '⊞',
-  JSON:      '{}',
-  Kafka:     '⚡',
-  XML:       '◇',
-  'ISO 20022 XML': '◇',
+const FORMAT_COLORS: Record<string, 'primary' | 'success' | 'warning' | 'error' | 'info' | 'secondary'> = {
+  Snowflake: 'info',
+  Parquet:   'warning',
+  CSV:       'success',
+  JSON:      'secondary',
+  Kafka:     'warning',
+  XML:       'error',
+  'ISO 20022 XML': 'error',
 };
 
 function formatBytes(bytes: number): string {
@@ -47,131 +54,107 @@ function CopyButton({ value, label }: { value: string; label: string }) {
     });
   }
   return (
-    <button
-      onClick={copy}
-      title={`Copy ${label}`}
-      className="ml-1 px-1.5 py-0.5 text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
-    >
-      {copied ? '✓' : '⎘'}
-    </button>
+    <Tooltip title={copied ? 'Copied!' : `Copy ${label}`}>
+      <IconButton size="small" onClick={copy} color={copied ? 'success' : 'default'}>
+        {copied ? <CheckIcon fontSize="small" /> : <ContentCopyIcon fontSize="small" />}
+      </IconButton>
+    </Tooltip>
   );
 }
 
 function DistributionCard({ dist, elements }: { dist: Distribution; elements: LogicalDataElement[] }) {
   const url = dist.accessUrl ?? dist.downloadUrl;
-  const colorClass = FORMAT_COLORS[dist.format ?? ''] ?? 'bg-gray-100 text-gray-700';
-  const icon = FORMAT_ICON[dist.format ?? ''] ?? '⊡';
   const { data: columns = [], isLoading: schemaLoading } = useDistributionSchema(dist.id);
 
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden">
-      <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold flex-shrink-0 ${colorClass}`}>
-            <span>{icon}</span>
-            {dist.format ?? dist.mediaType ?? 'File'}
-          </span>
-          <span className="text-sm font-medium text-gray-900 truncate">{dist.title}</span>
-        </div>
+    <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
+      <Box sx={{ px: 2, py: 1.5, bgcolor: 'grey.50', borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+          <Chip
+            label={dist.format ?? dist.mediaType ?? 'File'}
+            color={FORMAT_COLORS[dist.format ?? ''] ?? 'default'}
+            size="small"
+          />
+          <Typography variant="body2" fontWeight={600} noWrap>{dist.title}</Typography>
+        </Box>
         {dist.availability && (
-          <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${dist.availability === 'available' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-            {dist.availability}
-          </span>
+          <Chip
+            label={dist.availability}
+            color={dist.availability === 'available' ? 'success' : 'warning'}
+            size="small"
+            variant="outlined"
+          />
         )}
-      </div>
+      </Box>
 
-      <div className="px-4 py-3 space-y-3">
+      <Box sx={{ px: 2, py: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
         {dist.description && (
-          <p className="text-sm text-gray-600">{dist.description}</p>
+          <Typography variant="body2" color="text.secondary">{dist.description}</Typography>
         )}
 
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
-          {dist.mediaType && (
-            <div>
-              <dt className="text-gray-400 font-medium">Media type</dt>
-              <dd className="text-gray-700 font-mono mt-0.5">{dist.mediaType}</dd>
-            </div>
-          )}
-          {dist.byteSize != null && (
-            <div>
-              <dt className="text-gray-400 font-medium">Size</dt>
-              <dd className="text-gray-700 mt-0.5">{formatBytes(dist.byteSize)}</dd>
-            </div>
-          )}
+        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+          {dist.mediaType && <MetaItem label="Media type" value={dist.mediaType} mono />}
+          {dist.byteSize != null && <MetaItem label="Size" value={formatBytes(dist.byteSize)} />}
           {dist.checksumAlgorithm && dist.checksumValue && (
-            <div className="col-span-2">
-              <dt className="text-gray-400 font-medium">{dist.checksumAlgorithm} checksum</dt>
-              <dd className="text-gray-700 font-mono mt-0.5 break-all text-xs">{dist.checksumValue}</dd>
-            </div>
+            <Box sx={{ gridColumn: '1 / -1' }}>
+              <Typography variant="caption" color="text.secondary" fontWeight={600}>{dist.checksumAlgorithm} checksum</Typography>
+              <Typography variant="caption" fontFamily="monospace" display="block" sx={{ wordBreak: 'break-all' }}>{dist.checksumValue}</Typography>
+            </Box>
           )}
-        </dl>
+        </Box>
 
         {url && (
-          <div className="bg-gray-50 rounded px-3 py-2 flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <p className="text-xs text-gray-400 mb-0.5">{dist.accessUrl ? 'Access URL' : 'Download URL'}</p>
-              <p className="text-xs font-mono text-gray-700 truncate">{url}</p>
-            </div>
-            <div className="flex items-center gap-1 flex-shrink-0">
+          <Paper variant="outlined" sx={{ px: 1.5, py: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="caption" color="text.secondary">{dist.accessUrl ? 'Access URL' : 'Download URL'}</Typography>
+              <Typography variant="caption" fontFamily="monospace" display="block" noWrap>{url}</Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
               <CopyButton value={url} label="URL" />
               {dist.downloadUrl && (
-                <a
-                  href={dist.downloadUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  title="Download"
-                  className="px-1.5 py-0.5 text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
-                >
-                  ↓
-                </a>
+                <Tooltip title="Download">
+                  <IconButton size="small" component="a" href={dist.downloadUrl} target="_blank" rel="noreferrer">
+                    <DownloadIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
               )}
               {dist.accessUrl && (
-                <a
-                  href={dist.accessUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  title="Open"
-                  className="px-1.5 py-0.5 text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
-                >
-                  ↗
-                </a>
+                <Tooltip title="Open">
+                  <IconButton size="small" component="a" href={dist.accessUrl} target="_blank" rel="noreferrer">
+                    <OpenInNewIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
               )}
-            </div>
-          </div>
+            </Box>
+          </Paper>
         )}
 
         {(dist.databaseName || dist.schemaName || dist.tableName) && (
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <p className="text-xs font-medium text-gray-400 mb-2">Table Location</p>
-            <code className="text-sm font-mono font-semibold text-gray-900">
+          <Paper variant="outlined" sx={{ px: 2, py: 1.5 }}>
+            <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" sx={{ mb: 0.5 }}>Table Location</Typography>
+            <Typography variant="body2" fontFamily="monospace" fontWeight={700}>
               {[dist.databaseName, dist.schemaName, dist.tableName].filter(Boolean).join('.')}
-            </code>
-            <dl className="mt-2 flex gap-5 text-xs">
-              {dist.databaseName && (
-                <div>
-                  <dt className="text-gray-400 font-medium">Database</dt>
-                  <dd className="text-gray-700 font-mono mt-0.5">{dist.databaseName}</dd>
-                </div>
-              )}
-              {dist.schemaName && (
-                <div>
-                  <dt className="text-gray-400 font-medium">Schema</dt>
-                  <dd className="text-gray-700 font-mono mt-0.5">{dist.schemaName}</dd>
-                </div>
-              )}
-              {dist.tableName && (
-                <div>
-                  <dt className="text-gray-400 font-medium">Table</dt>
-                  <dd className="text-gray-700 font-mono mt-0.5">{dist.tableName}</dd>
-                </div>
-              )}
-            </dl>
-          </div>
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 3, mt: 1 }}>
+              {dist.databaseName && <MetaItem label="Database" value={dist.databaseName} mono />}
+              {dist.schemaName && <MetaItem label="Schema" value={dist.schemaName} mono />}
+              {dist.tableName && <MetaItem label="Table" value={dist.tableName} mono />}
+            </Box>
+          </Paper>
         )}
 
         <PhysicalSchemaSection columns={columns} isLoading={schemaLoading} elements={elements} />
-      </div>
-    </div>
+      </Box>
+    </Paper>
+  );
+}
+
+function MetaItem({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <Box>
+      <Typography variant="caption" color="text.secondary" fontWeight={600} display="block">{label}</Typography>
+      <Typography variant="caption" fontFamily={mono ? 'monospace' : undefined}>{value}</Typography>
+    </Box>
   );
 }
 
@@ -183,108 +166,88 @@ function PhysicalSchemaSection({ columns, isLoading, elements = [] }: {
   const [expanded, setExpanded] = useState(false);
 
   if (isLoading) {
-    return (
-      <div className="space-y-2">
-        {[...Array(3)].map((_, i) => (
-          <div key={i} className="h-8 bg-gray-100 rounded animate-pulse" />
-        ))}
-      </div>
-    );
+    return <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>{[...Array(3)].map((_, i) => <Skeleton key={i} height={32} />)}</Box>;
   }
 
   if (columns.length === 0) {
     return (
-      <div className="border border-dashed border-gray-200 rounded-lg px-4 py-6 text-center">
-        <p className="text-sm text-gray-400">No physical schema harvested yet.</p>
-        <p className="text-xs text-gray-300 mt-1">
+      <Paper variant="outlined" sx={{ px: 2, py: 4, textAlign: 'center', borderStyle: 'dashed' }}>
+        <Typography variant="body2" color="text.secondary">No physical schema harvested yet.</Typography>
+        <Typography variant="caption" color="text.disabled" display="block" sx={{ mt: 0.5 }}>
           Configure a harvest source and trigger a run to populate column-level details.
-        </p>
-      </div>
+        </Typography>
+      </Paper>
     );
   }
 
   const preview = expanded ? columns : columns.slice(0, 8);
 
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden">
-      <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-        <p className="text-xs font-medium text-gray-600">Physical columns · {columns.length} total</p>
-        <span className="text-xs text-gray-400 font-mono">CSV-W</span>
-      </div>
-      <table className="min-w-full text-xs">
-        <thead className="bg-gray-50 border-b border-gray-200">
-          <tr>
-            <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wide w-6">#</th>
-            <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wide">Column</th>
-            <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wide">Datatype</th>
-            <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wide">Nullable</th>
-            <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wide">Description</th>
-            {elements.length > 0 && (
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wide">Logical Element</th>
-            )}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100 bg-white">
-          {preview.map(col => (
-            <tr key={col.id} className="hover:bg-gray-50">
-              <td className="px-3 py-2 text-gray-300 tabular-nums">{col.ordinal + 1}</td>
-              <td className="px-3 py-2">
-                <span className="font-mono font-medium text-gray-800">{col.name}</span>
-                {col.titles && col.titles.length > 0 && col.titles[0] !== col.name && (
-                  <span className="ml-1.5 text-gray-400">({col.titles[0]})</span>
+    <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
+      <Box sx={{ px: 2, py: 1, bgcolor: 'grey.50', borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Typography variant="caption" fontWeight={600} color="text.secondary">Physical columns · {columns.length} total</Typography>
+        <Typography variant="caption" fontFamily="monospace" color="text.disabled">CSV-W</Typography>
+      </Box>
+      <Box sx={{ overflowX: 'auto' }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow sx={{ bgcolor: 'grey.50' }}>
+              <TableCell sx={{ width: 32, color: 'text.disabled', fontSize: 11 }}>#</TableCell>
+              <TableCell sx={{ fontWeight: 600, fontSize: 11 }}>Column</TableCell>
+              <TableCell sx={{ fontWeight: 600, fontSize: 11 }}>Datatype</TableCell>
+              <TableCell sx={{ fontWeight: 600, fontSize: 11 }}>Nullable</TableCell>
+              <TableCell sx={{ fontWeight: 600, fontSize: 11 }}>Description</TableCell>
+              {elements.length > 0 && <TableCell sx={{ fontWeight: 600, fontSize: 11 }}>Logical Element</TableCell>}
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {preview.map(col => (
+              <TableRow key={col.id} hover>
+                <TableCell sx={{ color: 'text.disabled', fontSize: 11 }}>{col.ordinal + 1}</TableCell>
+                <TableCell sx={{ fontFamily: 'monospace', fontWeight: 600, fontSize: 12 }}>
+                  {col.name}
+                  {col.titles && col.titles.length > 0 && col.titles[0] !== col.name && (
+                    <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>({col.titles[0]})</Typography>
+                  )}
+                </TableCell>
+                <TableCell>
+                  {col.datatype
+                    ? <Chip label={col.datatype} size="small" variant="outlined" sx={{ height: 18, fontSize: 11, fontFamily: 'monospace' }} />
+                    : <Typography variant="caption" color="text.disabled">—</Typography>}
+                </TableCell>
+                <TableCell>
+                  {col.required
+                    ? <Chip label="NOT NULL" color="error" size="small" sx={{ height: 18, fontSize: 11 }} />
+                    : <Typography variant="caption" color="text.secondary">nullable</Typography>}
+                </TableCell>
+                <TableCell sx={{ maxWidth: 160 }}>
+                  <Typography variant="caption" color="text.secondary" noWrap title={col.description ?? ''}>
+                    {col.description ?? <Typography component="span" variant="caption" color="text.disabled">—</Typography>}
+                  </Typography>
+                </TableCell>
+                {elements.length > 0 && (
+                  <TableCell>
+                    {col.logicalDataElementId ? (() => {
+                      const el = elements.find(e => e.id === col.logicalDataElementId);
+                      return el
+                        ? <Chip label={el.name} size="small" color="secondary" component={Link} to={`/search?q=${encodeURIComponent(el.name)}`} clickable sx={{ height: 18, fontSize: 11 }} />
+                        : <Typography variant="caption" color="text.disabled">—</Typography>;
+                    })() : <Typography variant="caption" color="text.disabled">—</Typography>}
+                  </TableCell>
                 )}
-              </td>
-              <td className="px-3 py-2">
-                {col.datatype
-                  ? <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded font-mono">{col.datatype}</span>
-                  : <span className="text-gray-300">—</span>
-                }
-              </td>
-              <td className="px-3 py-2">
-                {col.required
-                  ? <span className="text-red-500 font-medium">NOT NULL</span>
-                  : <span className="text-gray-400">nullable</span>
-                }
-              </td>
-              <td className="px-3 py-2 text-gray-500 max-w-[160px] truncate" title={col.description ?? ''}>
-                {col.description ?? <span className="text-gray-300">—</span>}
-              </td>
-              {elements.length > 0 && (
-                <td className="px-3 py-2">
-                  {col.logicalDataElementId
-                    ? (() => {
-                        const el = elements.find(e => e.id === col.logicalDataElementId);
-                        return el
-                          ? (
-                            <Link
-                              to={`/search?q=${encodeURIComponent(el.name)}`}
-                              title={`Search all datasets with element "${el.name}"`}
-                              className="px-1.5 py-0.5 bg-indigo-50 text-indigo-700 rounded text-xs font-medium hover:bg-indigo-100 hover:text-indigo-900 transition-colors"
-                            >
-                              {el.name}
-                            </Link>
-                          )
-                          : <span className="text-gray-300">—</span>;
-                      })()
-                    : <span className="text-gray-300">—</span>
-                  }
-                </td>
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Box>
       {columns.length > 8 && (
-        <div className="px-4 py-2 border-t border-gray-100 bg-gray-50 text-center">
-          <button
-            onClick={() => setExpanded(e => !e)}
-            className="text-xs text-blue-600 hover:text-blue-700"
-          >
-            {expanded ? `Show fewer ▲` : `Show all ${columns.length} columns ▼`}
-          </button>
-        </div>
+        <Box sx={{ px: 2, py: 1, borderTop: 1, borderColor: 'divider', bgcolor: 'grey.50', textAlign: 'center' }}>
+          <Button size="small" onClick={() => setExpanded(e => !e)} sx={{ fontSize: 12, textTransform: 'none' }}>
+            {expanded ? 'Show fewer' : `Show all ${columns.length} columns`}
+          </Button>
+        </Box>
       )}
-    </div>
+    </Paper>
   );
 }
 
@@ -307,26 +270,18 @@ export default function DistributionsTab({ datasetId }: { datasetId: string }) {
   });
 
   if (distLoading) {
-    return (
-      <div className="space-y-3">
-        {[...Array(2)].map((_, i) => <div key={i} className="h-24 bg-gray-100 rounded-lg animate-pulse" />)}
-      </div>
-    );
+    return <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>{[...Array(2)].map((_, i) => <Skeleton key={i} variant="rounded" height={120} />)}</Box>;
   }
 
   if (distributions.length === 0) {
-    return (
-      <div className="text-center py-10">
-        <p className="text-sm text-gray-400">No distributions registered for this dataset.</p>
-      </div>
-    );
+    return <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 5 }}>No distributions registered for this dataset.</Typography>;
   }
 
   return (
-    <div className="space-y-3">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       {distributions.map(dist => (
         <DistributionCard key={dist.id} dist={dist} elements={elements} />
       ))}
-    </div>
+    </Box>
   );
 }

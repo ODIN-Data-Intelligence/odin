@@ -1,8 +1,9 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { datasetApi } from '@datacatalog/shared';
+import Box from '@mui/material/Box';
+import Alert from '@mui/material/Alert';
+import { datasetApi, PageHeader } from '@datacatalog/shared';
 import type { Dataset } from '@datacatalog/shared';
-import { PageHeader } from '@datacatalog/shared';
 import DatasetForm from '../components/catalog/DatasetForm';
 
 export default function DatasetCreatePage() {
@@ -19,12 +20,9 @@ export default function DatasetCreatePage() {
   });
 
   return (
-    <div>
-      <PageHeader
-        title="New Dataset"
-        description="Register a new dataset in the catalog"
-      />
-      <div className="p-6 max-w-2xl">
+    <Box>
+      <PageHeader title="New Dataset" description="Register a new dataset in the catalog" />
+      <Box sx={{ p: 3, maxWidth: 640 }}>
         <DatasetForm
           onSubmit={data => mutation.mutate(data)}
           isSubmitting={mutation.isPending}
@@ -32,9 +30,9 @@ export default function DatasetCreatePage() {
           onCancel={() => navigate(`/${tenant}/datasets`)}
         />
         {mutation.isError && (
-          <p className="mt-3 text-sm text-red-600">Failed to create dataset. Please try again.</p>
+          <Alert severity="error" sx={{ mt: 2 }}>Failed to create dataset. Please try again.</Alert>
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }

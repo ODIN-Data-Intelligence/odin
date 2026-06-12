@@ -65,9 +65,13 @@ export const aiApi = {
     onToken: (token: string) => void,
     onDone: () => void,
     onError: (err: unknown) => void,
-    focusDatasetId?: string | null
+    focusDatasetId?: string | null,
+    focusDatasetIds?: string[] | null
   ): Promise<void> => {
     const token = localStorage.getItem('access_token');
+    const body: Record<string, unknown> = { content };
+    if (focusDatasetId) body.focusDatasetId = focusDatasetId;
+    if (focusDatasetIds && focusDatasetIds.length > 0) body.focusDatasetIds = focusDatasetIds;
     const res = await fetch(`${BASE}/conversations/${conversationId}/messages`, {
       method: 'POST',
       headers: {
@@ -75,7 +79,7 @@ export const aiApi = {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         Accept: 'text/event-stream',
       },
-      body: JSON.stringify({ content, ...(focusDatasetId ? { focusDatasetId } : {}) }),
+      body: JSON.stringify(body),
     });
 
     if (!res.ok || !res.body) {

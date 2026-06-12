@@ -1,5 +1,6 @@
 package com.odin.catalog.ai.rag;
 
+import com.odin.catalog.ai.client.CatalogServiceClient;
 import com.odin.catalog.shared.kafka.consumer.KafkaEventConsumer;
 import com.odin.catalog.shared.kafka.topics.CatalogTopics;
 import com.odin.catalog.shared.models.events.DatasetChangedPayload;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -28,6 +30,7 @@ public class EmbeddingService {
 
     private final VectorStore vectorStore;
     private final KafkaEventConsumer kafkaEventConsumer;
+    private final CatalogServiceClient catalogClient;
 
     @KafkaListener(
         topics = CatalogTopics.DATASETS_CHANGES,
@@ -88,6 +91,24 @@ public class EmbeddingService {
                 "Vocabulary concepts: " + String.join(", ", labels) + "\n" +
                 "Business elements: "   + String.join(", ", names);
             chunks.add(new Document(chunkId(payload.datasetId(), 2), typeChunk, meta));
+        }
+
+        // Chunk 3: physical column schema — enables RAG to surface column names for multi-dataset queries
+        try {
+            List<CatalogServiceClient.PhysicalColumn> columns = catalogClient.getDatasetPhysicalSchema(payload.datasetId());
+            if (!columns.isEmpty()) {
+                String tableName = resource.title() != null ? resource.title().replaceAll("[^a-zA-Z0-9_]", "_") : payload.datasetId();
+                String schemaChunk = "Physical schema (table: " + tableName + "):\n" +
+                    columns.stream()
+                        .sorted(Comparator.comparingInt(c -> c.ordinal() != null ? c.ordinal() : 0))
+                        .map(c -> "  " + c.name() +
+                            (c.datatype() != null ? " [" + c.datatype() + "]" : "") +
+                            (Boolean.TRUE.equals(c.required()) ? " NOT NULL" : ""))
+                        .collect(Collectors.joining("\n"));
+                chunks.add(new Document(chunkId(payload.datasetId(), 3), schemaChunk, meta));
+            }
+        } catch (Exception e) {
+            log.debug("Could not embed physical schema for dataset {}: {}", payload.datasetId(), e.getMessage());
         }
 
         return chunks;

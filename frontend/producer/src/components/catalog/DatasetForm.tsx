@@ -1,7 +1,14 @@
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
+import Box from '@mui/material/Box';
+import TextField from '@mui/material/TextField';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import InputLabel from '@mui/material/InputLabel';
+import FormControl from '@mui/material/FormControl';
+import FormHelperText from '@mui/material/FormHelperText';
+import Button from '@mui/material/Button';
+import Typography from '@mui/material/Typography';
 import type { Dataset } from '@datacatalog/shared';
-import { cn } from '../../lib/utils';
-import { Button } from '@datacatalog/shared';
 
 interface FormValues {
   title: string;
@@ -30,14 +37,8 @@ function splitTags(raw: string): string[] {
   return raw.split(',').map(s => s.trim()).filter(Boolean);
 }
 
-export default function DatasetForm({
-  defaultValues,
-  onSubmit,
-  isSubmitting,
-  submitLabel = 'Save',
-  onCancel,
-}: Props) {
-  const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({
+export default function DatasetForm({ defaultValues, onSubmit, isSubmitting, submitLabel = 'Save', onCancel }: Props) {
+  const { register, handleSubmit, control, formState: { errors } } = useForm<FormValues>({
     defaultValues: {
       title: defaultValues?.title ?? '',
       description: defaultValues?.description ?? '',
@@ -64,110 +65,83 @@ export default function DatasetForm({
   }
 
   return (
-    <form onSubmit={handleSubmit(values => onSubmit(convert(values)))} className="space-y-5">
-      <Field id="title" label="Title" required error={errors.title?.message}>
-        <input
-          id="title"
-          {...register('title', { required: 'Title is required' })}
-          className={inputCls(!!errors.title)}
-          placeholder="e.g. Trade Blotter"
+    <Box component="form" onSubmit={handleSubmit(values => onSubmit(convert(values)))} sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      <TextField
+        {...register('title', { required: 'Title is required' })}
+        label="Title"
+        required
+        size="small"
+        fullWidth
+        placeholder="e.g. Trade Blotter"
+        error={!!errors.title}
+        helperText={errors.title?.message}
+      />
+
+      <TextField
+        {...register('description')}
+        label="Description"
+        size="small"
+        fullWidth
+        multiline
+        rows={3}
+        placeholder="Describe this dataset…"
+      />
+
+      <TextField
+        {...register('keywordsRaw')}
+        label="Keywords"
+        size="small"
+        fullWidth
+        placeholder="trading, blotter, positions"
+        InputProps={{ endAdornment: <Typography variant="caption" color="text.disabled" sx={{ whiteSpace: 'nowrap' }}>comma-separated</Typography> }}
+      />
+
+      <Controller
+        name="accrualPeriodicity"
+        control={control}
+        render={({ field }) => (
+          <FormControl size="small" fullWidth>
+            <InputLabel>Accrual Periodicity</InputLabel>
+            <Select label="Accrual Periodicity" {...field}>
+              {PERIODICITY_OPTIONS.map(opt => (
+                <MenuItem key={opt} value={opt}>{opt || '— none —'}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
+      />
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+        <TextField {...register('version')} label="Version" size="small" fullWidth placeholder="1.0" />
+        <TextField
+          {...register('languageRaw')}
+          label="Language"
+          size="small"
+          fullWidth
+          placeholder="en"
+          InputProps={{ endAdornment: <Typography variant="caption" color="text.disabled" sx={{ whiteSpace: 'nowrap' }}>e.g. en, fr</Typography> }}
         />
-      </Field>
+      </Box>
 
-      <Field id="description" label="Description">
-        <textarea
-          id="description"
-          {...register('description')}
-          rows={3}
-          className={inputCls(false)}
-          placeholder="Describe this dataset…"
-        />
-      </Field>
+      <TextField {...register('license')} label="License" size="small" fullWidth placeholder="https://creativecommons.org/licenses/by/4.0/" />
 
-      <Field id="keywordsRaw" label="Keywords" hint="comma-separated">
-        <input
-          id="keywordsRaw"
-          {...register('keywordsRaw')}
-          className={inputCls(false)}
-          placeholder="trading, blotter, positions"
-        />
-      </Field>
+      <TextField
+        {...register('themesRaw')}
+        label="Themes"
+        size="small"
+        fullWidth
+        placeholder="Finance, Risk"
+        InputProps={{ endAdornment: <Typography variant="caption" color="text.disabled" sx={{ whiteSpace: 'nowrap' }}>IRIs or labels</Typography> }}
+      />
 
-      <Field id="accrualPeriodicity" label="Accrual Periodicity">
-        <select id="accrualPeriodicity" {...register('accrualPeriodicity')} className={inputCls(false)}>
-          {PERIODICITY_OPTIONS.map(opt => (
-            <option key={opt} value={opt}>{opt || '— none —'}</option>
-          ))}
-        </select>
-      </Field>
-
-      <div className="grid grid-cols-2 gap-4">
-        <Field id="version" label="Version">
-          <input id="version" {...register('version')} className={inputCls(false)} placeholder="1.0" />
-        </Field>
-        <Field id="languageRaw" label="Language" hint="comma-separated, e.g. en, fr">
-          <input id="languageRaw" {...register('languageRaw')} className={inputCls(false)} placeholder="en" />
-        </Field>
-      </div>
-
-      <Field id="license" label="License">
-        <input
-          id="license"
-          {...register('license')}
-          className={inputCls(false)}
-          placeholder="https://creativecommons.org/licenses/by/4.0/"
-        />
-      </Field>
-
-      <Field id="themesRaw" label="Themes" hint="comma-separated IRIs or labels">
-        <input id="themesRaw" {...register('themesRaw')} className={inputCls(false)} placeholder="Finance, Risk" />
-      </Field>
-
-      <div className="flex items-center gap-3 pt-2">
-        <Button type="submit" disabled={isSubmitting}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pt: 0.5 }}>
+        <Button type="submit" variant="contained" disabled={isSubmitting} sx={{ textTransform: 'none' }}>
           {isSubmitting ? 'Saving…' : submitLabel}
         </Button>
         {onCancel && (
-          <Button type="button" variant="secondary" onClick={onCancel}>
-            Cancel
-          </Button>
+          <Button type="button" variant="outlined" onClick={onCancel} sx={{ textTransform: 'none' }}>Cancel</Button>
         )}
-      </div>
-    </form>
-  );
-}
-
-function inputCls(invalid: boolean) {
-  return cn(
-    'w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500',
-    invalid ? 'border-red-400' : 'border-gray-300',
-  );
-}
-
-function Field({
-  id,
-  label,
-  required,
-  hint,
-  error,
-  children,
-}: {
-  id: string;
-  label: string;
-  required?: boolean;
-  hint?: string;
-  error?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">
-        {label}
-        {required && <span className="text-red-500 ml-0.5">*</span>}
-        {hint && <span className="text-gray-400 text-xs font-normal ml-1.5">({hint})</span>}
-      </label>
-      {children}
-      {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
-    </div>
+      </Box>
+    </Box>
   );
 }

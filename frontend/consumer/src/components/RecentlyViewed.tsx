@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
 
 interface RecentEntry {
   id: string;
@@ -32,19 +35,20 @@ export default function RecentlyViewed() {
   if (entries.length === 0) return null;
 
   return (
-    <div>
-      <h2 className="text-base font-semibold text-gray-800 mb-3">Recently Viewed</h2>
-      <div className="flex flex-wrap gap-2">
+    <Box>
+      <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1.5 }}>Recently Viewed</Typography>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
         {entries.map(e => (
-          <button
+          <Chip
             key={e.id}
+            label={e.title}
+            variant="outlined"
             onClick={() => navigate(`/search?ds=${e.id}`)}
-            className="px-3 py-1.5 bg-white border border-gray-200 text-sm text-gray-700 rounded-full hover:border-blue-300 transition-colors"
-          >
-            {e.title}
-          </button>
+            size="small"
+            sx={{ cursor: 'pointer' }}
+          />
         ))}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }

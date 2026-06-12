@@ -1,7 +1,16 @@
 import { Outlet, NavLink, useParams } from 'react-router-dom';
-import { cn } from '../../lib/utils';
+import Box from '@mui/material/Box';
+import Drawer from '@mui/material/Drawer';
+import List from '@mui/material/List';
+import ListItemButton from '@mui/material/ListItemButton';
+import ListItemText from '@mui/material/ListItemText';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Divider from '@mui/material/Divider';
 import { useAuthStore } from '../../store/authStore';
 import { keycloak } from '../../lib/keycloak';
+
+const DRAWER_WIDTH = 224;
 
 const navItems = [
   { label: 'Dashboard',     to: '' },
@@ -12,14 +21,12 @@ const navItems = [
   { label: 'Lineage',       to: 'lineage' },
 ];
 
-// Each admin item optionally restricted to specific roles.
-// If `roles` is omitted the item is visible to all authenticated users.
 const adminItems = [
-  { label: 'Harvest',        to: 'admin/harvest',                      roles: ['administrator'] },
-  { label: 'Domains',        to: 'admin/domains',                      roles: ['administrator', 'data-governance'] },
-  { label: 'Terms Policies', to: 'admin/governance/terms-policies',    roles: ['administrator', 'data-governance'] },
-  { label: 'Users',          to: 'admin/users',                        roles: ['administrator'] },
-  { label: 'Settings',       to: 'admin/settings',                     roles: ['administrator'] },
+  { label: 'Harvest',        to: 'admin/harvest',                   roles: ['administrator'] },
+  { label: 'Domains',        to: 'admin/domains',                   roles: ['administrator', 'data-governance'] },
+  { label: 'Terms Policies', to: 'admin/governance/terms-policies', roles: ['administrator', 'data-governance'] },
+  { label: 'Users',          to: 'admin/users',                     roles: ['administrator'] },
+  { label: 'Settings',       to: 'admin/settings',                  roles: ['administrator'] },
 ];
 
 export default function AppLayout() {
@@ -34,65 +41,104 @@ export default function AppLayout() {
   );
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <aside className="w-56 flex-shrink-0 bg-gray-900 text-gray-100 flex flex-col">
-        <div className="px-4 py-5 border-b border-gray-700">
-          <span className="text-lg font-semibold tracking-tight">Data Catalog</span>
-          <p className="text-xs text-gray-400 mt-0.5">{tenant}</p>
-        </div>
+    <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      <Drawer
+        variant="permanent"
+        sx={{
+          width: DRAWER_WIDTH,
+          flexShrink: 0,
+          '& .MuiDrawer-paper': {
+            width: DRAWER_WIDTH,
+            boxSizing: 'border-box',
+            bgcolor: 'grey.900',
+            color: 'grey.100',
+            display: 'flex',
+            flexDirection: 'column',
+          },
+        }}
+      >
+        {/* Brand */}
+        <Box sx={{ px: 2, py: 2.5, borderBottom: 1, borderColor: 'grey.700' }}>
+          <Typography variant="subtitle1" fontWeight={600} sx={{ letterSpacing: '-0.01em', color: 'grey.100' }}>
+            Data Catalog
+          </Typography>
+          <Typography variant="caption" sx={{ color: 'grey.500' }}>{tenant}</Typography>
+        </Box>
 
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        {/* Nav */}
+        <List dense sx={{ flex: 1, px: 1, py: 1.5, overflowY: 'auto' }}>
           {navItems.map(item => (
-            <NavLink
-              key={item.to}
-              to={`${base}/${item.to}`}
-              end={item.to === ''}
-              className={({ isActive }) =>
-                cn('block px-3 py-2 rounded text-sm font-medium transition-colors',
-                  isActive ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700')
-              }
-            >
-              {item.label}
+            <NavLink key={item.to} to={`${base}/${item.to}`} end={item.to === ''} style={{ textDecoration: 'none' }}>
+              {({ isActive }) => (
+                <ListItemButton
+                  selected={isActive}
+                  sx={{
+                    borderRadius: 1,
+                    mb: 0.25,
+                    '&.Mui-selected': { bgcolor: 'primary.main', '&:hover': { bgcolor: 'primary.dark' } },
+                    '&:hover': { bgcolor: 'grey.800' },
+                  }}
+                >
+                  <ListItemText
+                    primary={item.label}
+                    primaryTypographyProps={{ variant: 'body2', fontWeight: isActive ? 600 : 400, color: isActive ? 'white' : 'grey.300' }}
+                  />
+                </ListItemButton>
+              )}
             </NavLink>
           ))}
 
           {visibleAdminItems.length > 0 && (
             <>
-              <p className="px-3 pt-4 pb-1 text-xs font-semibold text-gray-500 uppercase tracking-wider">Admin</p>
+              <Divider sx={{ my: 1, borderColor: 'grey.700' }} />
+              <Typography variant="caption" sx={{ px: 1.5, py: 0.5, display: 'block', color: 'grey.500', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>
+                Admin
+              </Typography>
               {visibleAdminItems.map(item => (
-                <NavLink
-                  key={item.to}
-                  to={`${base}/${item.to}`}
-                  className={({ isActive }) =>
-                    cn('block px-3 py-2 rounded text-sm font-medium transition-colors',
-                      isActive ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700')
-                  }
-                >
-                  {item.label}
+                <NavLink key={item.to} to={`${base}/${item.to}`} style={{ textDecoration: 'none' }}>
+                  {({ isActive }) => (
+                    <ListItemButton
+                      selected={isActive}
+                      sx={{
+                        borderRadius: 1,
+                        mb: 0.25,
+                        '&.Mui-selected': { bgcolor: 'primary.main', '&:hover': { bgcolor: 'primary.dark' } },
+                        '&:hover': { bgcolor: 'grey.800' },
+                      }}
+                    >
+                      <ListItemText
+                        primary={item.label}
+                        primaryTypographyProps={{ variant: 'body2', fontWeight: isActive ? 600 : 400, color: isActive ? 'white' : 'grey.300' }}
+                      />
+                    </ListItemButton>
+                  )}
                 </NavLink>
               ))}
             </>
           )}
-        </nav>
+        </List>
 
-        {/* User identity + logout */}
-        <div className="px-4 py-3 border-t border-gray-700">
-          <p className="text-xs font-medium text-gray-200 truncate">{displayName ?? email ?? 'User'}</p>
+        {/* User footer */}
+        <Box sx={{ px: 2, py: 1.5, borderTop: 1, borderColor: 'grey.700' }}>
+          <Typography variant="body2" fontWeight={500} noWrap sx={{ color: 'grey.200' }}>
+            {displayName ?? email ?? 'User'}
+          </Typography>
           {email && displayName && (
-            <p className="text-xs text-gray-400 truncate">{email}</p>
+            <Typography variant="caption" noWrap sx={{ color: 'grey.500', display: 'block' }}>{email}</Typography>
           )}
-          <button
+          <Button
+            size="small"
             onClick={() => keycloak.logout({ redirectUri: window.location.origin })}
-            className="mt-2 w-full text-left text-xs text-gray-400 hover:text-gray-200 transition-colors"
+            sx={{ mt: 1, color: 'grey.400', textTransform: 'none', fontSize: 12, p: 0, '&:hover': { color: 'grey.200' } }}
           >
             Sign out →
-          </button>
-        </div>
-      </aside>
+          </Button>
+        </Box>
+      </Drawer>
 
-      <main className="flex-1 overflow-y-auto">
+      <Box component="main" sx={{ flex: 1, overflowY: 'auto' }}>
         <Outlet />
-      </main>
-    </div>
+      </Box>
+    </Box>
   );
 }
