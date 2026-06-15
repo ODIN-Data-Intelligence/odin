@@ -29,7 +29,8 @@ export default function SearchPage() {
     if (urlQ && urlQ !== query) setQuery(urlQ);
 
     const dsId = pathDatasetId ?? searchParams.get('ds');
-    if (dsId) openDataset(dsId);
+    const et = (searchParams.get('et') ?? 'DATASET') as 'DATASET' | 'DATA_PRODUCT';
+    if (dsId) openDataset(dsId, et);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

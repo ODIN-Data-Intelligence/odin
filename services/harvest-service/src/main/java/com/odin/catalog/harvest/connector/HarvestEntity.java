@@ -15,6 +15,7 @@ public record HarvestEntity(
     String mediaType,
     List<String> keywords,
     List<String> themes,
+    List<HarvestDistribution> distributions,
     List<NormalizedColumn> columns,
     String ddl,           // non-null for VIEWs/stored procs — triggers lineage extraction
     JsonNode rawPayload

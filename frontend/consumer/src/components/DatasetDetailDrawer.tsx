@@ -2,6 +2,8 @@ import { useEffect, SyntheticEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import Box from '@mui/material/Box';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
 import Drawer from '@mui/material/Drawer';
 import Typography from '@mui/material/Typography';
 import Tabs from '@mui/material/Tabs';
@@ -32,15 +34,16 @@ const DATASET_TABS = [
 ] as const;
 
 const DATA_PRODUCT_TABS = [
-  { key: 'overview', label: 'Overview' },
-  { key: 'lineage',  label: 'Lineage' },
-  { key: 'terms',    label: 'Terms' },
+  { key: 'overview',  label: 'Overview' },
+  { key: 'datasets',  label: 'Datasets' },
+  { key: 'lineage',   label: 'Lineage' },
+  { key: 'terms',     label: 'Terms' },
 ] as const;
 
-type DrawerTab = 'overview' | 'distributions' | 'schema' | 'lineage' | 'terms' | 'access';
+type DrawerTab = 'overview' | 'distributions' | 'schema' | 'lineage' | 'terms' | 'access' | 'datasets';
 
 export default function DatasetDetailDrawer() {
-  const { openDatasetId, openEntityType, activeTab, closeDrawer, setTab } = useDrawerStore();
+  const { openDatasetId, openEntityType, activeTab, openDataset, closeDrawer, setTab } = useDrawerStore();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const isDataProduct = openEntityType === 'DATA_PRODUCT';
@@ -48,11 +51,19 @@ export default function DatasetDetailDrawer() {
 
   useEffect(() => {
     if (openDatasetId) {
-      setSearchParams(prev => { prev.set('ds', openDatasetId); return prev; }, { replace: true });
+      setSearchParams(prev => {
+        prev.set('ds', openDatasetId);
+        prev.set('et', openEntityType);
+        return prev;
+      }, { replace: true });
     } else {
-      setSearchParams(prev => { prev.delete('ds'); return prev; }, { replace: true });
+      setSearchParams(prev => {
+        prev.delete('ds');
+        prev.delete('et');
+        return prev;
+      }, { replace: true });
     }
-  }, [openDatasetId, setSearchParams]);
+  }, [openDatasetId, openEntityType, setSearchParams]);
 
   // Reset to overview if current tab isn't available for this entity type
   useEffect(() => {
@@ -76,6 +87,13 @@ export default function DatasetDetailDrawer() {
 
   const entity = isDataProduct ? dataProduct : dataset;
   const isLoading = isDataProduct ? dataProductLoading : datasetLoading;
+
+  const { data: linkedDatasets = [], isLoading: linkedDatasetsLoading } = useQuery({
+    queryKey: ['data-product-datasets', openDatasetId],
+    queryFn: () => dataProductApi.listDatasets(openDatasetId!),
+    enabled: !!openDatasetId && isDataProduct && activeTab === 'datasets',
+    staleTime: 60_000,
+  });
 
   const { data: semanticContext } = useQuery({
     queryKey: ['dataset-semantic-context', openDatasetId],
@@ -256,6 +274,36 @@ export default function DatasetDetailDrawer() {
 
             {!isDataProduct && activeTab === 'distributions' && <DistributionsTab datasetId={entity.id} />}
             {!isDataProduct && activeTab === 'schema' && <LogicalSchemaTable datasetId={entity.id} />}
+            {isDataProduct && activeTab === 'datasets' && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {linkedDatasetsLoading && (
+                  [...Array(3)].map((_, i) => <Skeleton key={i} variant="rounded" height={60} />)
+                )}
+                {!linkedDatasetsLoading && linkedDatasets.length === 0 && (
+                  <Typography variant="body2" color="text.disabled" sx={{ py: 4, textAlign: 'center' }}>
+                    No datasets linked to this data product.
+                  </Typography>
+                )}
+                {!linkedDatasetsLoading && linkedDatasets.map(ds => (
+                  <Card
+                    key={ds.id}
+                    variant="outlined"
+                    sx={{ cursor: 'pointer', '&:hover': { borderColor: 'primary.light', boxShadow: 1 } }}
+                    onClick={() => openDataset(ds.id, 'DATASET')}
+                  >
+                    <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                      <Typography variant="body2" fontWeight={600} noWrap>{ds.title}</Typography>
+                      {ds.description && (
+                        <Typography variant="caption" color="text.secondary"
+                          sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {ds.description}
+                        </Typography>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </Box>
+            )}
             {activeTab === 'lineage' && <LineageTab datasetId={entity.id} />}
             {activeTab === 'terms' && <TermsOfUseTab datasetId={entity.id} />}
 

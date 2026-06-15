@@ -100,7 +100,7 @@ public class HarvestSourceService {
         entity.setCredentialRef(req.credentialRef());
     }
 
-    private HarvestSourceEntity findOrThrow(UUID id) {
+    HarvestSourceEntity findOrThrow(UUID id) {
         return sourceRepository.findById(id)
             .orElseThrow(() -> new NoSuchElementException("HarvestSource not found: " + id));
     }

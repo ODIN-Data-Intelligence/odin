@@ -81,7 +81,7 @@ public class TeradataConnector implements HarvestConnector {
                     sourceKey,
                     isView ? HarvestEntityType.VIEW : HarvestEntityType.DATASET,
                     sourceUri, tableName, comment, null, null,
-                    List.of(), List.of(), columns, ddl, null
+                    List.of(), List.of(), List.of(), columns, ddl, null
                 ));
             }
         }

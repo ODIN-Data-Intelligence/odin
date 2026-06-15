@@ -87,7 +87,7 @@ public class GlueConnector implements HarvestConnector {
                         table.name(),
                         table.description(),
                         null, null,
-                        List.of(), List.of(),
+                        List.of(), List.of(), List.of(),
                         columns, ddl,
                         objectMapper.valueToTree(table.toBuilder())
                     ));
