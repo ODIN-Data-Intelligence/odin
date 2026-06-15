@@ -1211,6 +1211,32 @@ get_or_create_harvest_job "ECB Reference Rates DCAT Harvest" \
     '{"sourceId":$sid,"name":"ECB Reference Rates DCAT Harvest","scheduleCron":"30 16 * * 1-5","fullRefresh":false,"enabled":true}')" > /dev/null
 success "Harvest job: ECB DCAT Harvest (16:30 weekdays)"
 
+SRC_FRB_DCAT=$(get_or_create_harvest_source "Federal Reserve — Open Data Catalog" '{
+  "name": "Federal Reserve — Open Data Catalog",
+  "sourceType": "dcat_http",
+  "baseUrl": "https://www.federalreserve.gov/PDC/data.json",
+  "credentialRef": ""
+}')
+success "Harvest source: Federal Reserve DCAT (${SRC_FRB_DCAT})"
+
+JOB_FRB_DCAT=$(get_or_create_harvest_job "Federal Reserve DCAT — Manual Validation" \
+  "$(jq -n --arg sid "${SRC_FRB_DCAT}" \
+    '{"sourceId":$sid,"name":"Federal Reserve DCAT — Manual Validation","fullRefresh":true,"enabled":true}')")
+success "Harvest job: Federal Reserve DCAT manual (${JOB_FRB_DCAT})"
+
+info "Triggering Federal Reserve DCAT harvest for validation..."
+FRB_RUN=$(curl -sf -X POST \
+  -H "${HEADER_AUTH}" \
+  "${HARVEST_URL}/api/v1/jobs/${JOB_FRB_DCAT}/trigger" 2>/dev/null || echo '{}')
+FRB_RUN_ID=$(echo "${FRB_RUN}" | jq -r '.id // empty')
+if [ -n "${FRB_RUN_ID}" ]; then
+  success "Harvest run triggered: ${FRB_RUN_ID}"
+  info "Monitor: curl -sf -H \"X-API-Key: dev-local\" ${HARVEST_URL}/api/v1/runs/${FRB_RUN_ID}"
+else
+  warn "Could not trigger — re-trigger manually once harvest-service is ready:"
+  info "  curl -sf -X POST -H \"X-API-Key: dev-local\" ${HARVEST_URL}/api/v1/jobs/${JOB_FRB_DCAT}/trigger"
+fi
+
 # ─────────────────────────────────────────────────────────────────────────────
 section "Phase 12 — Trigger Search Re-index"
 # ─────────────────────────────────────────────────────────────────────────────

@@ -4,6 +4,7 @@ import com.odin.catalog.inventory.infrastructure.jpa.entity.*;
 import com.odin.catalog.inventory.infrastructure.jpa.repository.*;
 import com.odin.catalog.inventory.infrastructure.kafka.CatalogEventProducer;
 import com.odin.catalog.shared.models.common.NormalizedColumn;
+import com.odin.catalog.shared.models.events.HarvestDistributionPayload;
 import com.odin.catalog.shared.models.events.HarvestEntityDiscoveredPayload;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -34,6 +35,10 @@ public class HarvestEntityProcessor {
         DatasetEntity dataset = upsertDataset(payload);
         UUID datasetId = dataset.getId();
 
+        if (payload.distributions() != null && !payload.distributions().isEmpty()) {
+            upsertDistributions(dataset, payload.distributions());
+        }
+
         if (payload.columns() != null && !payload.columns().isEmpty()) {
             UUID schemaId = upsertDistributionAndSchema(dataset, payload);
             List<CsvwColumnEntity> columns = upsertColumns(schemaId, payload.columns());
@@ -63,6 +68,27 @@ public class HarvestEntityProcessor {
                 entity.setSourceUri(payload.sourceUri());
                 return datasetRepository.save(entity);
             });
+    }
+
+    private void upsertDistributions(DatasetEntity dataset, List<HarvestDistributionPayload> distributions) {
+        for (HarvestDistributionPayload d : distributions) {
+            String lookupUrl = d.downloadUrl() != null ? d.downloadUrl() : d.accessUrl();
+            DistributionEntity entity = d.downloadUrl() != null
+                ? distributionRepository.findByDatasetIdAndDownloadUrlAndIsDeletedFalse(dataset.getId(), d.downloadUrl()).orElse(null)
+                : distributionRepository.findByDatasetIdAndAccessUrlAndIsDeletedFalse(dataset.getId(), d.accessUrl()).orElse(null);
+
+            if (entity == null) {
+                entity = new DistributionEntity();
+                entity.setTenantId(dataset.getTenantId());
+                entity.setDatasetId(dataset.getId());
+            }
+            entity.setTitle(d.title() != null ? d.title() : lookupUrl);
+            entity.setDownloadUrl(d.downloadUrl());
+            entity.setAccessUrl(d.accessUrl());
+            entity.setFormat(d.format());
+            entity.setMediaType(d.mediaType());
+            distributionRepository.save(entity);
+        }
     }
 
     private UUID upsertDistributionAndSchema(DatasetEntity dataset, HarvestEntityDiscoveredPayload payload) {

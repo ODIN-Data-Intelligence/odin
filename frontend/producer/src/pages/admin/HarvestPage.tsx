@@ -11,8 +11,14 @@ import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
 import Button from '@mui/material/Button';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
 import { harvestSourceApi, harvestJobApi, PageHeader } from '@datacatalog/shared';
+import type { HarvestSource, HarvestJob } from '@datacatalog/shared';
 import HarvestSourceForm from '../../components/admin/HarvestSourceForm';
+import HarvestJobForm from '../../components/admin/HarvestJobForm';
 
 const SOURCE_TYPE_LABELS: Record<string, string> = {
   dcat_http: 'DCAT HTTP',
@@ -23,8 +29,15 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
 
 export default function HarvestPage() {
   const { tenant } = useParams();
-  const [showForm, setShowForm] = useState(false);
   const qc = useQueryClient();
+
+  const [showSourceForm, setShowSourceForm] = useState(false);
+  const [editingSource, setEditingSource] = useState<HarvestSource | null>(null);
+  const [deletingSourceId, setDeletingSourceId] = useState<string | null>(null);
+
+  const [showJobForm, setShowJobForm] = useState(false);
+  const [editingJob, setEditingJob] = useState<HarvestJob | null>(null);
+  const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
 
   const { data: sources = [] } = useQuery({
     queryKey: ['harvest-sources'],
@@ -41,19 +54,48 @@ export default function HarvestPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['harvest-jobs'] }),
   });
 
+  const deleteSourceMut = useMutation({
+    mutationFn: (id: string) => harvestSourceApi.delete(id),
+    onSuccess: () => {
+      setDeletingSourceId(null);
+      qc.invalidateQueries({ queryKey: ['harvest-sources'] });
+    },
+  });
+
+  const deleteJobMut = useMutation({
+    mutationFn: (id: string) => harvestJobApi.delete(id),
+    onSuccess: () => {
+      setDeletingJobId(null);
+      qc.invalidateQueries({ queryKey: ['harvest-jobs'] });
+    },
+  });
+
+  function closeSourceForm() {
+    setShowSourceForm(false);
+    setEditingSource(null);
+    qc.invalidateQueries({ queryKey: ['harvest-sources'] });
+  }
+
+  function closeJobForm() {
+    setShowJobForm(false);
+    setEditingJob(null);
+    qc.invalidateQueries({ queryKey: ['harvest-jobs'] });
+  }
+
   return (
     <Box>
       <PageHeader
         title="Harvest"
         description="Configure sources and schedule metadata harvests"
         actions={
-          <Button variant="contained" size="small" onClick={() => setShowForm(true)} sx={{ textTransform: 'none' }}>
+          <Button variant="contained" size="small" onClick={() => setShowSourceForm(true)} sx={{ textTransform: 'none' }}>
             + Add Source
           </Button>
         }
       />
 
       <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {/* Sources */}
         <Box>
           <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1.5 }}>Sources</Typography>
           <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
@@ -89,7 +131,10 @@ export default function HarvestPage() {
                         {src.baseUrl ?? src.databaseName ?? '—'}
                       </Typography>
                     </TableCell>
-                    <TableCell />
+                    <TableCell sx={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <Button size="small" onClick={() => setEditingSource(src)} sx={{ textTransform: 'none', mr: 1 }}>Edit</Button>
+                      <Button size="small" color="error" onClick={() => setDeletingSourceId(src.id)} sx={{ textTransform: 'none' }}>Delete</Button>
+                    </TableCell>
                   </TableRow>
                 ))}
                 {sources.length === 0 && (
@@ -102,8 +147,12 @@ export default function HarvestPage() {
           </Paper>
         </Box>
 
+        {/* Jobs */}
         <Box>
-          <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1.5 }}>Jobs</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+            <Typography variant="subtitle2" fontWeight={600}>Jobs</Typography>
+            <Button size="small" variant="outlined" onClick={() => setShowJobForm(true)} sx={{ textTransform: 'none' }}>+ Add Job</Button>
+          </Box>
           <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
             <Table size="small">
               <TableHead>
@@ -131,10 +180,10 @@ export default function HarvestPage() {
                         sx={{ height: 18, fontSize: 11 }}
                       />
                     </TableCell>
-                    <TableCell sx={{ textAlign: 'right' }}>
-                      <Button size="small" variant="outlined" onClick={() => triggerMut.mutate(job.id)} sx={{ textTransform: 'none' }}>
-                        Run Now
-                      </Button>
+                    <TableCell sx={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <Button size="small" variant="outlined" onClick={() => triggerMut.mutate(job.id)} sx={{ textTransform: 'none', mr: 1 }}>Run Now</Button>
+                      <Button size="small" onClick={() => setEditingJob(job)} sx={{ textTransform: 'none', mr: 1 }}>Edit</Button>
+                      <Button size="small" color="error" onClick={() => setDeletingJobId(job.id)} sx={{ textTransform: 'none' }}>Delete</Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -149,7 +198,55 @@ export default function HarvestPage() {
         </Box>
       </Box>
 
-      {showForm && <HarvestSourceForm onClose={() => { setShowForm(false); qc.invalidateQueries({ queryKey: ['harvest-sources'] }); }} />}
+      {/* Source form (create / edit) */}
+      {(showSourceForm || editingSource) && (
+        <HarvestSourceForm source={editingSource ?? undefined} onClose={closeSourceForm} />
+      )}
+
+      {/* Job form (create / edit) */}
+      {(showJobForm || editingJob) && (
+        <HarvestJobForm job={editingJob ?? undefined} onClose={closeJobForm} />
+      )}
+
+      {/* Delete source confirmation */}
+      <Dialog open={!!deletingSourceId} onClose={() => setDeletingSourceId(null)} maxWidth="xs">
+        <DialogTitle>Delete source?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">This will also remove all associated jobs and runs.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeletingSourceId(null)} sx={{ textTransform: 'none' }}>Cancel</Button>
+          <Button
+            color="error"
+            variant="contained"
+            disabled={deleteSourceMut.isPending}
+            onClick={() => deleteSourceMut.mutate(deletingSourceId!)}
+            sx={{ textTransform: 'none' }}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete job confirmation */}
+      <Dialog open={!!deletingJobId} onClose={() => setDeletingJobId(null)} maxWidth="xs">
+        <DialogTitle>Delete job?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">Associated run history will also be removed.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeletingJobId(null)} sx={{ textTransform: 'none' }}>Cancel</Button>
+          <Button
+            color="error"
+            variant="contained"
+            disabled={deleteJobMut.isPending}
+            onClick={() => deleteJobMut.mutate(deletingJobId!)}
+            sx={{ textTransform: 'none' }}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
