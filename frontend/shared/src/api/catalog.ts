@@ -3,7 +3,8 @@ import type {
   Catalog, Dataset, DataProduct, Distribution, CsvwColumn, PageResponse,
   LogicalModel, LogicalDataElement, LogicalElementVocabMapping,
   Vocabulary, DatasetVocabularyProfile, VocabularyConcept,
-  ColumnElementSuggestion, DatasetAuditEntry, LogicalElementAuditEntry, OwnershipProposal,
+  ColumnElementSuggestion, DatasetAuditEntry, LogicalElementAuditEntry,
+  LogicalModelAuditEntry, DatasetActivityEntry, OwnershipProposal,
   BulkRecommendationJob, DatasetSemanticContext, SemanticContextRecommendation,
   AcceptedSemanticTag, DashboardSummary, UserActivity, TermsOfUse,
   TermsPolicySet, TermsPolicyDetail, TermsClassificationRule,
@@ -54,6 +55,10 @@ export const datasetApi = {
     get<PageResponse<DatasetAuditEntry>>(`${BASE}/datasets/${id}/history?page=${page}&size=${size}`),
   getElementHistory: (id: string, page = 0, size = 20) =>
     get<PageResponse<LogicalElementAuditEntry>>(`${BASE}/datasets/${id}/element-history?page=${page}&size=${size}`),
+  getModelHistory: (id: string, page = 0, size = 20) =>
+    get<PageResponse<LogicalModelAuditEntry>>(`${BASE}/datasets/${id}/model-history?page=${page}&size=${size}`),
+  getActivity: (id: string, page = 0, size = 20) =>
+    get<PageResponse<DatasetActivityEntry>>(`${BASE}/datasets/${id}/activity?page=${page}&size=${size}`),
   // Semantic context
   getSemanticContext: (id: string) =>
     get<DatasetSemanticContext>(`${BASE}/datasets/${id}/semantic-context`),

@@ -43,9 +43,20 @@ export function computeDiff(
   });
 }
 
+function renderArrayItem(item: unknown): string {
+  if (item === null || item === undefined) return '—';
+  if (typeof item !== 'object') return String(item);
+  const obj = item as Record<string, unknown>;
+  const label = obj.conceptLabel ?? obj.name ?? obj.label ?? obj.title;
+  const iri = obj.conceptIri ?? obj.iri;
+  if (label != null) return iri != null ? `${label} (${iri})` : String(label);
+  if (iri != null) return String(iri);
+  return JSON.stringify(obj);
+}
+
 function renderValue(v: unknown): string {
   if (v === undefined || v === null) return '—';
-  if (Array.isArray(v)) return v.join(', ');
+  if (Array.isArray(v)) return v.length === 0 ? '(none)' : v.map(renderArrayItem).join(', ');
   if (typeof v === 'object') return JSON.stringify(v);
   return String(v);
 }

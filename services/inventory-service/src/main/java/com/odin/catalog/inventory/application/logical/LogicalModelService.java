@@ -45,6 +45,7 @@ public class LogicalModelService {
     private final DatasetRepository datasetRepository;
     private final DatasetSemanticTagRepository semanticTagRepository;
     private final LogicalElementAuditLogRepository elementAuditLogRepository;
+    private final LogicalModelAuditLogRepository modelAuditLogRepository;
     private final CatalogEventProducer eventProducer;
     private final VocabularyRepository vocabularyRepository;
     private final AiServiceClient aiServiceClient;
@@ -70,7 +71,9 @@ public class LogicalModelService {
         entity.setName(request.name());
         entity.setDescription(request.description());
         if (request.version() != null) entity.setVersion(request.version());
-        LogicalModelResponse result = toResponse(modelRepository.save(entity));
+        entity = modelRepository.save(entity);
+        LogicalModelResponse result = toResponse(entity);
+        auditModel(entity, "MODEL_CREATED", null, toModelAuditSnapshot(entity));
         log.info("action=LOGICAL_MODEL_CREATED modelId={} datasetId={} name={}", result.id(), datasetId, request.name());
         return result;
     }
@@ -78,9 +81,12 @@ public class LogicalModelService {
     @Transactional
     public LogicalModelResponse updateStatus(UUID id, String newStatus) {
         LogicalModelEntity entity = findModelOrThrow(id);
+        ModelAuditSnapshot before = toModelAuditSnapshot(entity);
         String previousStatus = entity.getStatus();
         entity.setStatus(newStatus);
-        LogicalModelResponse result = toResponse(modelRepository.save(entity));
+        entity = modelRepository.save(entity);
+        LogicalModelResponse result = toResponse(entity);
+        auditModel(entity, "MODEL_STATUS_CHANGED", before, toModelAuditSnapshot(entity));
         log.info("action=LOGICAL_MODEL_STATUS_CHANGED modelId={} datasetId={} from={} to={}",
             id, entity.getDatasetId(), previousStatus, newStatus);
         if ("published".equals(newStatus)) {
@@ -91,7 +97,10 @@ public class LogicalModelService {
 
     @Transactional
     public void delete(UUID id) {
+        LogicalModelEntity entity = findModelOrThrow(id);
+        ModelAuditSnapshot before = toModelAuditSnapshot(entity);
         modelRepository.deleteById(id);
+        auditModel(entity, "MODEL_DELETED", before, null);
         log.info("action=LOGICAL_MODEL_DELETED modelId={}", id);
     }
 
@@ -101,7 +110,9 @@ public class LogicalModelService {
         LogicalDataElementEntity entity = new LogicalDataElementEntity();
         entity.setLogicalModelId(modelId);
         applyElementRequest(entity, request);
-        LogicalDataElementResponse result = toElementResponse(elementRepository.save(entity));
+        entity = elementRepository.save(entity);
+        LogicalDataElementResponse result = toElementResponse(entity);
+        auditElement(entity, "ELEMENT_CREATED", null, result);
         log.info("action=ELEMENT_CREATED elementId={} modelId={} name={}", result.id(), modelId, request.name());
         return result;
     }
@@ -143,7 +154,10 @@ public class LogicalModelService {
 
     @Transactional
     public void deleteElement(UUID elementId) {
+        LogicalDataElementEntity entity = findElementOrThrow(elementId);
+        LogicalDataElementResponse before = toElementResponse(entity);
         elementRepository.deleteById(elementId);
+        auditElement(entity, "ELEMENT_DELETED", before, null);
         log.info("action=ELEMENT_DELETED elementId={}", elementId);
     }
 
@@ -918,6 +932,77 @@ public class LogicalModelService {
         return new VocabMappingResponse(
             m.getId(), m.getVocabularyId(), m.getConceptIri(),
             m.getConceptLabel(), m.getConceptDefinition(), m.getMatchType(), m.getCreatedAt()
+        );
+    }
+
+    // ── Model audit helpers ──────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public PageResponse<LogicalModelAuditResponse> getModelHistory(UUID datasetId, Pageable pageable) {
+        return PageResponse.of(
+            modelAuditLogRepository.findByDatasetIdOrderByCreatedAtDesc(datasetId, pageable)
+                .map(this::toModelAuditResponse)
+        );
+    }
+
+    @Transactional
+    public void auditModelAutoScaffold(UUID modelId, UUID datasetId, UUID tenantId, int elementCount) {
+        try {
+            LogicalModelAuditLogEntity entry = new LogicalModelAuditLogEntity();
+            entry.setLogicalModelId(modelId);
+            entry.setDatasetId(datasetId);
+            entry.setEventType("MODEL_AUTO_SCAFFOLDED");
+            entry.setPayloadAfter(toJsonAudit(Map.of("elementCount", elementCount, "source", "harvest")));
+            entry.setTenantId(tenantId);
+            modelAuditLogRepository.save(entry);
+        } catch (Exception e) {
+            log.warn("action=AUDIT_WRITE_FAILED modelId={} eventType=MODEL_AUTO_SCAFFOLDED error={}", modelId, e.getMessage());
+        }
+    }
+
+    private record ModelAuditSnapshot(UUID id, UUID datasetId, String name, String description, String version, String status) {}
+
+    private ModelAuditSnapshot toModelAuditSnapshot(LogicalModelEntity m) {
+        return new ModelAuditSnapshot(m.getId(), m.getDatasetId(), m.getName(), m.getDescription(), m.getVersion(), m.getStatus());
+    }
+
+    private void auditModel(LogicalModelEntity model, String eventType, Object before, Object after) {
+        try {
+            UserContext user = currentUser();
+            UUID tenantId = datasetRepository.findById(model.getDatasetId())
+                .map(d -> d.getTenantId()).orElse(null);
+            if (tenantId == null) return;
+            LogicalModelAuditLogEntity entry = new LogicalModelAuditLogEntity();
+            entry.setLogicalModelId(model.getId());
+            entry.setDatasetId(model.getDatasetId());
+            entry.setEventType(eventType);
+            entry.setChangedById(user.id());
+            entry.setChangedByEmail(user.email());
+            entry.setPayloadBefore(toJsonAudit(before));
+            entry.setPayloadAfter(toJsonAudit(after));
+            entry.setTenantId(tenantId);
+            modelAuditLogRepository.save(entry);
+        } catch (Exception e) {
+            log.warn("action=AUDIT_WRITE_FAILED modelId={} eventType={} error={}", model.getId(), eventType, e.getMessage());
+        }
+    }
+
+    private LogicalModelAuditResponse toModelAuditResponse(LogicalModelAuditLogEntity e) {
+        String modelName = null;
+        if (e.getPayloadAfter() != null) {
+            try {
+                modelName = objectMapper.readTree(e.getPayloadAfter()).path("name").asText(null);
+            } catch (Exception ignored) {}
+        }
+        if (modelName == null && e.getPayloadBefore() != null) {
+            try {
+                modelName = objectMapper.readTree(e.getPayloadBefore()).path("name").asText(null);
+            } catch (Exception ignored) {}
+        }
+        return new LogicalModelAuditResponse(
+            e.getId(), e.getLogicalModelId(), e.getDatasetId(),
+            modelName, e.getEventType(), e.getChangedById(), e.getChangedByEmail(),
+            e.getPayloadBefore(), e.getPayloadAfter(), e.getCreatedAt()
         );
     }
 
