@@ -1,11 +1,6 @@
 package com.odin.catalog.ai.tools;
 
 import com.odin.catalog.ai.client.CatalogServiceClient;
-import dev.langchain4j.model.ollama.OllamaChatModel;
-import dev.langchain4j.service.AiServices;
-import dev.langchain4j.service.SystemMessage;
-import dev.langchain4j.service.UserMessage;
-import dev.langchain4j.service.V;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -25,47 +20,21 @@ public class DatasetContextService {
 
     private static final Logger log = LoggerFactory.getLogger(DatasetContextService.class);
 
-    interface DatasetContextAgent {
-        @SystemMessage("""
-            You are a data catalog assistant. Use the available tools to retrieve complete \
-            information about the requested dataset and return a concise, factual summary. \
-            Always call getDatasetInfo first, then getLogicalElementsWithVocabulary. \
-            When the user asks to write, generate, or suggest a SQL query: \
-            - Call getQueryContext for EVERY dataset referenced in the query before writing any SQL. \
-            - Only use column names that appear in the retrieved schema. Never invent column names. \
-            - Each dataset block states its Platform. Generate SQL using only the syntax and \
-              built-in functions of that platform. \
-            - If the PLATFORM CONFLICT section is present, write one separate query per platform \
-              group — never a single SQL statement that mixes tables from different platforms. \
-            - Use the Join Hints section (if present) for join predicates. \
-            - If schema for a required dataset is not loaded, call findRelatedDatasets to locate it first. \
-            - If the user specifically asks for Snowflake SQL, call getSnowflakeQueryContext \
-              to get the Snowflake account, fully-qualified table name (DATABASE.SCHEMA.TABLE), \
-              and column schema before writing the query. \
-            Do not add commentary — return only the retrieved facts and any requested SQL.
-            """)
-        String gatherContext(@UserMessage @V("prompt") String prompt);
-    }
-
-    private final DatasetContextAgent agent;
     private final CatalogServiceClient catalogClient;
 
-    public DatasetContextService(OllamaChatModel ollamaChatModel,
-                                 DatasetContextTool contextTool,
-                                 SqlGenerationTool sqlTool,
-                                 CatalogServiceClient catalogClient) {
-        this.agent = AiServices.builder(DatasetContextAgent.class)
-            .chatLanguageModel(ollamaChatModel)
-            .tools(contextTool, sqlTool)
-            .build();
+    public DatasetContextService(CatalogServiceClient catalogClient) {
         this.catalogClient = catalogClient;
     }
 
     /**
-     * Builds focused context for one or more datasets.
-     * For a single dataset, delegates to the tool-chain agent (same as before).
-     * For multiple datasets, assembles schema blocks for each, performs platform resolution
-     * (single-platform header vs. PLATFORM CONFLICT warning), then appends join hints.
+     * Builds focused context for one or more datasets by deterministically assembling schema
+     * blocks via direct catalog-service calls. Previously, a single focused dataset was handled
+     * by an LLM tool-calling agent that decided whether to fetch dataset details — unreliable
+     * with local models that don't consistently invoke tools, leaving the chat with no context
+     * for the dataset the user had open. Always building the block directly guarantees the
+     * dataset's schema reaches the system prompt regardless of model tool-calling behavior.
+     * Performs platform resolution (single-platform header vs. PLATFORM CONFLICT warning for
+     * mixed platforms) and appends join hints derived from shared vocabulary concepts.
      */
     public String buildFocusedContext(List<String> datasetIds, String userQuery, String conversationId) {
         if (datasetIds == null || datasetIds.isEmpty()) return "";
@@ -73,10 +42,6 @@ public class DatasetContextService {
         List<String> ids = new ArrayList<>(new LinkedHashSet<>(datasetIds));
 
         MDC.put("conversationId", conversationId);
-
-        if (ids.size() == 1) {
-            return buildSingleDatasetContext(ids.get(0), userQuery, conversationId);
-        }
 
         try {
             log.info("step=MULTI_DATASET_CONTEXT_START datasetCount={} ids={}", ids.size(), ids);
@@ -143,35 +108,12 @@ public class DatasetContextService {
         }
     }
 
-    /** Single-dataset path: use the tool-chain agent (same as before). */
-    private String buildSingleDatasetContext(String datasetId, String userQuery, String conversationId) {
-        MDC.put("conversationId", conversationId);
-        DatasetIdContext.set(datasetId);
-        try {
-            log.info("step=TOOL_CHAIN_INVOKE datasetId={} agent=DatasetContextAgent", datasetId);
-            String result = agent.gatherContext(
-                "Retrieve information for dataset ID: " + datasetId +
-                ". The user is asking: " + userQuery
-            );
-            log.info("step=TOOL_CHAIN_COMPLETE datasetId={} result.length={}", datasetId, result.length());
-            return result;
-        } catch (Exception e) {
-            log.warn("step=TOOL_CHAIN_ERROR datasetId={} error={}", datasetId, e.getMessage());
-            return "";
-        } finally {
-            DatasetIdContext.clear();
-            MDC.remove("conversationId");
-        }
-    }
-
     /**
      * Assembles a schema block for one dataset: summary, logical model, distribution,
      * physical columns. Detects the platform from the selected distribution.
      */
     private DatasetSchemaBlock buildSchemaBlock(String datasetId, String userQuery) {
         try {
-            DatasetIdContext.set(datasetId);
-
             CatalogServiceClient.DatasetSummary ds = catalogClient.getDataset(datasetId);
             String title = ds != null ? ds.title() : datasetId;
 
@@ -232,8 +174,6 @@ public class DatasetContextService {
         } catch (Exception e) {
             log.warn("step=SCHEMA_BLOCK_ERROR datasetId={} error={}", datasetId, e.getMessage());
             return null;
-        } finally {
-            DatasetIdContext.clear();
         }
     }
 
