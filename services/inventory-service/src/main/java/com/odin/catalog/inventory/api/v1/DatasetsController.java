@@ -3,6 +3,7 @@ package com.odin.catalog.inventory.api.v1;
 import com.odin.catalog.inventory.api.v1.dto.AssignOwnerRequest;
 import com.odin.catalog.inventory.api.v1.dto.DatasetAuditResponse;
 import com.odin.catalog.inventory.api.v1.dto.DatasetRequest;
+import com.odin.catalog.inventory.api.v1.dto.LogicalElementAuditResponse;
 import com.odin.catalog.inventory.api.v1.dto.DatasetResponse;
 import com.odin.catalog.inventory.api.v1.dto.DatasetSemanticContext;
 import com.odin.catalog.inventory.api.v1.dto.DatasetSemanticTagRequest;
@@ -222,6 +223,20 @@ public class DatasetsController {
             @Parameter(description = "Dataset UUID") @PathVariable UUID id,
             @PageableDefault(size = 20) Pageable pageable) {
         return datasetService.getHistory(id, pageable);
+    }
+
+    @Operation(summary = "Get logical element change history for a dataset",
+        description = "Returns a reverse-chronological paginated list of audit log entries for all logical data element mutations within the dataset.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Element audit entries"),
+        @ApiResponse(responseCode = "404", description = "Dataset not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @GetMapping("/{id}/element-history")
+    public PageResponse<LogicalElementAuditResponse> getElementHistory(
+            @Parameter(description = "Dataset UUID") @PathVariable UUID id,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return datasetService.getElementHistory(id, pageable);
     }
 
     // ── Ownership transfer proposals ──────────────────────────────────────────

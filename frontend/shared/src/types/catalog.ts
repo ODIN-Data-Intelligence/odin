@@ -151,6 +151,20 @@ export interface DatasetAuditEntry {
   createdAt: string;
 }
 
+export interface LogicalElementAuditEntry {
+  id: string;
+  logicalElementId: string;
+  logicalModelId: string;
+  datasetId: string;
+  elementName?: string;
+  eventType: string;
+  changedById?: string;
+  changedByEmail?: string;
+  payloadBefore?: string;
+  payloadAfter?: string;
+  createdAt: string;
+}
+
 export interface OwnershipProposal {
   id: string;
   datasetId: string;

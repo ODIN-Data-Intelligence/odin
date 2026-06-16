@@ -3,7 +3,7 @@ import type {
   Catalog, Dataset, DataProduct, Distribution, CsvwColumn, PageResponse,
   LogicalModel, LogicalDataElement, LogicalElementVocabMapping,
   Vocabulary, DatasetVocabularyProfile, VocabularyConcept,
-  ColumnElementSuggestion, DatasetAuditEntry, OwnershipProposal,
+  ColumnElementSuggestion, DatasetAuditEntry, LogicalElementAuditEntry, OwnershipProposal,
   BulkRecommendationJob, DatasetSemanticContext, SemanticContextRecommendation,
   AcceptedSemanticTag, DashboardSummary, UserActivity, TermsOfUse,
   TermsPolicySet, TermsPolicyDetail, TermsClassificationRule,
@@ -52,6 +52,8 @@ export const datasetApi = {
   // Audit history
   getHistory: (id: string, page = 0, size = 20) =>
     get<PageResponse<DatasetAuditEntry>>(`${BASE}/datasets/${id}/history?page=${page}&size=${size}`),
+  getElementHistory: (id: string, page = 0, size = 20) =>
+    get<PageResponse<LogicalElementAuditEntry>>(`${BASE}/datasets/${id}/element-history?page=${page}&size=${size}`),
   // Semantic context
   getSemanticContext: (id: string) =>
     get<DatasetSemanticContext>(`${BASE}/datasets/${id}/semantic-context`),

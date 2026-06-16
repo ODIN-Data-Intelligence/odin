@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.odin.catalog.inventory.api.v1.dto.DatasetAuditResponse;
 import com.odin.catalog.inventory.api.v1.dto.DatasetRequest;
 import com.odin.catalog.inventory.api.v1.dto.DatasetResponse;
+import com.odin.catalog.inventory.api.v1.dto.LogicalElementAuditResponse;
 import com.odin.catalog.inventory.api.v1.dto.OwnershipProposalResponse;
 import com.odin.catalog.inventory.api.v1.dto.PageResponse;
 import com.odin.catalog.inventory.infrastructure.jpa.entity.DatasetAuditLogEntity;
@@ -43,6 +44,7 @@ public class DatasetService {
     private final OwnershipProposalRepository proposalRepository;
     private final CatalogEventProducer eventProducer;
     private final ObjectMapper objectMapper;
+    private final com.odin.catalog.inventory.application.logical.LogicalModelService logicalModelService;
 
     @Transactional(readOnly = true)
     public PageResponse<DatasetResponse> list(UUID catalogId, String sourceUri, Pageable pageable) {
@@ -223,6 +225,12 @@ public class DatasetService {
         findOrThrow(datasetId);
         var page = auditLogRepository.findByDatasetIdOrderByCreatedAtDesc(datasetId, pageable);
         return PageResponse.of(page.map(this::toAuditResponse));
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<LogicalElementAuditResponse> getElementHistory(UUID datasetId, Pageable pageable) {
+        findOrThrow(datasetId);
+        return logicalModelService.getElementHistory(datasetId, pageable);
     }
 
     // ── Internal helpers ─────────────────────────────────────────────────────
