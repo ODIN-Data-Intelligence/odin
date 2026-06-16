@@ -68,7 +68,7 @@ export default function DataProductDetailPage() {
         {activeTab === 'Overview' && (
           <Box sx={{ maxWidth: 640, display: 'flex', flexDirection: 'column', gap: 2 }}>
             {dp.description && <Typography variant="body2" color="text.secondary">{dp.description}</Typography>}
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
               <DlItem label="Updated" value={formatDate(dp.updatedAt)} />
               <DlItem label="Sensitivity" value={dp.informationSensitivity ?? '—'} />
               {dp.purpose && <DlItem label="Purpose" value={dp.purpose} />}

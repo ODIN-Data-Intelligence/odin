@@ -15,7 +15,7 @@ import Skeleton from '@mui/material/Skeleton';
 import Divider from '@mui/material/Divider';
 import CloseIcon from '@mui/icons-material/Close';
 import ShareIcon from '@mui/icons-material/Share';
-import { datasetApi, dataProductApi, lineageApi, userApi, iriFragment, useIriTranslations } from '@datacatalog/shared';
+import { datasetApi, dataProductApi, lineageApi, userApi, iriFragment, useIriTranslations, useIsMobile } from '@datacatalog/shared';
 import type { DataProduct } from '@datacatalog/shared';
 import { useDrawerStore } from '../store/drawerStore';
 import DistributionsTab from './DistributionsTab';
@@ -45,6 +45,7 @@ type DrawerTab = 'overview' | 'distributions' | 'schema' | 'lineage' | 'terms' |
 export default function DatasetDetailDrawer() {
   const { openDatasetId, openEntityType, activeTab, openDataset, closeDrawer, setTab } = useDrawerStore();
   const [searchParams, setSearchParams] = useSearchParams();
+  const isMobile = useIsMobile();
 
   const isDataProduct = openEntityType === 'DATA_PRODUCT';
   const TABS = isDataProduct ? DATA_PRODUCT_TABS : DATASET_TABS;
@@ -129,8 +130,9 @@ export default function DatasetDetailDrawer() {
       anchor="right"
       open={!!openDatasetId}
       onClose={closeDrawer}
-      variant="persistent"
-      PaperProps={{ sx: { width: '45%', minWidth: 360, display: 'flex', flexDirection: 'column' } }}
+      variant={isMobile ? 'temporary' : 'persistent'}
+      ModalProps={isMobile ? { keepMounted: true } : undefined}
+      PaperProps={{ sx: { width: { xs: '100vw', md: '45%' }, minWidth: { xs: 0, md: 360 }, display: 'flex', flexDirection: 'column' } }}
     >
       {/* Header */}
       <Box sx={{ px: 2.5, pt: 2, pb: 0, borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper', position: 'sticky', top: 0, zIndex: 1 }}>
@@ -233,7 +235,7 @@ export default function DatasetDetailDrawer() {
                   </Box>
                 )}
 
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
                   {entity.ownerId && (
                     <Box sx={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 1.5 }}>
                       <Box sx={{ width: 32, height: 32, borderRadius: '50%', bgcolor: 'primary.100', color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 13, flexShrink: 0 }}>

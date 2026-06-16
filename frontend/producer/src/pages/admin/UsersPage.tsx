@@ -76,8 +76,8 @@ export default function UsersPage() {
         {isError && <Alert severity="error">Failed to load users.</Alert>}
 
         {!isLoading && !isError && (
-          <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
-            <Table size="small">
+          <Paper variant="outlined" sx={{ overflow: 'auto' }}>
+            <Table size="small" sx={{ minWidth: 680 }}>
               <TableHead>
                 <TableRow sx={{ bgcolor: 'grey.50' }}>
                   <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>User</TableCell>

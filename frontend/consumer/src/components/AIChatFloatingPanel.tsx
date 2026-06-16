@@ -132,7 +132,7 @@ export default function AIChatFloatingPanel({ open, onClose }: AIChatFloatingPan
   ];
 
   return (
-    <Drawer anchor="right" open={open} onClose={onClose} sx={{ zIndex: (theme) => theme.zIndex.tooltip + 1 }} PaperProps={{ sx: { width: 480 } }}>
+    <Drawer anchor="right" open={open} onClose={onClose} sx={{ zIndex: (theme) => theme.zIndex.tooltip + 1 }} PaperProps={{ sx: { width: { xs: '100vw', sm: 480 }, maxWidth: '100vw' } }}>
       <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
         {/* Header */}
         <Box sx={{ px: 2, py: 1.5, bgcolor: 'primary.main', color: 'primary.contrastText', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

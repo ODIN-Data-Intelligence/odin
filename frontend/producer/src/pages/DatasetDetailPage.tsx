@@ -203,7 +203,7 @@ function OverviewTab({ dataset }: { dataset: Dataset }) {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
         <DlItem label="Updated" value={formatDate(dataset.updatedAt)} />
         {dataset.version && <DlItem label="Version" value={dataset.version} />}
         {dataset.accrualPeriodicity && <DlItem label="Accrual Periodicity" value={t(dataset.accrualPeriodicity)} />}
@@ -288,7 +288,7 @@ function DistributionForm({ datasetId, onSuccess, onCancel }: { datasetId: strin
   return (
     <Paper variant="outlined" sx={{ p: 2, bgcolor: 'grey.50', display: 'flex', flexDirection: 'column', gap: 2 }}>
       <Typography variant="body2" fontWeight={600}>Add Distribution</Typography>
-      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
         <TextField {...register('title')} label="Title" size="small" fullWidth placeholder="Snowflake table endpoint" />
         <Controller
           name="format"
@@ -305,7 +305,7 @@ function DistributionForm({ datasetId, onSuccess, onCancel }: { datasetId: strin
         />
       </Box>
       <TextField {...register('description')} label="Description" size="small" fullWidth multiline rows={2} placeholder="Optional description…" />
-      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
         <TextField {...register('mediaType')} label="Media Type" size="small" fullWidth placeholder="application/json" />
         <TextField {...register('accessUrl')} label="Access URL" size="small" fullWidth placeholder="https://…" />
       </Box>

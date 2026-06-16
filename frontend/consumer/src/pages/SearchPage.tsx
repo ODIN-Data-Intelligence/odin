@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { useSearchParams, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import Box from '@mui/material/Box';
@@ -7,7 +7,10 @@ import Skeleton from '@mui/material/Skeleton';
 import Pagination from '@mui/material/Pagination';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
-import { searchApi } from '@datacatalog/shared';
+import Drawer from '@mui/material/Drawer';
+import Button from '@mui/material/Button';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import { searchApi, useIsMobile } from '@datacatalog/shared';
 import SearchBar from '../components/SearchBar';
 import FacetPanel from '../components/FacetPanel';
 import DatasetSummaryCard from '../components/DatasetSummaryCard';
@@ -23,6 +26,8 @@ export default function SearchPage() {
   const { id: pathDatasetId } = useParams<{ id: string }>();
   const { query, filters, page, size, setQuery, setPage, setSize } = useSearchStore();
   const { openDatasetId, openDataset } = useDrawerStore();
+  const isMobile = useIsMobile();
+  const [facetsOpen, setFacetsOpen] = useState(false);
 
   useEffect(() => {
     const urlQ = searchParams.get('q');
@@ -48,25 +53,40 @@ export default function SearchPage() {
   const lastItem = Math.min((page + 1) * size, total);
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden', flexDirection: 'column' }}>
+    <Box sx={{ display: 'flex', height: '100%', overflow: 'hidden', flexDirection: 'column' }}>
       {/* Top bar */}
-      <Box sx={{ bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider', px: 3, py: 1.5, display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+      <Box sx={{ bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider', px: { xs: 1.5, md: 3 }, py: 1.5, display: 'flex', alignItems: 'center', gap: { xs: 1, md: 2 }, flexShrink: 0 }}>
+        {isMobile && (
+          <Button
+            onClick={() => setFacetsOpen(true)}
+            startIcon={<FilterListIcon />}
+            size="small"
+            variant="outlined"
+            sx={{ flexShrink: 0, textTransform: 'none' }}
+          >
+            Filters
+          </Button>
+        )}
         <Box sx={{ flex: 1, maxWidth: 640 }}>
           <SearchBar ref={searchBarRef} />
         </Box>
-        <Typography variant="body2" color="text.secondary" sx={{ flexShrink: 0, minWidth: 80, textAlign: 'right' }}>
-          {isLoading ? 'Searching…' : total > 0 ? `${total.toLocaleString()} results` : ''}
-        </Typography>
+        {!isMobile && (
+          <Typography variant="body2" color="text.secondary" sx={{ flexShrink: 0, minWidth: 80, textAlign: 'right' }}>
+            {isLoading ? 'Searching…' : total > 0 ? `${total.toLocaleString()} results` : ''}
+          </Typography>
+        )}
       </Box>
 
       {/* Body */}
       <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* Facets + Results */}
-        <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden', width: openDatasetId ? '50%' : '100%' }}>
-          {/* Facets sidebar */}
-          <Box sx={{ width: 240, flexShrink: 0, borderRight: 1, borderColor: 'divider', bgcolor: 'grey.50', overflowY: 'auto', px: 2, py: 2.5 }}>
-            <FacetPanel facets={facets} />
-          </Box>
+        <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden', width: openDatasetId && !isMobile ? '50%' : '100%' }}>
+          {/* Facets sidebar — inline on desktop, drawer on mobile */}
+          {!isMobile && (
+            <Box sx={{ width: 240, flexShrink: 0, borderRight: 1, borderColor: 'divider', bgcolor: 'grey.50', overflowY: 'auto', px: 2, py: 2.5 }}>
+              <FacetPanel facets={facets} />
+            </Box>
+          )}
 
           {/* Results column: scrollable list + fixed pagination bar */}
           <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -143,6 +163,19 @@ export default function SearchPage() {
         {/* Drawer */}
         {openDatasetId && <DatasetDetailDrawer />}
       </Box>
+
+      {/* Mobile facets drawer */}
+      {isMobile && (
+        <Drawer
+          anchor="left"
+          open={facetsOpen}
+          onClose={() => setFacetsOpen(false)}
+          ModalProps={{ keepMounted: true }}
+          PaperProps={{ sx: { width: 280, maxWidth: '85vw', bgcolor: 'grey.50', px: 2, py: 2.5, overflowY: 'auto' } }}
+        >
+          <FacetPanel facets={facets} />
+        </Drawer>
+      )}
     </Box>
   );
 }

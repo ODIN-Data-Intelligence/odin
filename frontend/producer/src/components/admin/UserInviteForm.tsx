@@ -52,7 +52,7 @@ export default function UserInviteForm({ onClose }: Props) {
             helperText={errors.email?.message}
           />
 
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
             <TextField {...register('firstName')} label="First name" size="small" fullWidth placeholder="Jane" />
             <TextField {...register('lastName')} label="Last name" size="small" fullWidth placeholder="Smith" />
           </Box>

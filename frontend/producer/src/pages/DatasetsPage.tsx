@@ -13,11 +13,12 @@ import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
 import Button from '@mui/material/Button';
 import Skeleton from '@mui/material/Skeleton';
-import { datasetApi, useIriTranslations, iriFragment, PageHeader } from '@datacatalog/shared';
+import { datasetApi, useIriTranslations, iriFragment, PageHeader, useIsMobile } from '@datacatalog/shared';
 import { formatDate } from '../lib/utils';
 
 export default function DatasetsPage() {
   const { tenant } = useParams();
+  const isMobile = useIsMobile();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 20;
@@ -66,6 +67,52 @@ export default function DatasetsPage() {
           fullWidth
         />
 
+        {isMobile ? (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {isLoading && [...Array(5)].map((_, i) => <Skeleton key={i} variant="rounded" height={92} />)}
+            {!isLoading && filtered.map(ds => (
+              <Paper key={ds.id} variant="outlined" sx={{ p: 1.5 }}>
+                <Typography
+                  component={Link}
+                  to={`/${tenant}/datasets/${ds.id}`}
+                  variant="body2"
+                  fontWeight={600}
+                  color="primary"
+                  sx={{ textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+                >
+                  {ds.title}
+                </Typography>
+                {ds.description && (
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', mt: 0.25 }}
+                  >
+                    {ds.description}
+                  </Typography>
+                )}
+                {(ds.keywords ?? []).length > 0 && (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.75 }}>
+                    {(ds.keywords ?? []).slice(0, 3).map(kw => (
+                      <Chip key={kw} label={kw} size="small" variant="outlined" sx={{ height: 18, fontSize: 11 }} />
+                    ))}
+                  </Box>
+                )}
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.75 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    {ds.accrualPeriodicity ? tFreq(ds.accrualPeriodicity) : '—'}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">{formatDate(ds.updatedAt)}</Typography>
+                </Box>
+              </Paper>
+            ))}
+            {!isLoading && filtered.length === 0 && (
+              <Typography variant="body2" sx={{ textAlign: 'center', py: 5, color: 'text.disabled' }}>
+                {search ? 'No datasets match your filter.' : 'No datasets found.'}
+              </Typography>
+            )}
+          </Box>
+        ) : (
         <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
           <Table size="small">
             <TableHead>
@@ -134,6 +181,7 @@ export default function DatasetsPage() {
             </TableBody>
           </Table>
         </Paper>
+        )}
 
         {totalPages > 1 && (
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 2 }}>
