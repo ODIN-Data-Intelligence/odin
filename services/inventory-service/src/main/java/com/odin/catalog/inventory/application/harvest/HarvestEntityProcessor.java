@@ -1,5 +1,6 @@
 package com.odin.catalog.inventory.application.harvest;
 
+import com.odin.catalog.inventory.application.logical.LogicalModelService;
 import com.odin.catalog.inventory.infrastructure.jpa.entity.*;
 import com.odin.catalog.inventory.infrastructure.jpa.repository.*;
 import com.odin.catalog.inventory.infrastructure.kafka.CatalogEventProducer;
@@ -27,6 +28,7 @@ public class HarvestEntityProcessor {
     private final LogicalDataElementRepository elementRepository;
     private final CsvwColumnRepository columnRepository;
     private final CatalogEventProducer eventProducer;
+    private final LogicalModelService logicalModelService;
 
     @Transactional
     public void process(HarvestEntityDiscoveredPayload payload) {
@@ -154,6 +156,9 @@ public class HarvestEntityProcessor {
             col.setLogicalDataElementId(element.getId());
             columnRepository.save(col);
         }
+
+        datasetRepository.findById(datasetId).ifPresent(ds ->
+            logicalModelService.auditModelAutoScaffold(modelId, datasetId, ds.getTenantId(), columns.size()));
     }
 
     private String inferLogicalType(String sqlType) {

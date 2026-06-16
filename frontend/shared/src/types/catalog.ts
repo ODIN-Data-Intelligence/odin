@@ -151,6 +151,48 @@ export interface DatasetAuditEntry {
   createdAt: string;
 }
 
+export interface LogicalElementAuditEntry {
+  id: string;
+  logicalElementId: string;
+  logicalModelId: string;
+  datasetId: string;
+  elementName?: string;
+  eventType: string;
+  changedById?: string;
+  changedByEmail?: string;
+  payloadBefore?: string;
+  payloadAfter?: string;
+  createdAt: string;
+}
+
+export interface LogicalModelAuditEntry {
+  id: string;
+  logicalModelId: string;
+  datasetId: string;
+  modelName?: string;
+  eventType: string;
+  changedById?: string;
+  changedByEmail?: string;
+  payloadBefore?: string;
+  payloadAfter?: string;
+  createdAt: string;
+}
+
+export interface DatasetActivityEntry {
+  id: string;
+  scope: 'DATASET' | 'MODEL' | 'ELEMENT';
+  datasetId: string;
+  logicalModelId?: string;
+  logicalElementId?: string;
+  entityName?: string;
+  eventType: string;
+  changedById?: string;
+  changedByEmail?: string;
+  payloadBefore?: string;
+  payloadAfter?: string;
+  createdAt: string;
+}
+
 export interface OwnershipProposal {
   id: string;
   datasetId: string;

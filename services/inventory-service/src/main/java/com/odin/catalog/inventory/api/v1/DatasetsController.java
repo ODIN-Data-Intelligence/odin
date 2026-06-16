@@ -1,8 +1,11 @@
 package com.odin.catalog.inventory.api.v1;
 
 import com.odin.catalog.inventory.api.v1.dto.AssignOwnerRequest;
+import com.odin.catalog.inventory.api.v1.dto.DatasetActivityResponse;
 import com.odin.catalog.inventory.api.v1.dto.DatasetAuditResponse;
 import com.odin.catalog.inventory.api.v1.dto.DatasetRequest;
+import com.odin.catalog.inventory.api.v1.dto.LogicalElementAuditResponse;
+import com.odin.catalog.inventory.api.v1.dto.LogicalModelAuditResponse;
 import com.odin.catalog.inventory.api.v1.dto.DatasetResponse;
 import com.odin.catalog.inventory.api.v1.dto.DatasetSemanticContext;
 import com.odin.catalog.inventory.api.v1.dto.DatasetSemanticTagRequest;
@@ -222,6 +225,48 @@ public class DatasetsController {
             @Parameter(description = "Dataset UUID") @PathVariable UUID id,
             @PageableDefault(size = 20) Pageable pageable) {
         return datasetService.getHistory(id, pageable);
+    }
+
+    @Operation(summary = "Get logical element change history for a dataset",
+        description = "Returns a reverse-chronological paginated list of audit log entries for all logical data element mutations within the dataset.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Element audit entries"),
+        @ApiResponse(responseCode = "404", description = "Dataset not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @GetMapping("/{id}/element-history")
+    public PageResponse<LogicalElementAuditResponse> getElementHistory(
+            @Parameter(description = "Dataset UUID") @PathVariable UUID id,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return datasetService.getElementHistory(id, pageable);
+    }
+
+    @Operation(summary = "Get logical model change history for a dataset",
+        description = "Returns a reverse-chronological paginated list of audit log entries for logical model lifecycle mutations (create, status change, delete, auto-scaffold) within the dataset.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Model audit entries"),
+        @ApiResponse(responseCode = "404", description = "Dataset not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @GetMapping("/{id}/model-history")
+    public PageResponse<LogicalModelAuditResponse> getModelHistory(
+            @Parameter(description = "Dataset UUID") @PathVariable UUID id,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return datasetService.getModelHistory(id, pageable);
+    }
+
+    @Operation(summary = "Get unified activity timeline for a dataset",
+        description = "Returns a single reverse-chronological paginated feed merging dataset, logical model, and logical element audit events for this dataset, each tagged with a scope.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Activity entries"),
+        @ApiResponse(responseCode = "404", description = "Dataset not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @GetMapping("/{id}/activity")
+    public PageResponse<DatasetActivityResponse> getActivity(
+            @Parameter(description = "Dataset UUID") @PathVariable UUID id,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return datasetService.getActivity(id, pageable);
     }
 
     // ── Ownership transfer proposals ──────────────────────────────────────────

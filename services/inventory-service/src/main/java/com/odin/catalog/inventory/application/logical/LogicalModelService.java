@@ -1,5 +1,6 @@
 package com.odin.catalog.inventory.application.logical;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.odin.catalog.inventory.api.v1.dto.*;
@@ -12,10 +13,15 @@ import com.odin.catalog.inventory.infrastructure.ai.AiServiceClient.VocabInfo;
 import com.odin.catalog.inventory.infrastructure.jpa.entity.*;
 import com.odin.catalog.inventory.infrastructure.jpa.repository.*;
 import com.odin.catalog.inventory.infrastructure.kafka.CatalogEventProducer;
+import com.odin.catalog.shared.auth.filter.ApiKeyAuthenticationFilter.ApiKeyPrincipal;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +44,8 @@ public class LogicalModelService {
     private final CsvwColumnRepository columnRepository;
     private final DatasetRepository datasetRepository;
     private final DatasetSemanticTagRepository semanticTagRepository;
+    private final LogicalElementAuditLogRepository elementAuditLogRepository;
+    private final LogicalModelAuditLogRepository modelAuditLogRepository;
     private final CatalogEventProducer eventProducer;
     private final VocabularyRepository vocabularyRepository;
     private final AiServiceClient aiServiceClient;
@@ -63,7 +71,9 @@ public class LogicalModelService {
         entity.setName(request.name());
         entity.setDescription(request.description());
         if (request.version() != null) entity.setVersion(request.version());
-        LogicalModelResponse result = toResponse(modelRepository.save(entity));
+        entity = modelRepository.save(entity);
+        LogicalModelResponse result = toResponse(entity);
+        auditModel(entity, "MODEL_CREATED", null, toModelAuditSnapshot(entity));
         log.info("action=LOGICAL_MODEL_CREATED modelId={} datasetId={} name={}", result.id(), datasetId, request.name());
         return result;
     }
@@ -71,9 +81,12 @@ public class LogicalModelService {
     @Transactional
     public LogicalModelResponse updateStatus(UUID id, String newStatus) {
         LogicalModelEntity entity = findModelOrThrow(id);
+        ModelAuditSnapshot before = toModelAuditSnapshot(entity);
         String previousStatus = entity.getStatus();
         entity.setStatus(newStatus);
-        LogicalModelResponse result = toResponse(modelRepository.save(entity));
+        entity = modelRepository.save(entity);
+        LogicalModelResponse result = toResponse(entity);
+        auditModel(entity, "MODEL_STATUS_CHANGED", before, toModelAuditSnapshot(entity));
         log.info("action=LOGICAL_MODEL_STATUS_CHANGED modelId={} datasetId={} from={} to={}",
             id, entity.getDatasetId(), previousStatus, newStatus);
         if ("published".equals(newStatus)) {
@@ -84,7 +97,10 @@ public class LogicalModelService {
 
     @Transactional
     public void delete(UUID id) {
+        LogicalModelEntity entity = findModelOrThrow(id);
+        ModelAuditSnapshot before = toModelAuditSnapshot(entity);
         modelRepository.deleteById(id);
+        auditModel(entity, "MODEL_DELETED", before, null);
         log.info("action=LOGICAL_MODEL_DELETED modelId={}", id);
     }
 
@@ -94,7 +110,9 @@ public class LogicalModelService {
         LogicalDataElementEntity entity = new LogicalDataElementEntity();
         entity.setLogicalModelId(modelId);
         applyElementRequest(entity, request);
-        LogicalDataElementResponse result = toElementResponse(elementRepository.save(entity));
+        entity = elementRepository.save(entity);
+        LogicalDataElementResponse result = toElementResponse(entity);
+        auditElement(entity, "ELEMENT_CREATED", null, result);
         log.info("action=ELEMENT_CREATED elementId={} modelId={} name={}", result.id(), modelId, request.name());
         return result;
     }
@@ -108,10 +126,12 @@ public class LogicalModelService {
     @Transactional
     public LogicalDataElementResponse updateElement(UUID elementId, LogicalDataElementRequest request) {
         LogicalDataElementEntity entity = findElementOrThrow(elementId);
+        LogicalDataElementResponse before = toElementResponse(entity);
         applyElementRequest(entity, request);
-        LogicalDataElementResponse result = toElementResponse(elementRepository.save(entity));
+        LogicalDataElementResponse after = toElementResponse(elementRepository.save(entity));
+        auditElement(entity, "UPDATED", before, after);
         log.info("action=ELEMENT_UPDATED elementId={} name={}", elementId, request.name());
-        return result;
+        return after;
     }
 
     @Transactional
@@ -134,13 +154,17 @@ public class LogicalModelService {
 
     @Transactional
     public void deleteElement(UUID elementId) {
+        LogicalDataElementEntity entity = findElementOrThrow(elementId);
+        LogicalDataElementResponse before = toElementResponse(entity);
         elementRepository.deleteById(elementId);
+        auditElement(entity, "ELEMENT_DELETED", before, null);
         log.info("action=ELEMENT_DELETED elementId={}", elementId);
     }
 
     @Transactional
     public VocabMappingResponse addVocabMapping(UUID elementId, VocabMappingRequest request) {
         LogicalDataElementEntity element = findElementOrThrow(elementId);
+        LogicalDataElementResponse before = toElementResponse(element);
         VocabMappingEntity entity = new VocabMappingEntity();
         entity.setLogicalElementId(elementId);
         entity.setVocabularyId(request.vocabularyId());
@@ -152,6 +176,7 @@ public class LogicalModelService {
         modelRepository.findById(element.getLogicalModelId())
             .map(LogicalModelEntity::getDatasetId)
             .ifPresent(this::publishSemanticUpdate);
+        auditElement(element, "VOCAB_MAPPING_ADDED", before, toElementResponse(findElementOrThrow(elementId)));
         log.info("action=VOCAB_MAPPING_ADDED mappingId={} elementId={} conceptIri={} matchType={}",
             response.id(), elementId, request.conceptIri(), entity.getMatchType());
         return response;
@@ -165,13 +190,18 @@ public class LogicalModelService {
 
     @Transactional
     public void deleteVocabMapping(UUID mappingId) {
-        UUID datasetId = mappingRepository.findById(mappingId)
-            .flatMap(m -> elementRepository.findById(m.getLogicalElementId()))
-            .flatMap(e -> modelRepository.findById(e.getLogicalModelId()))
-            .map(LogicalModelEntity::getDatasetId)
-            .orElse(null);
+        VocabMappingEntity mapping = mappingRepository.findById(mappingId).orElse(null);
+        LogicalDataElementEntity element = mapping != null
+            ? elementRepository.findById(mapping.getLogicalElementId()).orElse(null) : null;
+        LogicalDataElementResponse before = element != null ? toElementResponse(element) : null;
+        UUID datasetId = element != null
+            ? modelRepository.findById(element.getLogicalModelId()).map(LogicalModelEntity::getDatasetId).orElse(null)
+            : null;
         mappingRepository.deleteById(mappingId);
         if (datasetId != null) publishSemanticUpdate(datasetId);
+        if (element != null) {
+            auditElement(element, "VOCAB_MAPPING_DELETED", before, toElementResponse(findElementOrThrow(element.getId())));
+        }
         log.info("action=VOCAB_MAPPING_DELETED mappingId={}", mappingId);
     }
 
@@ -344,23 +374,29 @@ public class LogicalModelService {
         if (entity.getRecommendedClassification() == null) {
             throw new NoSuchElementException("No pending recommendation for element: " + elementId);
         }
+        LogicalDataElementResponse before = toElementResponse(entity);
         String classification = entity.getRecommendedClassification();
         entity.setClassification(classification);
         entity.setRecommendedClassification(null);
         entity.setClassificationReasoning(null);
         entity.setClassificationRecommendedAt(null);
+        LogicalDataElementResponse after = toElementResponse(elementRepository.save(entity));
+        auditElement(entity, "CLASSIFICATION_ACCEPTED", before, after);
         log.info("action=CLASSIFICATION_ACCEPTED elementId={} classification={}", elementId, classification);
-        return toElementResponse(elementRepository.save(entity));
+        return after;
     }
 
     @Transactional
     public LogicalDataElementResponse rejectClassification(UUID elementId) {
         LogicalDataElementEntity entity = findElementOrThrow(elementId);
+        LogicalDataElementResponse before = toElementResponse(entity);
         entity.setRecommendedClassification(null);
         entity.setClassificationReasoning(null);
         entity.setClassificationRecommendedAt(null);
+        LogicalDataElementResponse after = toElementResponse(elementRepository.save(entity));
+        auditElement(entity, "CLASSIFICATION_REJECTED", before, after);
         log.info("action=CLASSIFICATION_REJECTED elementId={}", elementId);
-        return toElementResponse(elementRepository.save(entity));
+        return after;
     }
 
     public LogicalDataElementResponse recommendDescription(UUID elementId) {
@@ -391,22 +427,28 @@ public class LogicalModelService {
         if (entity.getRecommendedDescription() == null) {
             throw new NoSuchElementException("No pending description recommendation for element: " + elementId);
         }
+        LogicalDataElementResponse before = toElementResponse(entity);
         entity.setDescription(entity.getRecommendedDescription());
         entity.setRecommendedDescription(null);
         entity.setDescriptionReasoning(null);
         entity.setDescriptionRecommendedAt(null);
+        LogicalDataElementResponse after = toElementResponse(elementRepository.save(entity));
+        auditElement(entity, "DESCRIPTION_ACCEPTED", before, after);
         log.info("action=DESCRIPTION_ACCEPTED elementId={}", elementId);
-        return toElementResponse(elementRepository.save(entity));
+        return after;
     }
 
     @Transactional
     public LogicalDataElementResponse rejectDescription(UUID elementId) {
         LogicalDataElementEntity entity = findElementOrThrow(elementId);
+        LogicalDataElementResponse before = toElementResponse(entity);
         entity.setRecommendedDescription(null);
         entity.setDescriptionReasoning(null);
         entity.setDescriptionRecommendedAt(null);
+        LogicalDataElementResponse after = toElementResponse(elementRepository.save(entity));
+        auditElement(entity, "DESCRIPTION_REJECTED", before, after);
         log.info("action=DESCRIPTION_REJECTED elementId={}", elementId);
-        return toElementResponse(elementRepository.save(entity));
+        return after;
     }
 
     // ── Vocabulary concept recommendations ───────────────────────────────────
@@ -459,21 +501,27 @@ public class LogicalModelService {
             mappingRepository.save(mapping);
             accepted++;
         }
+        LogicalDataElementResponse before = toElementResponse(entity);
         entity.setRecommendedVocabMappings(null);
         entity.setVocabMappingReasoning(null);
         entity.setVocabMappingRecommendedAt(null);
         log.info("action=VOCAB_CONCEPTS_ACCEPTED elementId={} accepted={} of={}", elementId, accepted, recommendations.size());
-        return toElementResponse(elementRepository.save(entity));
+        LogicalDataElementResponse after = toElementResponse(elementRepository.save(entity));
+        auditElement(entity, "VOCAB_CONCEPTS_ACCEPTED", before, after);
+        return after;
     }
 
     @Transactional
     public LogicalDataElementResponse rejectVocabConcepts(UUID elementId) {
         LogicalDataElementEntity entity = findElementOrThrow(elementId);
+        LogicalDataElementResponse before = toElementResponse(entity);
         entity.setRecommendedVocabMappings(null);
         entity.setVocabMappingReasoning(null);
         entity.setVocabMappingRecommendedAt(null);
+        LogicalDataElementResponse after = toElementResponse(elementRepository.save(entity));
+        auditElement(entity, "VOCAB_CONCEPTS_REJECTED", before, after);
         log.info("action=VOCAB_CONCEPTS_REJECTED elementId={}", elementId);
-        return toElementResponse(elementRepository.save(entity));
+        return after;
     }
 
     @Async
@@ -588,6 +636,7 @@ public class LogicalModelService {
         if (entity.getRecommendedIsPersonalInformation() == null && entity.getRecommendedIsDirectIdentifier() == null) {
             throw new NoSuchElementException("No pending PII recommendation for element: " + elementId);
         }
+        LogicalDataElementResponse before = toElementResponse(entity);
         if (entity.getRecommendedIsPersonalInformation() != null)
             entity.setPersonalInformation(entity.getRecommendedIsPersonalInformation());
         if (entity.getRecommendedIsDirectIdentifier() != null)
@@ -598,18 +647,23 @@ public class LogicalModelService {
         entity.setPiiRecommendedAt(null);
         log.info("action=PII_ACCEPTED elementId={} personalInfo={} directId={}",
             elementId, entity.isPersonalInformation(), entity.isDirectIdentifier());
-        return toElementResponse(elementRepository.save(entity));
+        LogicalDataElementResponse after = toElementResponse(elementRepository.save(entity));
+        auditElement(entity, "PII_ACCEPTED", before, after);
+        return after;
     }
 
     @Transactional
     public LogicalDataElementResponse rejectPii(UUID elementId) {
         LogicalDataElementEntity entity = findElementOrThrow(elementId);
+        LogicalDataElementResponse before = toElementResponse(entity);
         entity.setRecommendedIsPersonalInformation(null);
         entity.setRecommendedIsDirectIdentifier(null);
         entity.setPiiRecommendationReasoning(null);
         entity.setPiiRecommendedAt(null);
+        LogicalDataElementResponse after = toElementResponse(elementRepository.save(entity));
+        auditElement(entity, "PII_REJECTED", before, after);
         log.info("action=PII_REJECTED elementId={}", elementId);
-        return toElementResponse(elementRepository.save(entity));
+        return after;
     }
 
     @Transactional(readOnly = true)
@@ -824,7 +878,7 @@ public class LogicalModelService {
         entity.setLabel(req.label());
         entity.setDescription(req.description());
         entity.setLogicalType(req.logicalType());
-        entity.setOrdinal(req.ordinal());
+        if (req.ordinal() != null) entity.setOrdinal(req.ordinal());
         entity.setRequired(req.isRequired());
         entity.setIdentifier(req.isIdentifier());
         entity.setNullable(req.isNullable());
@@ -879,5 +933,157 @@ public class LogicalModelService {
             m.getId(), m.getVocabularyId(), m.getConceptIri(),
             m.getConceptLabel(), m.getConceptDefinition(), m.getMatchType(), m.getCreatedAt()
         );
+    }
+
+    // ── Model audit helpers ──────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public PageResponse<LogicalModelAuditResponse> getModelHistory(UUID datasetId, Pageable pageable) {
+        return PageResponse.of(
+            modelAuditLogRepository.findByDatasetIdOrderByCreatedAtDesc(datasetId, pageable)
+                .map(this::toModelAuditResponse)
+        );
+    }
+
+    @Transactional
+    public void auditModelAutoScaffold(UUID modelId, UUID datasetId, UUID tenantId, int elementCount) {
+        try {
+            LogicalModelAuditLogEntity entry = new LogicalModelAuditLogEntity();
+            entry.setLogicalModelId(modelId);
+            entry.setDatasetId(datasetId);
+            entry.setEventType("MODEL_AUTO_SCAFFOLDED");
+            entry.setPayloadAfter(toJsonAudit(Map.of("elementCount", elementCount, "source", "harvest")));
+            entry.setTenantId(tenantId);
+            modelAuditLogRepository.save(entry);
+        } catch (Exception e) {
+            log.warn("action=AUDIT_WRITE_FAILED modelId={} eventType=MODEL_AUTO_SCAFFOLDED error={}", modelId, e.getMessage());
+        }
+    }
+
+    private record ModelAuditSnapshot(UUID id, UUID datasetId, String name, String description, String version, String status) {}
+
+    private ModelAuditSnapshot toModelAuditSnapshot(LogicalModelEntity m) {
+        return new ModelAuditSnapshot(m.getId(), m.getDatasetId(), m.getName(), m.getDescription(), m.getVersion(), m.getStatus());
+    }
+
+    private void auditModel(LogicalModelEntity model, String eventType, Object before, Object after) {
+        try {
+            UserContext user = currentUser();
+            UUID tenantId = datasetRepository.findById(model.getDatasetId())
+                .map(d -> d.getTenantId()).orElse(null);
+            if (tenantId == null) return;
+            LogicalModelAuditLogEntity entry = new LogicalModelAuditLogEntity();
+            entry.setLogicalModelId(model.getId());
+            entry.setDatasetId(model.getDatasetId());
+            entry.setEventType(eventType);
+            entry.setChangedById(user.id());
+            entry.setChangedByEmail(user.email());
+            entry.setPayloadBefore(toJsonAudit(before));
+            entry.setPayloadAfter(toJsonAudit(after));
+            entry.setTenantId(tenantId);
+            modelAuditLogRepository.save(entry);
+        } catch (Exception e) {
+            log.warn("action=AUDIT_WRITE_FAILED modelId={} eventType={} error={}", model.getId(), eventType, e.getMessage());
+        }
+    }
+
+    private LogicalModelAuditResponse toModelAuditResponse(LogicalModelAuditLogEntity e) {
+        String modelName = null;
+        if (e.getPayloadAfter() != null) {
+            try {
+                modelName = objectMapper.readTree(e.getPayloadAfter()).path("name").asText(null);
+            } catch (Exception ignored) {}
+        }
+        if (modelName == null && e.getPayloadBefore() != null) {
+            try {
+                modelName = objectMapper.readTree(e.getPayloadBefore()).path("name").asText(null);
+            } catch (Exception ignored) {}
+        }
+        return new LogicalModelAuditResponse(
+            e.getId(), e.getLogicalModelId(), e.getDatasetId(),
+            modelName, e.getEventType(), e.getChangedById(), e.getChangedByEmail(),
+            e.getPayloadBefore(), e.getPayloadAfter(), e.getCreatedAt()
+        );
+    }
+
+    // ── Element audit helpers ────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public PageResponse<LogicalElementAuditResponse> getElementHistory(UUID datasetId, Pageable pageable) {
+        return PageResponse.of(
+            elementAuditLogRepository.findByDatasetIdOrderByCreatedAtDesc(datasetId, pageable)
+                .map(this::toElementAuditResponse)
+        );
+    }
+
+    private void auditElement(LogicalDataElementEntity element, String eventType,
+                              LogicalDataElementResponse before, LogicalDataElementResponse after) {
+        try {
+            UserContext user = currentUser();
+            UUID datasetId = datasetIdFor(element.getLogicalModelId());
+            if (datasetId == null) return;
+            UUID tenantId = datasetRepository.findById(datasetId)
+                .map(d -> d.getTenantId()).orElse(null);
+            if (tenantId == null) return;
+            LogicalElementAuditLogEntity entry = new LogicalElementAuditLogEntity();
+            entry.setLogicalElementId(element.getId());
+            entry.setLogicalModelId(element.getLogicalModelId());
+            entry.setDatasetId(datasetId);
+            entry.setEventType(eventType);
+            entry.setChangedById(user.id());
+            entry.setChangedByEmail(user.email());
+            entry.setPayloadBefore(toJsonAudit(before));
+            entry.setPayloadAfter(toJsonAudit(after));
+            entry.setTenantId(tenantId);
+            elementAuditLogRepository.save(entry);
+        } catch (Exception e) {
+            log.warn("action=AUDIT_WRITE_FAILED elementId={} eventType={} error={}", element.getId(), eventType, e.getMessage());
+        }
+    }
+
+    private UUID datasetIdFor(UUID logicalModelId) {
+        return modelRepository.findById(logicalModelId)
+            .map(LogicalModelEntity::getDatasetId).orElse(null);
+    }
+
+    private String toJsonAudit(Object obj) {
+        if (obj == null) return null;
+        try {
+            return objectMapper.writeValueAsString(obj);
+        } catch (JsonProcessingException e) {
+            return null;
+        }
+    }
+
+    private LogicalElementAuditResponse toElementAuditResponse(LogicalElementAuditLogEntity e) {
+        String elementName = null;
+        if (e.getPayloadAfter() != null) {
+            try {
+                elementName = objectMapper.readTree(e.getPayloadAfter()).path("name").asText(null);
+            } catch (Exception ignored) {}
+        }
+        if (elementName == null && e.getPayloadBefore() != null) {
+            try {
+                elementName = objectMapper.readTree(e.getPayloadBefore()).path("name").asText(null);
+            } catch (Exception ignored) {}
+        }
+        return new LogicalElementAuditResponse(
+            e.getId(), e.getLogicalElementId(), e.getLogicalModelId(), e.getDatasetId(),
+            elementName, e.getEventType(), e.getChangedById(), e.getChangedByEmail(),
+            e.getPayloadBefore(), e.getPayloadAfter(), e.getCreatedAt()
+        );
+    }
+
+    private record UserContext(String id, String email) {}
+
+    private UserContext currentUser() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) return new UserContext(null, null);
+        Object principal = auth.getPrincipal();
+        if (principal instanceof ApiKeyPrincipal akp) return new UserContext(akp.ownerId(), null);
+        if (principal instanceof Jwt jwt) {
+            return new UserContext(jwt.getSubject(), jwt.getClaimAsString("email"));
+        }
+        return new UserContext(auth.getName(), null);
     }
 }

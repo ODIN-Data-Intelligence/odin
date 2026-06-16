@@ -2,16 +2,23 @@ package com.odin.catalog.inventory.application.dataset;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.odin.catalog.inventory.api.v1.dto.DatasetActivityResponse;
 import com.odin.catalog.inventory.api.v1.dto.DatasetAuditResponse;
 import com.odin.catalog.inventory.api.v1.dto.DatasetRequest;
 import com.odin.catalog.inventory.api.v1.dto.DatasetResponse;
+import com.odin.catalog.inventory.api.v1.dto.LogicalElementAuditResponse;
+import com.odin.catalog.inventory.api.v1.dto.LogicalModelAuditResponse;
 import com.odin.catalog.inventory.api.v1.dto.OwnershipProposalResponse;
 import com.odin.catalog.inventory.api.v1.dto.PageResponse;
 import com.odin.catalog.inventory.infrastructure.jpa.entity.DatasetAuditLogEntity;
 import com.odin.catalog.inventory.infrastructure.jpa.entity.DatasetEntity;
+import com.odin.catalog.inventory.infrastructure.jpa.entity.LogicalElementAuditLogEntity;
+import com.odin.catalog.inventory.infrastructure.jpa.entity.LogicalModelAuditLogEntity;
 import com.odin.catalog.inventory.infrastructure.jpa.entity.OwnershipProposalEntity;
 import com.odin.catalog.inventory.infrastructure.jpa.repository.DatasetAuditLogRepository;
 import com.odin.catalog.inventory.infrastructure.jpa.repository.DatasetRepository;
+import com.odin.catalog.inventory.infrastructure.jpa.repository.LogicalElementAuditLogRepository;
+import com.odin.catalog.inventory.infrastructure.jpa.repository.LogicalModelAuditLogRepository;
 import com.odin.catalog.inventory.infrastructure.jpa.repository.OwnershipProposalRepository;
 import com.odin.catalog.inventory.infrastructure.kafka.CatalogEventProducer;
 import com.odin.catalog.shared.auth.filter.ApiKeyAuthenticationFilter.ApiKeyPrincipal;
@@ -19,7 +26,9 @@ import com.odin.catalog.shared.auth.filter.TenantContextHolder;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -27,6 +36,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
@@ -38,11 +49,16 @@ public class DatasetService {
 
     private static final Logger log = LoggerFactory.getLogger(DatasetService.class);
 
+    private static final int ACTIVITY_FETCH_CAP = 200;
+
     private final DatasetRepository datasetRepository;
     private final DatasetAuditLogRepository auditLogRepository;
+    private final LogicalModelAuditLogRepository modelAuditLogRepository;
+    private final LogicalElementAuditLogRepository elementAuditLogRepository;
     private final OwnershipProposalRepository proposalRepository;
     private final CatalogEventProducer eventProducer;
     private final ObjectMapper objectMapper;
+    private final com.odin.catalog.inventory.application.logical.LogicalModelService logicalModelService;
 
     @Transactional(readOnly = true)
     public PageResponse<DatasetResponse> list(UUID catalogId, String sourceUri, Pageable pageable) {
@@ -223,6 +239,79 @@ public class DatasetService {
         findOrThrow(datasetId);
         var page = auditLogRepository.findByDatasetIdOrderByCreatedAtDesc(datasetId, pageable);
         return PageResponse.of(page.map(this::toAuditResponse));
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<LogicalElementAuditResponse> getElementHistory(UUID datasetId, Pageable pageable) {
+        findOrThrow(datasetId);
+        return logicalModelService.getElementHistory(datasetId, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<LogicalModelAuditResponse> getModelHistory(UUID datasetId, Pageable pageable) {
+        findOrThrow(datasetId);
+        return logicalModelService.getModelHistory(datasetId, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<DatasetActivityResponse> getActivity(UUID datasetId, Pageable pageable) {
+        findOrThrow(datasetId);
+        Pageable capped = PageRequest.of(0, ACTIVITY_FETCH_CAP, Sort.by(Sort.Direction.DESC, "createdAt"));
+
+        List<DatasetActivityResponse> merged = new ArrayList<>();
+        auditLogRepository.findByDatasetIdOrderByCreatedAtDesc(datasetId, capped)
+            .forEach(e -> merged.add(toActivity(e)));
+        modelAuditLogRepository.findByDatasetIdOrderByCreatedAtDesc(datasetId, capped)
+            .forEach(e -> merged.add(toActivity(e)));
+        elementAuditLogRepository.findByDatasetIdOrderByCreatedAtDesc(datasetId, capped)
+            .forEach(e -> merged.add(toActivity(e)));
+        merged.sort(Comparator.comparing(DatasetActivityResponse::createdAt).reversed());
+
+        int total = merged.size();
+        int start = Math.min((int) pageable.getOffset(), total);
+        int end = Math.min(start + pageable.getPageSize(), total);
+        List<DatasetActivityResponse> pageContent = merged.subList(start, end);
+        int totalPages = pageable.getPageSize() == 0 ? 0 : (int) Math.ceil((double) total / pageable.getPageSize());
+
+        return new PageResponse<>(pageContent, pageable.getPageNumber(), pageable.getPageSize(), total, totalPages);
+    }
+
+    private DatasetActivityResponse toActivity(DatasetAuditLogEntity e) {
+        String name = extractField(e.getPayloadAfter(), e.getPayloadBefore(), "title");
+        return new DatasetActivityResponse(
+            e.getId(), "DATASET", e.getDatasetId(), null, null, name,
+            e.getEventType(), e.getChangedById(), e.getChangedByEmail(),
+            e.getPayloadBefore(), e.getPayloadAfter(), e.getCreatedAt()
+        );
+    }
+
+    private DatasetActivityResponse toActivity(LogicalModelAuditLogEntity e) {
+        String name = extractField(e.getPayloadAfter(), e.getPayloadBefore(), "name");
+        return new DatasetActivityResponse(
+            e.getId(), "MODEL", e.getDatasetId(), e.getLogicalModelId(), null, name,
+            e.getEventType(), e.getChangedById(), e.getChangedByEmail(),
+            e.getPayloadBefore(), e.getPayloadAfter(), e.getCreatedAt()
+        );
+    }
+
+    private DatasetActivityResponse toActivity(LogicalElementAuditLogEntity e) {
+        String name = extractField(e.getPayloadAfter(), e.getPayloadBefore(), "name");
+        return new DatasetActivityResponse(
+            e.getId(), "ELEMENT", e.getDatasetId(), e.getLogicalModelId(), e.getLogicalElementId(), name,
+            e.getEventType(), e.getChangedById(), e.getChangedByEmail(),
+            e.getPayloadBefore(), e.getPayloadAfter(), e.getCreatedAt()
+        );
+    }
+
+    private String extractField(String payloadAfter, String payloadBefore, String field) {
+        for (String json : new String[]{payloadAfter, payloadBefore}) {
+            if (json == null) continue;
+            try {
+                String value = objectMapper.readTree(json).path(field).asText(null);
+                if (value != null) return value;
+            } catch (Exception ignored) { /* fall through to next candidate */ }
+        }
+        return null;
     }
 
     // ── Internal helpers ─────────────────────────────────────────────────────

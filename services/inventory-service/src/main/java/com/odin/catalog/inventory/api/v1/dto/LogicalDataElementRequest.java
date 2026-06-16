@@ -2,7 +2,6 @@ package com.odin.catalog.inventory.api.v1.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 
 @Schema(description = "Request body for creating or updating a logical data element within a model")
 public record LogicalDataElementRequest(
@@ -25,7 +24,7 @@ public record LogicalDataElementRequest(
     String logicalType,
 
     @Schema(description = "Display order within the logical model (1-based)", example = "1")
-    @NotNull Integer ordinal,
+    Integer ordinal,
 
     @Schema(description = "Whether this element must always have a value", example = "true")
     boolean isRequired,

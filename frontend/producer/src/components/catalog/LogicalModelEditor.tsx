@@ -17,12 +17,14 @@ import Alert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
 import Tooltip from '@mui/material/Tooltip';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import EditIcon from '@mui/icons-material/Edit';
 import { logicalModelApi, logicalElementApi, preferredLabel, useIriTranslations, resolveLabel, ClassificationBadge } from '@datacatalog/shared';
-import type { LogicalModel } from '@datacatalog/shared';
+import type { LogicalModel, LogicalDataElement } from '@datacatalog/shared';
 import ClassificationRecommendationRow from './ClassificationRecommendationRow';
 import DescriptionRecommendationRow from './DescriptionRecommendationRow';
 import VocabRecommendationRow from './VocabRecommendationRow';
 import PiiRecommendationRow from './PiiRecommendationRow';
+import ElementEditRow from './ElementEditRow';
 
 const MATCH_TYPE_COLORS: Record<string, 'success' | 'primary' | 'secondary' | 'warning' | 'info'> = {
   exactMatch: 'success',
@@ -71,6 +73,7 @@ export default function LogicalModelEditor({ datasetId, models, canAction }: Pro
   const [piiRecommendingElementId, setPiiRecommendingElementId] = useState<string | null>(null);
   const [piiRecommendError, setPiiRecommendError] = useState<string | null>(null);
   const [bulkPiiJobId, setBulkPiiJobId] = useState<string | null>(null);
+  const [editingElementId, setEditingElementId] = useState<string | null>(null);
 
   useEffect(() => {
     if (selectedModelId === null && models.length > 0) setSelectedModelId(models[0].id);
@@ -207,6 +210,17 @@ export default function LogicalModelEditor({ datasetId, models, canAction }: Pro
     onError: () => setPiiRecommendError('PII recommendation service is unavailable. Please try again later.'),
   });
 
+  const updateMut = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Partial<LogicalDataElement> }) =>
+      logicalElementApi.update(id, body),
+    onSuccess: updated => {
+      qc.setQueryData<LogicalDataElement[]>(['logical-elements', selectedModelId], prev =>
+        prev?.map(el => el.id === updated.id ? { ...el, ...updated } : el) ?? []
+      );
+      setEditingElementId(null);
+    },
+  });
+
   const selectedModel = models.find(m => m.id === selectedModelId);
 
   if (models.length === 0) {
@@ -339,8 +353,35 @@ export default function LogicalModelEditor({ datasetId, models, canAction }: Pro
           <TableBody>
             {elements.map(el => (
               <>
+                {editingElementId === el.id ? (
+                  <ElementEditRow
+                    key={`edit-${el.id}`}
+                    element={el}
+                    onSave={(id, updates) => updateMut.mutate({ id, body: updates })}
+                    onCancel={() => setEditingElementId(null)}
+                    saving={updateMut.isPending}
+                  />
+                ) : (
+                <>
                 <TableRow key={el.id} hover sx={{ verticalAlign: 'top' }}>
-                  <TableCell><Typography variant="caption" color="text.disabled">{el.ordinal}</Typography></TableCell>
+                  <TableCell sx={{ position: 'relative' }}>
+                    <Typography variant="caption" color="text.disabled">{el.ordinal}</Typography>
+                    {canAction && editingElementId === null && (
+                      <Tooltip title="Edit this element">
+                        <IconButton
+                          size="small"
+                          onClick={() => setEditingElementId(el.id)}
+                          sx={{
+                            position: 'absolute', top: 2, left: 2,
+                            opacity: 0, p: 0.25, color: 'text.secondary',
+                            '.MuiTableRow-root:hover &': { opacity: 1 },
+                          }}
+                        >
+                          <EditIcon sx={{ fontSize: 12 }} />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </TableCell>
                   <TableCell><Typography variant="body2" fontWeight={600}>{el.label ?? el.name}</Typography></TableCell>
                   <TableCell sx={{ maxWidth: 200 }}>
                     <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5 }}>
@@ -433,6 +474,8 @@ export default function LogicalModelEditor({ datasetId, models, canAction }: Pro
                 )}
                 {el.recommendedIsPersonalInformation != null && (
                   <PiiRecommendationRow key={`pii-rec-${el.id}`} element={el} modelId={selectedModelId!} canAction={canAction} />
+                )}
+                </>
                 )}
               </>
             ))}

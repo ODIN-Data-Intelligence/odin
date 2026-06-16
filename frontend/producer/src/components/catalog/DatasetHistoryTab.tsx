@@ -7,9 +7,10 @@ import Button from '@mui/material/Button';
 import Paper from '@mui/material/Paper';
 import Collapse from '@mui/material/Collapse';
 import { datasetApi, JsonDiffView } from '@datacatalog/shared';
-import type { DatasetAuditEntry } from '@datacatalog/shared';
+import type { DatasetActivityEntry } from '@datacatalog/shared';
 
 const EVENT_COLORS: Record<string, 'success' | 'primary' | 'error' | 'secondary' | 'warning' | 'info' | 'default'> = {
+  // Dataset scope
   CREATED:                   'success',
   UPDATED:                   'primary',
   DELETED:                   'error',
@@ -17,13 +18,43 @@ const EVENT_COLORS: Record<string, 'success' | 'primary' | 'error' | 'secondary'
   OWNER_TRANSFER_PROPOSED:   'warning',
   OWNER_TRANSFER_APPROVED:   'info',
   OWNER_TRANSFER_REJECTED:   'default',
+  // Model scope
+  MODEL_CREATED:             'success',
+  MODEL_STATUS_CHANGED:      'info',
+  MODEL_DELETED:             'error',
+  MODEL_AUTO_SCAFFOLDED:     'secondary',
+  // Element scope
+  ELEMENT_CREATED:           'success',
+  ELEMENT_DELETED:           'error',
+  CLASSIFICATION_ACCEPTED:   'success',
+  CLASSIFICATION_REJECTED:   'error',
+  DESCRIPTION_ACCEPTED:      'success',
+  DESCRIPTION_REJECTED:      'error',
+  VOCAB_MAPPING_ADDED:       'info',
+  VOCAB_MAPPING_DELETED:     'warning',
+  VOCAB_CONCEPTS_ACCEPTED:   'success',
+  VOCAB_CONCEPTS_REJECTED:   'error',
+  PII_ACCEPTED:              'secondary',
+  PII_REJECTED:              'default',
+};
+
+const SCOPE_COLORS: Record<DatasetActivityEntry['scope'], 'default' | 'primary' | 'secondary'> = {
+  DATASET: 'default',
+  MODEL:   'secondary',
+  ELEMENT: 'primary',
+};
+
+const SCOPE_LABELS: Record<DatasetActivityEntry['scope'], string> = {
+  DATASET: 'Dataset',
+  MODEL:   'Model',
+  ELEMENT: 'Element',
 };
 
 function formatTs(iso: string) {
   return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-function AuditEntryRow({ entry }: { entry: DatasetAuditEntry }) {
+function ActivityEntryRow({ entry }: { entry: DatasetActivityEntry }) {
   const [expanded, setExpanded] = useState(false);
   const hasDiff = entry.payloadBefore != null || entry.payloadAfter != null;
   const color = EVENT_COLORS[entry.eventType] ?? 'default';
@@ -41,11 +72,23 @@ function AuditEntryRow({ entry }: { entry: DatasetAuditEntry }) {
         }}
       >
         <Chip
+          label={SCOPE_LABELS[entry.scope]}
+          color={SCOPE_COLORS[entry.scope]}
+          variant="outlined"
+          size="small"
+          sx={{ height: 20, fontSize: 11, fontWeight: 600, flexShrink: 0 }}
+        />
+        <Chip
           label={entry.eventType.replace(/_/g, ' ')}
           color={color}
           size="small"
           sx={{ height: 20, fontSize: 11, fontWeight: 600, flexShrink: 0 }}
         />
+        {entry.entityName && (
+          <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.primary', flexShrink: 0 }}>
+            {entry.entityName}
+          </Typography>
+        )}
         <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
           {entry.changedByEmail ?? entry.changedById ?? 'system'}
         </Typography>
@@ -73,19 +116,19 @@ export default function DatasetHistoryTab({ datasetId }: Props) {
   const [page, setPage] = useState(0);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['dataset-history', datasetId, page],
-    queryFn: () => datasetApi.getHistory(datasetId, page, 20),
+    queryKey: ['dataset-activity', datasetId, page],
+    queryFn: () => datasetApi.getActivity(datasetId, page, 20),
   });
 
   if (isLoading) return <Typography variant="body2" color="text.secondary">Loading history…</Typography>;
   if (!data || data.content.length === 0) {
-    return <Typography variant="body2" color="text.secondary">No audit history yet.</Typography>;
+    return <Typography variant="body2" color="text.secondary">No activity yet.</Typography>;
   }
 
   return (
     <Box sx={{ maxWidth: 800, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       <Typography variant="caption" color="text.disabled">{data.totalElements} total entries</Typography>
-      {data.content.map(entry => <AuditEntryRow key={entry.id} entry={entry} />)}
+      {data.content.map(entry => <ActivityEntryRow key={entry.id} entry={entry} />)}
       {data.totalPages > 1 && (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, pt: 1 }}>
           <Button size="small" variant="outlined" disabled={page === 0} onClick={() => setPage(p => p - 1)} sx={{ textTransform: 'none' }}>
