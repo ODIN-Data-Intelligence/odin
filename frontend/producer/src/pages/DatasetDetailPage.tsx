@@ -59,7 +59,11 @@ export default function DatasetDetailPage() {
 
   const updateMutation = useMutation({
     mutationFn: (data: Partial<Dataset>) => datasetApi.update(id!, data),
-    onSuccess: (updated) => { qc.setQueryData(['dataset', id], updated); setEditing(false); },
+    onSuccess: (updated) => {
+      qc.setQueryData(['dataset', id], updated);
+      qc.invalidateQueries({ queryKey: ['dataset-terms', id] });
+      setEditing(false);
+    },
   });
 
   const deleteMutation = useMutation({

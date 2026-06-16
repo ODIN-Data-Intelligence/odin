@@ -114,6 +114,7 @@ public class CatalogServiceClient {
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record LogicalElement(
         String id, String name, String label, String description, String logicalType,
+        boolean isIdentifier,
         List<VocabMapping> vocabMappings
     ) {}
 

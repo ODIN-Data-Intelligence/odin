@@ -1,11 +1,6 @@
 package com.odin.catalog.ai.tools;
 
 import com.odin.catalog.ai.client.CatalogServiceClient;
-import dev.langchain4j.model.ollama.OllamaChatModel;
-import dev.langchain4j.service.AiServices;
-import dev.langchain4j.service.SystemMessage;
-import dev.langchain4j.service.UserMessage;
-import dev.langchain4j.service.V;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -25,47 +20,21 @@ public class DatasetContextService {
 
     private static final Logger log = LoggerFactory.getLogger(DatasetContextService.class);
 
-    interface DatasetContextAgent {
-        @SystemMessage("""
-            You are a data catalog assistant. Use the available tools to retrieve complete \
-            information about the requested dataset and return a concise, factual summary. \
-            Always call getDatasetInfo first, then getLogicalElementsWithVocabulary. \
-            When the user asks to write, generate, or suggest a SQL query: \
-            - Call getQueryContext for EVERY dataset referenced in the query before writing any SQL. \
-            - Only use column names that appear in the retrieved schema. Never invent column names. \
-            - Each dataset block states its Platform. Generate SQL using only the syntax and \
-              built-in functions of that platform. \
-            - If the PLATFORM CONFLICT section is present, write one separate query per platform \
-              group — never a single SQL statement that mixes tables from different platforms. \
-            - Use the Join Hints section (if present) for join predicates. \
-            - If schema for a required dataset is not loaded, call findRelatedDatasets to locate it first. \
-            - If the user specifically asks for Snowflake SQL, call getSnowflakeQueryContext \
-              to get the Snowflake account, fully-qualified table name (DATABASE.SCHEMA.TABLE), \
-              and column schema before writing the query. \
-            Do not add commentary — return only the retrieved facts and any requested SQL.
-            """)
-        String gatherContext(@UserMessage @V("prompt") String prompt);
-    }
-
-    private final DatasetContextAgent agent;
     private final CatalogServiceClient catalogClient;
 
-    public DatasetContextService(OllamaChatModel ollamaChatModel,
-                                 DatasetContextTool contextTool,
-                                 SqlGenerationTool sqlTool,
-                                 CatalogServiceClient catalogClient) {
-        this.agent = AiServices.builder(DatasetContextAgent.class)
-            .chatLanguageModel(ollamaChatModel)
-            .tools(contextTool, sqlTool)
-            .build();
+    public DatasetContextService(CatalogServiceClient catalogClient) {
         this.catalogClient = catalogClient;
     }
 
     /**
-     * Builds focused context for one or more datasets.
-     * For a single dataset, delegates to the tool-chain agent (same as before).
-     * For multiple datasets, assembles schema blocks for each, performs platform resolution
-     * (single-platform header vs. PLATFORM CONFLICT warning), then appends join hints.
+     * Builds focused context for one or more datasets by deterministically assembling schema
+     * blocks via direct catalog-service calls. Previously, a single focused dataset was handled
+     * by an LLM tool-calling agent that decided whether to fetch dataset details — unreliable
+     * with local models that don't consistently invoke tools, leaving the chat with no context
+     * for the dataset the user had open. Always building the block directly guarantees the
+     * dataset's schema reaches the system prompt regardless of model tool-calling behavior.
+     * Performs platform resolution (single-platform header vs. PLATFORM CONFLICT warning for
+     * mixed platforms) and appends join hints derived from shared vocabulary concepts.
      */
     public String buildFocusedContext(List<String> datasetIds, String userQuery, String conversationId) {
         if (datasetIds == null || datasetIds.isEmpty()) return "";
@@ -73,10 +42,6 @@ public class DatasetContextService {
         List<String> ids = new ArrayList<>(new LinkedHashSet<>(datasetIds));
 
         MDC.put("conversationId", conversationId);
-
-        if (ids.size() == 1) {
-            return buildSingleDatasetContext(ids.get(0), userQuery, conversationId);
-        }
 
         try {
             log.info("step=MULTI_DATASET_CONTEXT_START datasetCount={} ids={}", ids.size(), ids);
@@ -143,35 +108,12 @@ public class DatasetContextService {
         }
     }
 
-    /** Single-dataset path: use the tool-chain agent (same as before). */
-    private String buildSingleDatasetContext(String datasetId, String userQuery, String conversationId) {
-        MDC.put("conversationId", conversationId);
-        DatasetIdContext.set(datasetId);
-        try {
-            log.info("step=TOOL_CHAIN_INVOKE datasetId={} agent=DatasetContextAgent", datasetId);
-            String result = agent.gatherContext(
-                "Retrieve information for dataset ID: " + datasetId +
-                ". The user is asking: " + userQuery
-            );
-            log.info("step=TOOL_CHAIN_COMPLETE datasetId={} result.length={}", datasetId, result.length());
-            return result;
-        } catch (Exception e) {
-            log.warn("step=TOOL_CHAIN_ERROR datasetId={} error={}", datasetId, e.getMessage());
-            return "";
-        } finally {
-            DatasetIdContext.clear();
-            MDC.remove("conversationId");
-        }
-    }
-
     /**
      * Assembles a schema block for one dataset: summary, logical model, distribution,
      * physical columns. Detects the platform from the selected distribution.
      */
     private DatasetSchemaBlock buildSchemaBlock(String datasetId, String userQuery) {
         try {
-            DatasetIdContext.set(datasetId);
-
             CatalogServiceClient.DatasetSummary ds = catalogClient.getDataset(datasetId);
             String title = ds != null ? ds.title() : datasetId;
 
@@ -198,7 +140,7 @@ public class DatasetContextService {
                     ? el.vocabMappings().stream().map(CatalogServiceClient.VocabMapping::conceptIri).collect(Collectors.toList())
                     : List.of();
                 columnEntries.add(new ColumnEntry(col.name(), col.datatype(), Boolean.TRUE.equals(col.required()),
-                    el != null ? el.name() : null, conceptIris));
+                    el != null ? el.name() : null, el != null && el.isIdentifier(), conceptIris));
             }
 
             StringBuilder sb = new StringBuilder();
@@ -219,7 +161,8 @@ public class DatasetContextService {
                     sb.append("  - ").append(ce.name());
                     if (ce.datatype() != null) sb.append(" [").append(ce.datatype()).append(']');
                     if (ce.required()) sb.append(" NOT NULL");
-                    if (ce.logicalName() != null) sb.append(" → ").append(ce.logicalName());
+                    if (ce.logicalName() != null)
+                        sb.append("  (business name: \"").append(ce.logicalName()).append("\" — not a SQL identifier)");
                     sb.append('\n');
                 }
             } else {
@@ -232,31 +175,31 @@ public class DatasetContextService {
         } catch (Exception e) {
             log.warn("step=SCHEMA_BLOCK_ERROR datasetId={} error={}", datasetId, e.getMessage());
             return null;
-        } finally {
-            DatasetIdContext.clear();
         }
     }
 
     /**
      * Derives join hints by finding columns that share the same vocabulary concept IRI
-     * across two or more datasets.
+     * across two or more datasets. A "Suggested join:" line — the only line the model should
+     * treat as an actionable join — is only emitted when at least one side of the pair is a
+     * known identifier column; a shared concept tag alone is not a reliable join key.
      */
     private String buildJoinHints(List<DatasetSchemaBlock> blocks) {
         if (blocks.size() < 2) return "";
 
-        Map<String, List<String[]>> iriToColumns = new LinkedHashMap<>();
+        Map<String, List<JoinOccurrence>> iriToColumns = new LinkedHashMap<>();
         for (DatasetSchemaBlock block : blocks) {
             for (ColumnEntry col : block.columns()) {
                 for (String iri : col.conceptIris()) {
                     iriToColumns.computeIfAbsent(iri, k -> new ArrayList<>())
-                        .add(new String[]{ block.title(), block.tableName(), col.name() });
+                        .add(new JoinOccurrence(block.title(), block.tableName(), col.name(), col.isIdentifier()));
                 }
             }
         }
 
-        List<Map.Entry<String, List<String[]>>> joinCandidates = iriToColumns.entrySet().stream()
+        List<Map.Entry<String, List<JoinOccurrence>>> joinCandidates = iriToColumns.entrySet().stream()
             .filter(e -> {
-                Set<String> titles = e.getValue().stream().map(a -> a[0]).collect(Collectors.toSet());
+                Set<String> titles = e.getValue().stream().map(JoinOccurrence::datasetTitle).collect(Collectors.toSet());
                 return titles.size() >= 2;
             })
             .collect(Collectors.toList());
@@ -265,16 +208,25 @@ public class DatasetContextService {
 
         StringBuilder sb = new StringBuilder();
         sb.append("=== JOIN HINTS (derived from shared vocabulary concepts) ===\n");
+        sb.append("Only lines starting with \"Suggested join:\" represent a verified key relationship — ")
+          .append("nothing else in this section should be treated as joinable.\n");
 
-        for (Map.Entry<String, List<String[]>> entry : joinCandidates) {
-            List<String[]> occurrences = entry.getValue();
+        for (Map.Entry<String, List<JoinOccurrence>> entry : joinCandidates) {
+            List<JoinOccurrence> occurrences = entry.getValue();
             sb.append("Shared concept: ").append(entry.getKey()).append('\n');
-            for (String[] occ : occurrences) {
-                sb.append("  ").append(occ[0]).append(" [").append(occ[1]).append("] → column: ").append(occ[2]).append('\n');
+            for (JoinOccurrence occ : occurrences) {
+                sb.append("  ").append(occ.datasetTitle()).append(" [").append(occ.tableName())
+                  .append("] → column: ").append(occ.columnName());
+                if (occ.isIdentifier()) sb.append(" (identifier column)");
+                sb.append('\n');
             }
-            if (occurrences.size() >= 2) {
-                sb.append("  Suggested join: ").append(occurrences.get(0)[1]).append('.').append(occurrences.get(0)[2])
-                  .append(" = ").append(occurrences.get(1)[1]).append('.').append(occurrences.get(1)[2]).append('\n');
+            boolean anyIdentifier = occurrences.stream().anyMatch(JoinOccurrence::isIdentifier);
+            if (anyIdentifier && occurrences.size() >= 2) {
+                sb.append("  Suggested join: ").append(occurrences.get(0).tableName()).append('.').append(occurrences.get(0).columnName())
+                  .append(" = ").append(occurrences.get(1).tableName()).append('.').append(occurrences.get(1).columnName()).append('\n');
+            } else {
+                sb.append("  (informational only — neither side is a known key column; ")
+                  .append("do not use as a join key without confirming with the user)\n");
             }
         }
 
@@ -346,8 +298,11 @@ public class DatasetContextService {
 
     // ── internal data holders ─────────────────────────────────────────────────
 
-    record ColumnEntry(String name, String datatype, boolean required, String logicalName, List<String> conceptIris) {}
+    record ColumnEntry(String name, String datatype, boolean required, String logicalName,
+                       boolean isIdentifier, List<String> conceptIris) {}
 
     record DatasetSchemaBlock(String datasetId, String title, String tableName,
                               String platform, String schemaText, List<ColumnEntry> columns) {}
+
+    record JoinOccurrence(String datasetTitle, String tableName, String columnName, boolean isIdentifier) {}
 }
