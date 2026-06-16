@@ -52,7 +52,7 @@ export default function HarvestSourceDetailPage() {
 
       <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
         <Paper variant="outlined" sx={{ p: 2 }}>
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
             {source.baseUrl && (
               <Box>
                 <Typography variant="caption" color="text.secondary">Base URL</Typography>

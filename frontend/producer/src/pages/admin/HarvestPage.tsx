@@ -98,8 +98,8 @@ export default function HarvestPage() {
         {/* Sources */}
         <Box>
           <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1.5 }}>Sources</Typography>
-          <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
-            <Table size="small">
+          <Paper variant="outlined" sx={{ overflow: 'auto' }}>
+            <Table size="small" sx={{ minWidth: 680 }}>
               <TableHead>
                 <TableRow sx={{ bgcolor: 'grey.50' }}>
                   <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Name</TableCell>
@@ -153,8 +153,8 @@ export default function HarvestPage() {
             <Typography variant="subtitle2" fontWeight={600}>Jobs</Typography>
             <Button size="small" variant="outlined" onClick={() => setShowJobForm(true)} sx={{ textTransform: 'none' }}>+ Add Job</Button>
           </Box>
-          <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
-            <Table size="small">
+          <Paper variant="outlined" sx={{ overflow: 'auto' }}>
+            <Table size="small" sx={{ minWidth: 680 }}>
               <TableHead>
                 <TableRow sx={{ bgcolor: 'grey.50' }}>
                   <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Name</TableCell>

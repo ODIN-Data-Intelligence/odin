@@ -111,7 +111,7 @@ export default function DatasetForm({ defaultValues, onSubmit, isSubmitting, sub
         )}
       />
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
         <TextField {...register('version')} label="Version" size="small" fullWidth placeholder="1.0" />
         <TextField
           {...register('languageRaw')}

@@ -120,7 +120,7 @@ function ClassificationRuleDialog({ policyId, existing, onClose, onSaved }: Clas
       <form onSubmit={handleSubmit}>
         <DialogTitle>{existing ? `Edit Rule: ${existing.classification}` : 'Add Classification Rule'}</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '12px !important' }}>
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 2 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 2 }}>
             <FormControl size="small" required>
               <InputLabel>Classification</InputLabel>
               <Select label="Classification" value={classification} onChange={e => setClassification(e.target.value)} disabled={!!existing}>
@@ -131,12 +131,12 @@ function ClassificationRuleDialog({ policyId, existing, onClose, onSaved }: Clas
             <TextField label="Access Level" value={accessLevel} onChange={e => setAccessLevel(e.target.value)} size="small" placeholder="e.g. OPEN" required />
           </Box>
           <Typography variant="caption" color="text.secondary">Enter one item per line for list fields.</Typography>
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 2 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 2 }}>
             <TextField label="Permissions" value={permissions} onChange={e => setPermissions(e.target.value)} multiline rows={5} size="small" inputProps={{ style: { fontFamily: 'monospace', fontSize: 12 } }} />
             <TextField label="Prohibitions" value={prohibitions} onChange={e => setProhibitions(e.target.value)} multiline rows={5} size="small" inputProps={{ style: { fontFamily: 'monospace', fontSize: 12 } }} />
             <TextField label="Obligations" value={obligations} onChange={e => setObligations(e.target.value)} multiline rows={5} size="small" inputProps={{ style: { fontFamily: 'monospace', fontSize: 12 } }} />
           </Box>
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 2 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 2 }}>
             <TextField label="ODRL Permissions" value={odrlPermissions} onChange={e => setOdrlPermissions(e.target.value)} multiline rows={4} size="small" inputProps={{ style: { fontFamily: 'monospace', fontSize: 12 } }} />
             <TextField label="ODRL Prohibitions" value={odrlProhibitions} onChange={e => setOdrlProhibitions(e.target.value)} multiline rows={4} size="small" inputProps={{ style: { fontFamily: 'monospace', fontSize: 12 } }} />
             <TextField label="ODRL Duties" value={odrlDuties} onChange={e => setOdrlDuties(e.target.value)} multiline rows={4} size="small" inputProps={{ style: { fontFamily: 'monospace', fontSize: 12 } }} />
@@ -448,7 +448,7 @@ export default function TermsPolicyDetailPage() {
               )}
             </Box>
             <Paper variant="outlined" sx={{ overflow: 'auto' }}>
-              <Table size="small">
+              <Table size="small" sx={{ minWidth: 980 }}>
                 <TableHead>
                   <TableRow sx={{ bgcolor: 'grey.50' }}>
                     {['Classification', 'Rank', 'Access Level', 'Permissions', 'Prohibitions', 'Obligations', 'ODRL Perms', 'ODRL Prohibs', 'ODRL Duties'].map(h => (
@@ -497,8 +497,8 @@ export default function TermsPolicyDetailPage() {
                 <Button variant="contained" size="small" onClick={() => setEditRegRule('new')} sx={{ textTransform: 'none' }}>+ Add Rule</Button>
               )}
             </Box>
-            <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
-              <Table size="small">
+            <Paper variant="outlined" sx={{ overflow: 'auto' }}>
+              <Table size="small" sx={{ minWidth: 720 }}>
                 <TableHead>
                   <TableRow sx={{ bgcolor: 'grey.50' }}>
                     {['Signal Type', 'Pattern', 'Regulation Name', 'Signal Label'].map(h => (
@@ -544,8 +544,8 @@ export default function TermsPolicyDetailPage() {
                 <Button variant="contained" size="small" onClick={() => setShowAddObligation(true)} sx={{ textTransform: 'none' }}>+ Add Obligation</Button>
               )}
             </Box>
-            <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
-              <Table size="small">
+            <Paper variant="outlined" sx={{ overflow: 'auto' }}>
+              <Table size="small" sx={{ minWidth: 720 }}>
                 <TableHead>
                   <TableRow sx={{ bgcolor: 'grey.50' }}>
                     {['Regulation', 'Obligation', 'ODRL Duty'].map(h => (

@@ -91,7 +91,7 @@ export default function DataProductWizard({ onClose }: Props) {
               rows={3}
               placeholder="Describe this data product…"
             />
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
               <Controller
                 name="lifecycleStatus"
                 control={control}

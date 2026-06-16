@@ -355,9 +355,9 @@ export default function LineagePage() {
   }, [navigate]);
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Header */}
-      <Paper square elevation={0} sx={{ borderBottom: 1, borderColor: 'divider', px: 3, py: 1.5, display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+      <Paper square elevation={0} sx={{ borderBottom: 1, borderColor: 'divider', px: { xs: 1.5, md: 3 }, py: 1.5, display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0, flexWrap: 'wrap' }}>
         <Button
           component={Link}
           to="/search"
@@ -377,14 +377,14 @@ export default function LineagePage() {
       </Paper>
 
       {/* Controls */}
-      <Paper square elevation={0} sx={{ borderBottom: 1, borderColor: 'divider', px: 3, py: 2, display: 'flex', alignItems: 'flex-end', gap: 2, flexShrink: 0, flexWrap: 'wrap' }}>
+      <Paper square elevation={0} sx={{ borderBottom: 1, borderColor: 'divider', px: { xs: 1.5, md: 3 }, py: 2, display: 'flex', alignItems: 'flex-end', gap: 2, flexShrink: 0, flexWrap: 'wrap' }}>
         <TextField
           label="Namespace"
           value={namespace}
           onChange={e => setNamespace(e.target.value)}
           placeholder="e.g. snowflake://my-account/mydb"
           size="small"
-          sx={{ width: 320 }}
+          sx={{ width: { xs: '100%', sm: 320 } }}
           variant="outlined"
         />
         <TextField
@@ -393,10 +393,10 @@ export default function LineagePage() {
           onChange={e => setName(e.target.value)}
           placeholder="e.g. trades"
           size="small"
-          sx={{ width: 220 }}
+          sx={{ width: { xs: '100%', sm: 220 } }}
           variant="outlined"
         />
-        <FormControl size="small" sx={{ minWidth: 140 }}>
+        <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 140 } }}>
           <InputLabel>Direction</InputLabel>
           <Select
             label="Direction"

@@ -14,7 +14,7 @@ export default function HomePage() {
   const { openDatasetId } = useDrawerStore();
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+    <Box sx={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
       <Box sx={{ flex: 1, overflowY: 'auto' }}>
         <Container maxWidth="md" sx={{ px: 3, py: 8 }}>
           <Box sx={{ textAlign: 'center', mb: 5 }}>

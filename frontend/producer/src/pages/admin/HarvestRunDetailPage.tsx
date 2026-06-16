@@ -68,7 +68,7 @@ export default function HarvestRunDetailPage() {
           <StatCard label="Failed" value={run.entitiesFailed ?? 0} color="error.main" />
         </Box>
 
-        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
           <DlItem label="Started" value={formatDateTime(run.startedAt)} />
           <DlItem label="Completed" value={formatDateTime(run.completedAt)} />
         </Box>
@@ -78,8 +78,8 @@ export default function HarvestRunDetailPage() {
         {items.length > 0 && (
           <Box>
             <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1.5 }}>Items ({items.length})</Typography>
-            <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
-              <Table size="small">
+            <Paper variant="outlined" sx={{ overflow: 'auto' }}>
+              <Table size="small" sx={{ minWidth: 680 }}>
                 <TableHead>
                   <TableRow sx={{ bgcolor: 'grey.50' }}>
                     <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Entity</TableCell>

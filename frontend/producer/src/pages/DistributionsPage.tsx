@@ -12,7 +12,7 @@ import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
 import Button from '@mui/material/Button';
 import Skeleton from '@mui/material/Skeleton';
-import { distributionApi, datasetApi, PageHeader } from '@datacatalog/shared';
+import { distributionApi, datasetApi, PageHeader, useIsMobile } from '@datacatalog/shared';
 import { formatDate } from '../lib/utils';
 
 const FORMAT_COLORS: Record<string, 'warning' | 'success' | 'secondary' | 'error' | 'info' | 'primary' | 'default'> = {
@@ -30,6 +30,7 @@ const PAGE_SIZE = 20;
 
 export default function DistributionsPage() {
   const { tenant } = useParams();
+  const isMobile = useIsMobile();
   const [page, setPage] = useState(0);
 
   const { data: pageData, isLoading } = useQuery({
@@ -58,6 +59,52 @@ export default function DistributionsPage() {
       <PageHeader title="Distributions" description={`${totalElements} distributions across all datasets`} />
 
       <Box sx={{ p: 3 }}>
+        {isMobile ? (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {isLoading && [...Array(5)].map((_, i) => <Skeleton key={i} variant="rounded" height={92} />)}
+            {!isLoading && distributions.map(dist => (
+              <Paper key={dist.id} variant="outlined" sx={{ p: 1.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                  {dist.format && (
+                    <Chip label={dist.format} color={FORMAT_COLORS[dist.format] ?? 'default'} size="small" sx={{ height: 18, fontSize: 11 }} />
+                  )}
+                  <Typography
+                    component={Link}
+                    to={`/${tenant}/datasets/${dist.datasetId}/distributions/${dist.id}`}
+                    variant="body2"
+                    fontWeight={600}
+                    color="primary"
+                    sx={{ textDecoration: 'none', '&:hover': { textDecoration: 'underline' }, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  >
+                    {dist.title ?? dist.id}
+                  </Typography>
+                </Box>
+                {dist.description && (
+                  <Typography variant="caption" color="text.secondary" sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                    {dist.description}
+                  </Typography>
+                )}
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, mt: 0.75 }}>
+                  <Typography
+                    component={Link}
+                    to={`/${tenant}/datasets/${dist.datasetId}`}
+                    variant="caption"
+                    color="primary"
+                    sx={{ textDecoration: 'none', '&:hover': { textDecoration: 'underline' }, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  >
+                    {dist.datasetId ? (datasetTitles[dist.datasetId] || dist.datasetId.slice(0, 8) + '…') : '—'}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>{formatDate(dist.updatedAt)}</Typography>
+                </Box>
+              </Paper>
+            ))}
+            {!isLoading && distributions.length === 0 && (
+              <Typography variant="body2" sx={{ textAlign: 'center', py: 5, color: 'text.disabled' }}>
+                No distributions found.
+              </Typography>
+            )}
+          </Box>
+        ) : (
         <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
           <Table size="small">
             <TableHead>
@@ -124,6 +171,7 @@ export default function DistributionsPage() {
             </TableBody>
           </Table>
         </Paper>
+        )}
 
         {totalPages > 1 && (
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 2 }}>

@@ -92,7 +92,7 @@ function DistributionCard({ dist, elements }: { dist: Distribution; elements: Lo
           <Typography variant="body2" color="text.secondary">{dist.description}</Typography>
         )}
 
-        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
           {dist.mediaType && <MetaItem label="Media type" value={dist.mediaType} mono />}
           {dist.byteSize != null && <MetaItem label="Size" value={formatBytes(dist.byteSize)} />}
           {dist.checksumAlgorithm && dist.checksumValue && (

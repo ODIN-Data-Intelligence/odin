@@ -34,8 +34,8 @@ export default function SettingsPage() {
             <Typography variant="subtitle2" fontWeight={600}>Registered Vocabularies</Typography>
             <Button size="small" variant="outlined" sx={{ textTransform: 'none' }}>+ Register Vocabulary</Button>
           </Box>
-          <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
-            <Table size="small">
+          <Paper variant="outlined" sx={{ overflow: 'auto' }}>
+            <Table size="small" sx={{ minWidth: 680 }}>
               <TableHead>
                 <TableRow sx={{ bgcolor: 'grey.50' }}>
                   <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Name</TableCell>

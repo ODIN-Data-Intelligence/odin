@@ -16,7 +16,9 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Divider from '@mui/material/Divider';
 import Tooltip from '@mui/material/Tooltip';
+import Drawer from '@mui/material/Drawer';
 import BookmarksIcon from '@mui/icons-material/Bookmarks';
+import MenuIcon from '@mui/icons-material/Menu';
 import FolderIcon from '@mui/icons-material/Folder';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -24,7 +26,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import DriveFileMoveIcon from '@mui/icons-material/DriveFileMove';
 import CloseIcon from '@mui/icons-material/Close';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import { bookmarkApi, bookmarkCollectionApi } from '@datacatalog/shared';
+import { bookmarkApi, bookmarkCollectionApi, useIsMobile } from '@datacatalog/shared';
 import type { Bookmark, BookmarkCollection } from '@datacatalog/shared';
 import { useDrawerStore } from '../store/drawerStore';
 import DatasetDetailDrawer from '../components/DatasetDetailDrawer';
@@ -32,8 +34,10 @@ import DatasetDetailDrawer from '../components/DatasetDetailDrawer';
 export default function BookmarksPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const { openDataset, openDatasetId } = useDrawerStore();
 
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [newCollectionName, setNewCollectionName] = useState('');
   const [showNewCollectionForm, setShowNewCollectionForm] = useState(false);
@@ -117,15 +121,18 @@ export default function BookmarksPage() {
     setEditName(col.name);
   }
 
+  function selectCollection(id: string | null) {
+    setSelectedCollectionId(id);
+    setSidebarOpen(false);
+  }
+
   const selectedCollection = collections.find(c => c.id === selectedCollectionId) ?? null;
 
-  return (
-    <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      {/* Sidebar */}
+  const sidebar = (
       <Paper
         square
         elevation={0}
-        sx={{ width: 224, flexShrink: 0, borderRight: 1, borderColor: 'divider', bgcolor: 'grey.50', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}
+        sx={{ width: isMobile ? 264 : 224, flexShrink: 0, borderRight: isMobile ? 0 : 1, borderColor: 'divider', bgcolor: 'grey.50', display: 'flex', flexDirection: 'column', overflowY: 'auto', height: '100%' }}
       >
         <Box sx={{ px: 2, pt: 2.5, pb: 1.5, borderBottom: 1, borderColor: 'divider' }}>
           <Button
@@ -143,7 +150,7 @@ export default function BookmarksPage() {
         <List dense sx={{ flex: 1, px: 1, py: 1 }}>
           <ListItemButton
             selected={selectedCollectionId === null}
-            onClick={() => setSelectedCollectionId(null)}
+            onClick={() => selectCollection(null)}
             sx={{ borderRadius: 1, mb: 0.25 }}
           >
             <ListItemIcon sx={{ minWidth: 28 }}>
@@ -173,7 +180,7 @@ export default function BookmarksPage() {
               ) : (
                 <ListItemButton
                   selected={selectedCollectionId === col.id}
-                  onClick={() => setSelectedCollectionId(col.id)}
+                  onClick={() => selectCollection(col.id)}
                   sx={{ borderRadius: 1, mb: 0.25 }}
                 >
                   <ListItemIcon sx={{ minWidth: 28 }}>
@@ -240,11 +247,32 @@ export default function BookmarksPage() {
           )}
         </Box>
       </Paper>
+  );
+
+  return (
+    <Box sx={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+      {/* Sidebar — inline on desktop, drawer on mobile */}
+      {isMobile ? (
+        <Drawer anchor="left" open={sidebarOpen} onClose={() => setSidebarOpen(false)} ModalProps={{ keepMounted: true }}>
+          {sidebar}
+        </Drawer>
+      ) : sidebar}
 
       {/* Main content */}
       <Box sx={{ flex: 1, overflowY: 'auto' }}>
         <Box sx={{ maxWidth: 800, mx: 'auto', px: 3, py: 4 }}>
           <Box sx={{ mb: 3 }}>
+            {isMobile && (
+              <Button
+                onClick={() => setSidebarOpen(true)}
+                startIcon={<MenuIcon />}
+                size="small"
+                variant="outlined"
+                sx={{ mb: 1.5, textTransform: 'none' }}
+              >
+                Collections
+              </Button>
+            )}
             <Typography variant="h6" fontWeight={600}>
               {selectedCollection ? selectedCollection.name : 'All Bookmarks'}
             </Typography>
@@ -276,7 +304,7 @@ export default function BookmarksPage() {
           )}
 
           {isLoading && (
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
               {[...Array(4)].map((_, i) => <Skeleton key={i} variant="rounded" height={112} />)}
             </Box>
           )}

@@ -2,6 +2,7 @@ export * from './types/catalog';
 export * from './utils/iri';
 export * from './utils/iriCache';
 export * from './hooks/useIriTranslations';
+export * from './hooks/useResponsive';
 export * from './types/lineage';
 export * from './types/search';
 export * from './types/harvest';
