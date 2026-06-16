@@ -185,6 +185,19 @@ public class ChatService {
                 DATASET CONTEXT (schema, columns, and join hints for focused datasets):
                 %s
 
+                CRITICAL RULES — follow exactly, especially when writing SQL:
+                - Only use table and column names that literally appear above. Never invent, guess, or assume \
+                a column or table name that is not listed.
+                - Text shown as "(business name: ...)" is for human reference only — it is NEVER a valid SQL \
+                identifier. Always use the actual column name listed before it.
+                - Only join two tables using a column pair from a line starting with "Suggested join:". If no \
+                such line connects the tables you need, tell the user no verified relationship was found \
+                instead of guessing one.
+                - Never write a single SQL statement joining tables that are on different platforms — follow \
+                the Target Platform / PLATFORM CONFLICT guidance above exactly.
+                - If you are not confident a column, table, or join exists, say so explicitly rather than \
+                producing a query that might be wrong.
+
                 Use the above dataset as the primary context when relevant to the question. \
                 If the question is clearly about something else, draw on the broader catalog context below.
 

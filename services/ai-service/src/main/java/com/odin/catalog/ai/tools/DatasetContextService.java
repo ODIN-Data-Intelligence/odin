@@ -140,7 +140,7 @@ public class DatasetContextService {
                     ? el.vocabMappings().stream().map(CatalogServiceClient.VocabMapping::conceptIri).collect(Collectors.toList())
                     : List.of();
                 columnEntries.add(new ColumnEntry(col.name(), col.datatype(), Boolean.TRUE.equals(col.required()),
-                    el != null ? el.name() : null, conceptIris));
+                    el != null ? el.name() : null, el != null && el.isIdentifier(), conceptIris));
             }
 
             StringBuilder sb = new StringBuilder();
@@ -161,7 +161,8 @@ public class DatasetContextService {
                     sb.append("  - ").append(ce.name());
                     if (ce.datatype() != null) sb.append(" [").append(ce.datatype()).append(']');
                     if (ce.required()) sb.append(" NOT NULL");
-                    if (ce.logicalName() != null) sb.append(" → ").append(ce.logicalName());
+                    if (ce.logicalName() != null)
+                        sb.append("  (business name: \"").append(ce.logicalName()).append("\" — not a SQL identifier)");
                     sb.append('\n');
                 }
             } else {
@@ -179,24 +180,26 @@ public class DatasetContextService {
 
     /**
      * Derives join hints by finding columns that share the same vocabulary concept IRI
-     * across two or more datasets.
+     * across two or more datasets. A "Suggested join:" line — the only line the model should
+     * treat as an actionable join — is only emitted when at least one side of the pair is a
+     * known identifier column; a shared concept tag alone is not a reliable join key.
      */
     private String buildJoinHints(List<DatasetSchemaBlock> blocks) {
         if (blocks.size() < 2) return "";
 
-        Map<String, List<String[]>> iriToColumns = new LinkedHashMap<>();
+        Map<String, List<JoinOccurrence>> iriToColumns = new LinkedHashMap<>();
         for (DatasetSchemaBlock block : blocks) {
             for (ColumnEntry col : block.columns()) {
                 for (String iri : col.conceptIris()) {
                     iriToColumns.computeIfAbsent(iri, k -> new ArrayList<>())
-                        .add(new String[]{ block.title(), block.tableName(), col.name() });
+                        .add(new JoinOccurrence(block.title(), block.tableName(), col.name(), col.isIdentifier()));
                 }
             }
         }
 
-        List<Map.Entry<String, List<String[]>>> joinCandidates = iriToColumns.entrySet().stream()
+        List<Map.Entry<String, List<JoinOccurrence>>> joinCandidates = iriToColumns.entrySet().stream()
             .filter(e -> {
-                Set<String> titles = e.getValue().stream().map(a -> a[0]).collect(Collectors.toSet());
+                Set<String> titles = e.getValue().stream().map(JoinOccurrence::datasetTitle).collect(Collectors.toSet());
                 return titles.size() >= 2;
             })
             .collect(Collectors.toList());
@@ -205,16 +208,25 @@ public class DatasetContextService {
 
         StringBuilder sb = new StringBuilder();
         sb.append("=== JOIN HINTS (derived from shared vocabulary concepts) ===\n");
+        sb.append("Only lines starting with \"Suggested join:\" represent a verified key relationship — ")
+          .append("nothing else in this section should be treated as joinable.\n");
 
-        for (Map.Entry<String, List<String[]>> entry : joinCandidates) {
-            List<String[]> occurrences = entry.getValue();
+        for (Map.Entry<String, List<JoinOccurrence>> entry : joinCandidates) {
+            List<JoinOccurrence> occurrences = entry.getValue();
             sb.append("Shared concept: ").append(entry.getKey()).append('\n');
-            for (String[] occ : occurrences) {
-                sb.append("  ").append(occ[0]).append(" [").append(occ[1]).append("] → column: ").append(occ[2]).append('\n');
+            for (JoinOccurrence occ : occurrences) {
+                sb.append("  ").append(occ.datasetTitle()).append(" [").append(occ.tableName())
+                  .append("] → column: ").append(occ.columnName());
+                if (occ.isIdentifier()) sb.append(" (identifier column)");
+                sb.append('\n');
             }
-            if (occurrences.size() >= 2) {
-                sb.append("  Suggested join: ").append(occurrences.get(0)[1]).append('.').append(occurrences.get(0)[2])
-                  .append(" = ").append(occurrences.get(1)[1]).append('.').append(occurrences.get(1)[2]).append('\n');
+            boolean anyIdentifier = occurrences.stream().anyMatch(JoinOccurrence::isIdentifier);
+            if (anyIdentifier && occurrences.size() >= 2) {
+                sb.append("  Suggested join: ").append(occurrences.get(0).tableName()).append('.').append(occurrences.get(0).columnName())
+                  .append(" = ").append(occurrences.get(1).tableName()).append('.').append(occurrences.get(1).columnName()).append('\n');
+            } else {
+                sb.append("  (informational only — neither side is a known key column; ")
+                  .append("do not use as a join key without confirming with the user)\n");
             }
         }
 
@@ -286,8 +298,11 @@ public class DatasetContextService {
 
     // ── internal data holders ─────────────────────────────────────────────────
 
-    record ColumnEntry(String name, String datatype, boolean required, String logicalName, List<String> conceptIris) {}
+    record ColumnEntry(String name, String datatype, boolean required, String logicalName,
+                       boolean isIdentifier, List<String> conceptIris) {}
 
     record DatasetSchemaBlock(String datasetId, String title, String tableName,
                               String platform, String schemaText, List<ColumnEntry> columns) {}
+
+    record JoinOccurrence(String datasetTitle, String tableName, String columnName, boolean isIdentifier) {}
 }
