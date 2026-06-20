@@ -13,7 +13,7 @@ Create a default fully qualified app name.
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
 {{- $name := default .Chart.Name .Values.nameOverride }}
-{{- if contains $name .Release.Name }}
+{{- if contains .Release.Name $name }}
 {{- .Release.Name | trunc 63 | trimSuffix "-" }}
 {{- else }}
 {{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" }}
@@ -72,12 +72,12 @@ ServiceAccount name.
 Kafka bootstrap servers URL.
 */}}
 {{- define "odin-catalog.kafkaBootstrap" -}}
-{{- printf "%s-kafka:9092" .Release.Name }}
+{{- printf "%s-kafka:9092" (include "odin-catalog.fullname" .) }}
 {{- end }}
 
 {{/*
 Keycloak issuer URI.
 */}}
 {{- define "odin-catalog.keycloakIssuer" -}}
-{{- printf "http://%s-keycloak:8180/realms/%s" .Release.Name .Values.keycloak.realm }}
+{{- printf "http://%s-keycloak:8180/realms/%s" (include "odin-catalog.fullname" .) .Values.keycloak.realm }}
 {{- end }}

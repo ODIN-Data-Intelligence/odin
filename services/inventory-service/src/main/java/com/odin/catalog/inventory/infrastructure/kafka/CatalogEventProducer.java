@@ -7,6 +7,8 @@ import com.odin.catalog.shared.kafka.producer.KafkaEventPublisher;
 import com.odin.catalog.shared.kafka.topics.CatalogTopics;
 import com.odin.catalog.shared.models.dcat.DcatDataset;
 import com.odin.catalog.shared.models.dcat.DcatResource;
+import com.odin.catalog.shared.models.dprod.DataProduct;
+import com.odin.catalog.shared.models.dprod.DataProductLifecycleStatus;
 import com.odin.catalog.shared.models.events.DataProductChangedPayload;
 import com.odin.catalog.shared.models.events.DatasetChangedPayload;
 import com.odin.catalog.shared.models.policy.PolicyComponentPayload;
@@ -79,7 +81,7 @@ public class CatalogEventProducer {
             entity.getDomainId() != null ? entity.getDomainId().toString() : null,
             entity.getTenantId().toString(),
             previousStatus,
-            null
+            buildDataProduct(entity)
         );
         publisher.publishAsync(
             CatalogTopics.DATA_PRODUCTS_CHANGES,
@@ -128,5 +130,37 @@ public class CatalogEventProducer {
             null,
             null
         );
+    }
+
+    private DataProduct buildDataProduct(DataProductEntity entity) {
+        DcatResource resource = new DcatResource(
+            entity.getId().toString(),
+            entity.getResourceType(),
+            entity.getIri(),
+            entity.getTenantId().toString(),
+            entity.getDomainId() != null ? entity.getDomainId().toString() : null,
+            entity.getTitle(),
+            entity.getDescription(),
+            entity.getLanguage(),
+            entity.getKeywords(),
+            entity.getThemes(),
+            entity.getIssued() != null ? entity.getIssued().toString() : null,
+            entity.getModified() != null ? entity.getModified().toString() : null,
+            entity.getLicense(),
+            entity.getRightsStatement(),
+            entity.getAccessRights(),
+            entity.getConformsTo(),
+            entity.getCreatorId() != null ? entity.getCreatorId().toString() : null,
+            entity.getPublisherId() != null ? entity.getPublisherId().toString() : null,
+            null,
+            entity.getSourceUri(),
+            null
+        );
+        DataProductLifecycleStatus status = DataProductLifecycleStatus.Ideation;
+        try {
+            status = DataProductLifecycleStatus.valueOf(entity.getLifecycleStatus());
+        } catch (IllegalArgumentException ignored) {}
+        return new DataProduct(resource, status, null, entity.getPurpose(),
+            entity.getInformationSensitivity(), null, null);
     }
 }

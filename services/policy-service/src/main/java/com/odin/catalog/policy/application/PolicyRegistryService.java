@@ -147,6 +147,7 @@ public class PolicyRegistryService {
             e.getPolicyLevel(), parsed, e.getCreatedAt(), e.getUpdatedAt());
     }
 
+    @Transactional
     public PolicyComponentsResponse getComponents(UUID datasetId, UUID tenantId) {
         PolicyRecordEntity record = find(datasetId, tenantId)
             .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(

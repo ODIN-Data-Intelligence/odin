@@ -28,6 +28,10 @@ images:
     repository: odin/identity-service
     tag: latest
     pullPolicy: IfNotPresent
+  policyService:
+    repository: odin/policy-service
+    tag: latest
+    pullPolicy: IfNotPresent
   frontendProducer:
     repository: odin/frontend-producer
     tag: latest
@@ -69,6 +73,12 @@ postgres:
     username: ai
     password: ai
     storage: 20Gi
+  policy:
+    image: postgres:16-alpine
+    database: policy
+    username: policy
+    password: policy
+    storage: 5Gi
 
 # ─── Kafka ────────────────────────────────────────────────────────────────────
 kafka:
@@ -105,8 +115,6 @@ keycloak:
   realm: datacatalog
   clientId: odin-catalog
   clientSecret: change-me-in-production
-  # Points to identity-service postgres (uses 'keycloak' db within it)
-  dbUrl: "jdbc:postgresql://postgres-identity:5432/keycloak"
 
 # ─── Service ports ───────────────────────────────────────────────────────────
 services:
@@ -128,6 +136,9 @@ services:
   identityService:
     port: 8006
     replicas: 1
+  policyService:
+    port: 8007
+    replicas: 1
   frontendProducer:
     port: 3000
     replicas: 1
@@ -142,6 +153,7 @@ ingress:
   consumerHost: catalog.local
   producerHost: manage.catalog.local
   apiHost: api.catalog.local
+  keycloakHost: keycloak.catalog.local
   tls: []
 
 # ─── Spring Boot common env ──────────────────────────────────────────────────
@@ -152,6 +164,22 @@ spring:
   security:
     oauth2:
       issuerUri: "http://keycloak:8180/realms/datacatalog"
+
+# ─── AI / Ollama ─────────────────────────────────────────────────────────────
+ai:
+  ollamaBaseUrl: "http://10.0.0.27:11434"
+  ollamaChatModel: "llama3.1:latest"
+  ollamaEmbeddingModel: "nomic-embed-text"
+
+# ─── App feature flags ────────────────────────────────────────────────────────
+app:
+  # Allow dev-* API keys (X-API-Key: dev-local) to bypass JWT auth.
+  # Enable only in non-production environments (e.g. local MicroK8s).
+  devAuthEnabled: false
+  # API key injected by the consumer/producer frontend nginx into every proxied backend request.
+  # Leave empty in production (users authenticate via Keycloak JWT instead).
+  consumerApiKey: ""
+  producerApiKey: ""
 
 # ─── HPA ─────────────────────────────────────────────────────────────────────
 autoscaling:

@@ -13,6 +13,7 @@ import com.odin.catalog.shared.models.events.HarvestRunStatusPayload;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -126,14 +127,33 @@ public class HarvestJobLauncher {
         eventProducer.publishRunStatus(run, "failed", error);
     }
 
+    private static final int STATUS_UPDATE_ATTEMPTS = 3;
+
+    /**
+     * Read-modify-write of the run row. Each attempt re-reads (fresh {@code @Version}) and saves in
+     * its own transaction, so a retry on {@link OptimisticLockingFailureException} — possible when a
+     * concurrent writer (another replica or a cancel) touches the same run — applies cleanly.
+     */
     private void updateRunStatus(UUID runId, String status, Integer discovered, Integer failed) {
-        runRepository.findById(runId).ifPresent(entity -> {
-            entity.setStatus(status);
-            if ("running".equals(status)) entity.setStartedAt(OffsetDateTime.now());
-            if ("completed".equals(status) || "failed".equals(status)) entity.setCompletedAt(OffsetDateTime.now());
-            if (discovered != null) entity.setEntitiesDiscovered(discovered);
-            if (failed != null) entity.setEntitiesFailed(failed);
-            runRepository.save(entity);
-        });
+        for (int attempt = 1; attempt <= STATUS_UPDATE_ATTEMPTS; attempt++) {
+            try {
+                runRepository.findById(runId).ifPresent(entity -> {
+                    entity.setStatus(status);
+                    if ("running".equals(status)) entity.setStartedAt(OffsetDateTime.now());
+                    if ("completed".equals(status) || "failed".equals(status)) entity.setCompletedAt(OffsetDateTime.now());
+                    if (discovered != null) entity.setEntitiesDiscovered(discovered);
+                    if (failed != null) entity.setEntitiesFailed(failed);
+                    runRepository.save(entity);
+                });
+                return;
+            } catch (OptimisticLockingFailureException e) {
+                if (attempt == STATUS_UPDATE_ATTEMPTS) {
+                    log.error("Failed to update run {} status to {} after {} attempts: {}",
+                        runId, status, STATUS_UPDATE_ATTEMPTS, e.getMessage());
+                    return;
+                }
+                log.warn("action=RUN_STATUS_RETRY runId={} status={} attempt={}", runId, status, attempt);
+            }
+        }
     }
 }

@@ -13,9 +13,10 @@
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://localhost}"
-CATALOG_URL="${BASE_URL}:8001"
-HARVEST_URL="${BASE_URL}:8002"
-LINEAGE_URL="${BASE_URL}:8003"
+CATALOG_URL="${CATALOG_URL:-${BASE_URL}:8001}"
+HARVEST_URL="${HARVEST_URL:-${BASE_URL}:8002}"
+LINEAGE_URL="${LINEAGE_URL:-${BASE_URL}:8003}"
+SEARCH_URL="${SEARCH_URL:-${BASE_URL}:8004}"
 API_KEY="${API_KEY:-dev-local}"
 
 HEADER_AUTH="X-API-Key: ${API_KEY}"
@@ -1243,7 +1244,7 @@ section "Phase 12 — Trigger Search Re-index"
 
 info "Triggering OpenSearch re-index to pick up all new datasets..."
 REINDEX_RESULT=$(curl -sf -H "${HEADER_AUTH}" -H "${HEADER_JSON}" \
-  -X POST "http://localhost:8004/api/v1/admin/reindex" 2>/dev/null || echo '{"note":"reindex endpoint not available, search will sync via Kafka"}')
+  -X POST "${SEARCH_URL}/api/v1/admin/reindex" 2>/dev/null || echo '{"note":"reindex endpoint not available, search will sync via Kafka"}')
 echo "${REINDEX_RESULT}" | python3 -m json.tool 2>/dev/null || echo "${REINDEX_RESULT}"
 
 # ─────────────────────────────────────────────────────────────────────────────

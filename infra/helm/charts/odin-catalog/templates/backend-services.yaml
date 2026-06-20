@@ -57,6 +57,10 @@ spec:
                 secretKeyRef:
                   name: {{ include "odin-catalog.fullname" $root }}-postgres
                   key: inventory-password
+            - name: SPRING_DATA_REDIS_HOST
+              value: "{{ include "odin-catalog.fullname" $root }}-redis"
+            - name: SPRING_DATA_REDIS_PORT
+              value: "6379"
           resources: {{- toYaml $root.Values.resources.backend | nindent 12 }}
           readinessProbe:
             httpGet:
@@ -356,6 +360,10 @@ spec:
               value: "cosine_distance"
             - name: SPRING_AI_VECTORSTORE_PGVECTOR_DIMENSIONS
               value: "768"
+            - name: CATALOG_SERVICE_URL
+              value: "http://{{ include "odin-catalog.fullname" $root }}-inventory-service:{{ $root.Values.services.inventoryService.port }}"
+            - name: SEARCH_SERVICE_URL
+              value: "http://{{ include "odin-catalog.fullname" $root }}-search-service:{{ $root.Values.services.searchService.port }}"
           resources: {{- toYaml $root.Values.resources.backend | nindent 12 }}
           readinessProbe:
             httpGet:
@@ -432,12 +440,9 @@ spec:
             - name: KEYCLOAK_REALM
               value: {{ $root.Values.keycloak.realm | quote }}
             - name: KEYCLOAK_CLIENT_ID
-              value: {{ $root.Values.keycloak.clientId | quote }}
+              value: "identity-service"
             - name: KEYCLOAK_CLIENT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "odin-catalog.fullname" $root }}-keycloak
-                  key: client-secret
+              value: {{ $root.Values.keycloak.clientSecret | quote }}
           resources: {{- toYaml $root.Values.resources.backend | nindent 12 }}
           readinessProbe:
             httpGet:
@@ -449,5 +454,72 @@ spec:
             httpGet:
               path: /actuator/health/liveness
               port: {{ $root.Values.services.identityService.port }}
+            initialDelaySeconds: 60
+            periodSeconds: 20
+
+{{/* ── policy-service ──────────────────────────────────────────────────── */}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "odin-catalog.fullname" $root }}-policy-service
+  labels: {{- include "odin-catalog.componentLabels" (dict "component" "policy-service" "root" $root) | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ $root.Values.services.policyService.port }}
+      targetPort: {{ $root.Values.services.policyService.port }}
+  selector:
+    app.kubernetes.io/name: policy-service
+    app.kubernetes.io/instance: {{ $root.Release.Name }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "odin-catalog.fullname" $root }}-policy-service
+  labels: {{- include "odin-catalog.componentLabels" (dict "component" "policy-service" "root" $root) | nindent 4 }}
+spec:
+  replicas: {{ $root.Values.services.policyService.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: policy-service
+      app.kubernetes.io/instance: {{ $root.Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: policy-service
+        app.kubernetes.io/instance: {{ $root.Release.Name }}
+        app.kubernetes.io/component: policy-service
+    spec:
+      containers:
+        - name: policy-service
+          image: {{ $root.Values.images.policyService.repository }}:{{ $root.Values.images.policyService.tag }}
+          imagePullPolicy: {{ $root.Values.images.policyService.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "odin-catalog.fullname" $root }}-common
+          env:
+            - name: SERVER_PORT
+              value: {{ $root.Values.services.policyService.port | quote }}
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://{{ include "odin-catalog.fullname" $root }}-postgres-policy:5432/policy"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: {{ $root.Values.postgres.policy.username | quote }}
+            - name: SPRING_DATASOURCE_PASSWORD
+              value: {{ $root.Values.postgres.policy.password | quote }}
+          ports:
+            - containerPort: {{ $root.Values.services.policyService.port }}
+          resources: {{- toYaml $root.Values.resources.backend | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: {{ $root.Values.services.policyService.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: {{ $root.Values.services.policyService.port }}
             initialDelaySeconds: 60
             periodSeconds: 20

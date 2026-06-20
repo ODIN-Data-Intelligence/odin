@@ -19,6 +19,7 @@ import com.odin.catalog.inventory.api.v1.dto.TermsOfUseResponse;
 import com.odin.catalog.inventory.application.dataset.DatasetService;
 import com.odin.catalog.inventory.application.dataset.TermsOfUseService;
 import com.odin.catalog.inventory.application.logical.LogicalModelService;
+import com.odin.catalog.inventory.application.support.OptimisticRetry;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -48,6 +49,7 @@ public class DatasetsController {
     private final DatasetService datasetService;
     private final LogicalModelService logicalModelService;
     private final TermsOfUseService termsOfUseService;
+    private final OptimisticRetry optimisticRetry;
 
     @Operation(summary = "List datasets",
         description = "Returns a paginated list of datasets. Filter by catalog or source URI.")
@@ -285,7 +287,7 @@ public class DatasetsController {
             @Parameter(description = "Dataset UUID") @PathVariable UUID id,
             @Valid @RequestBody ProposeTransferRequest request) {
         log.info("action=PROPOSE_TRANSFER datasetId={} proposedOwnerId={}", id, request.proposedOwnerId());
-        return datasetService.proposeTransfer(id, request.proposedOwnerId());
+        return optimisticRetry.execute(() -> datasetService.proposeTransfer(id, request.proposedOwnerId()));
     }
 
     @Operation(summary = "Approve ownership transfer",
@@ -303,7 +305,8 @@ public class DatasetsController {
             @Parameter(description = "Proposal UUID") @PathVariable UUID proposalId,
             @RequestBody(required = false) ResolveProposalRequest request) {
         log.info("action=APPROVE_TRANSFER datasetId={} proposalId={}", id, proposalId);
-        return datasetService.approveTransfer(id, proposalId, request != null ? request.note() : null);
+        return optimisticRetry.execute(() ->
+            datasetService.approveTransfer(id, proposalId, request != null ? request.note() : null));
     }
 
     @Operation(summary = "Reject ownership transfer",
@@ -321,7 +324,8 @@ public class DatasetsController {
             @Parameter(description = "Proposal UUID") @PathVariable UUID proposalId,
             @RequestBody(required = false) ResolveProposalRequest request) {
         log.info("action=REJECT_TRANSFER datasetId={} proposalId={}", id, proposalId);
-        return datasetService.rejectTransfer(id, proposalId, request != null ? request.note() : null);
+        return optimisticRetry.execute(() ->
+            datasetService.rejectTransfer(id, proposalId, request != null ? request.note() : null));
     }
 
     @Operation(summary = "Get pending ownership proposal",

@@ -141,6 +141,7 @@ class LogicalModelServiceTest {
     @Test
     void delete_callsDeleteById() {
         UUID id = UUID.randomUUID();
+        when(modelRepository.findById(id)).thenReturn(Optional.of(model(id)));
         service.delete(id);
         verify(modelRepository).deleteById(id);
     }
@@ -266,6 +267,7 @@ class LogicalModelServiceTest {
     @Test
     void deleteElement_callsDeleteById() {
         UUID id = UUID.randomUUID();
+        when(elementRepository.findById(id)).thenReturn(Optional.of(element(id)));
         service.deleteElement(id);
         verify(elementRepository).deleteById(id);
     }

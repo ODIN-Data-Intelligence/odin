@@ -40,16 +40,14 @@ class OpenLineageHandlerTest {
         LineageJobEntity job = job("trading", "enrichment_job");
         LineageRunEntity run = run(job.getId(), event.run().runId());
 
-        when(jobRepository.findByNamespaceAndName("trading", "enrichment_job")).thenReturn(Optional.empty());
-        when(jobRepository.save(any())).thenReturn(job);
+        when(jobRepository.insertIfAbsent("trading", "enrichment_job")).thenReturn(1);
+        when(jobRepository.findByNamespaceAndName("trading", "enrichment_job")).thenReturn(Optional.of(job));
         when(runRepository.findByRunId(event.run().runId())).thenReturn(Optional.empty());
         when(runRepository.save(any())).thenReturn(run);
 
         handler.handle(event);
 
-        verify(jobRepository).save(argThat(j ->
-            "trading".equals(j.getNamespace()) && "enrichment_job".equals(j.getName())
-        ));
+        verify(jobRepository).insertIfAbsent("trading", "enrichment_job");
         verify(ageGraph).mergeJobNode("trading", "enrichment_job");
         verify(runRepository).save(any());
         verify(eventRepository).save(any());
@@ -63,13 +61,13 @@ class OpenLineageHandlerTest {
         LineageJobEntity existingJob = job("trading", "enrichment_job");
         LineageRunEntity run = run(existingJob.getId(), event.run().runId());
 
+        when(jobRepository.insertIfAbsent("trading", "enrichment_job")).thenReturn(0);
         when(jobRepository.findByNamespaceAndName("trading", "enrichment_job")).thenReturn(Optional.of(existingJob));
         when(runRepository.findByRunId(event.run().runId())).thenReturn(Optional.empty());
         when(runRepository.save(any())).thenReturn(run);
 
         handler.handle(event);
 
-        verify(jobRepository, never()).save(any());
         verify(ageGraph, never()).mergeJobNode(any(), any());
     }
 
@@ -101,8 +99,7 @@ class OpenLineageHandlerTest {
         when(jobRepository.findByNamespaceAndName(any(), any())).thenReturn(Optional.of(job));
         when(runRepository.findByRunId(any())).thenReturn(Optional.empty());
         when(runRepository.save(any())).thenReturn(run);
-        when(datasetRepository.findByNamespaceAndName(any(), any())).thenReturn(Optional.empty());
-        when(datasetRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(datasetRepository.findByNamespaceAndName(any(), any())).thenReturn(Optional.of(new LineageDatasetEntity()));
 
         handler.handle(event);
 
@@ -129,8 +126,7 @@ class OpenLineageHandlerTest {
         when(jobRepository.findByNamespaceAndName(any(), any())).thenReturn(Optional.of(job));
         when(runRepository.findByRunId(any())).thenReturn(Optional.empty());
         when(runRepository.save(any())).thenReturn(run);
-        when(datasetRepository.findByNamespaceAndName(any(), any())).thenReturn(Optional.empty());
-        when(datasetRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(datasetRepository.findByNamespaceAndName(any(), any())).thenReturn(Optional.of(new LineageDatasetEntity()));
 
         handler.handle(event);
 
@@ -155,8 +151,7 @@ class OpenLineageHandlerTest {
         when(jobRepository.findByNamespaceAndName(any(), any())).thenReturn(Optional.of(job));
         when(runRepository.findByRunId(any())).thenReturn(Optional.empty());
         when(runRepository.save(any())).thenReturn(run);
-        when(datasetRepository.findByNamespaceAndName(any(), any())).thenReturn(Optional.empty());
-        when(datasetRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(datasetRepository.findByNamespaceAndName(any(), any())).thenReturn(Optional.of(new LineageDatasetEntity()));
 
         handler.handle(event);
 
@@ -179,8 +174,7 @@ class OpenLineageHandlerTest {
         when(jobRepository.findByNamespaceAndName(any(), any())).thenReturn(Optional.of(job));
         when(runRepository.findByRunId(any())).thenReturn(Optional.empty());
         when(runRepository.save(any())).thenReturn(run);
-        when(datasetRepository.findByNamespaceAndName(any(), any())).thenReturn(Optional.empty());
-        when(datasetRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(datasetRepository.findByNamespaceAndName(any(), any())).thenReturn(Optional.of(new LineageDatasetEntity()));
 
         handler.handle(event);
 
@@ -200,14 +194,12 @@ class OpenLineageHandlerTest {
         when(jobRepository.findByNamespaceAndName(any(), any())).thenReturn(Optional.of(job));
         when(runRepository.findByRunId(any())).thenReturn(Optional.empty());
         when(runRepository.save(any())).thenReturn(run);
-        when(datasetRepository.findByNamespaceAndName("reference", "securities")).thenReturn(Optional.empty());
-        when(datasetRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(datasetRepository.findByNamespaceAndName("reference", "securities"))
+            .thenReturn(Optional.of(new LineageDatasetEntity()));
 
         handler.handle(event);
 
-        verify(datasetRepository).save(argThat(ds ->
-            "reference".equals(ds.getNamespace()) && "securities".equals(ds.getName())
-        ));
+        verify(datasetRepository).insertIfAbsent("reference", "securities");
     }
 
     // ── invalid event time falls back to now ──────────────────────────────

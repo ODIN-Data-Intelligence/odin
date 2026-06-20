@@ -7,12 +7,21 @@
 global:
   imageRegistry: localhost:32000
 
+app:
+  devAuthEnabled: true
+  consumerApiKey: "dev-local"
+
+ai:
+  ollamaBaseUrl: "http://ollama:11434"
+  ollamaChatModel: "qwen3:latest"
+
 ingress:
   enabled: true
   className: nginx
   consumerHost: catalog.local
   producerHost: manage.catalog.local
   apiHost: api.catalog.local
+  keycloakHost: keycloak.catalog.local
   tls: []
 
 # ─── Resource overrides for a single developer machine (16 GB RAM) ───────────
