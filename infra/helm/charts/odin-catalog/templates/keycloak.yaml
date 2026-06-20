@@ -52,7 +52,7 @@ spec:
             - name: KC_DB
               value: postgres
             - name: KC_DB_URL
-              value: {{ .Values.keycloak.dbUrl | quote }}
+              value: {{ printf "jdbc:postgresql://%s-postgres-identity:5432/keycloak" (include "odin-catalog.fullname" .) | quote }}
             - name: KC_DB_USERNAME
               value: {{ .Values.postgres.identity.username | quote }}
             - name: KC_DB_PASSWORD
@@ -62,6 +62,10 @@ spec:
                   key: identity-password
             - name: KC_HTTP_PORT
               value: "8180"
+            - name: KC_HOSTNAME
+              value: {{ .Values.ingress.keycloakHost | quote }}
+            - name: KC_HOSTNAME_STRICT
+              value: "false"
           volumeMounts:
             - name: realm
               mountPath: /opt/keycloak/data/import

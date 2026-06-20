@@ -1,0 +1,15 @@
+{{- if .Values.ingress.enabled }}
+{{- $apiPaths := list "inventory" "harvest" "lineage" "search" "ai" "identity" "policy" }}
+{{- range $apiPaths }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: strip-{{ . }}
+  labels: {{- include "odin-catalog.labels" $ | nindent 4 }}
+spec:
+  stripPrefix:
+    prefixes:
+      - /{{ . }}
+{{- end }}
+{{- end }}

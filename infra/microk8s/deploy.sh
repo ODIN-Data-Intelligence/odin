@@ -86,6 +86,7 @@ if [[ -z "$DRY_RUN" ]]; then
   echo "      $NODE_IP  catalog.local"
   echo "      $NODE_IP  manage.catalog.local"
   echo "      $NODE_IP  api.catalog.local"
+  echo "      $NODE_IP  keycloak.catalog.local"
   echo ""
   echo "    Access URLs:"
   echo "      Consumer UI   http://catalog.local"
@@ -93,7 +94,7 @@ if [[ -z "$DRY_RUN" ]]; then
   echo "      API gateway   http://api.catalog.local/inventory/actuator/health"
   echo ""
   echo "    Keycloak admin (port-forward):"
-  echo "      kubectl -n $NAMESPACE port-forward svc/$RELEASE-catalog-keycloak 8180:8180"
+  echo "      kubectl -n $NAMESPACE port-forward svc/$RELEASE-keycloak 8180:8180"
   echo "      open http://localhost:8180  (admin / admin)"
   echo ""
 fi

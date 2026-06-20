@@ -1,11 +1,19 @@
 package com.odin.catalog.inventory.application.logical;
 
+import com.odin.catalog.inventory.infrastructure.jpa.entity.BulkRecommendationJobEntity;
+import com.odin.catalog.inventory.infrastructure.jpa.repository.BulkRecommendationJobRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class BulkRecommendationJobRegistryTest {
 
@@ -13,7 +21,21 @@ class BulkRecommendationJobRegistryTest {
 
     @BeforeEach
     void setUp() {
-        registry = new BulkRecommendationJobRegistry();
+        // In-memory stand-in for the JPA repository so these stay fast unit tests; mimics the
+        // DB-assigned id on save and findById lookups.
+        BulkRecommendationJobRepository repository = mock(BulkRecommendationJobRepository.class);
+        Map<UUID, BulkRecommendationJobEntity> store = new HashMap<>();
+        when(repository.save(any(BulkRecommendationJobEntity.class))).thenAnswer(invocation -> {
+            BulkRecommendationJobEntity entity = invocation.getArgument(0);
+            if (entity.getId() == null) {
+                entity.setId(UUID.randomUUID());
+            }
+            store.put(entity.getId(), entity);
+            return entity;
+        });
+        when(repository.findById(any(UUID.class)))
+            .thenAnswer(invocation -> Optional.ofNullable(store.get(invocation.getArgument(0))));
+        registry = new BulkRecommendationJobRegistry(repository);
     }
 
     @Test

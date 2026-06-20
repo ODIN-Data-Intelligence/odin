@@ -71,6 +71,7 @@ langchain4j            = { module = "dev.langchain4j:langchain4j",              
 langchain4j-ollama     = { module = "dev.langchain4j:langchain4j-ollama",                version.ref = "langchain4j" }
 lombok                 = { module = "org.projectlombok:lombok" }
 spring-boot-cache      = { module = "org.springframework.boot:spring-boot-starter-cache" }
+spring-boot-data-redis = { module = "org.springframework.boot:spring-boot-starter-data-redis" }
 caffeine               = { module = "com.github.ben-manes.caffeine:caffeine", version.ref = "caffeine" }
 
 # Testing

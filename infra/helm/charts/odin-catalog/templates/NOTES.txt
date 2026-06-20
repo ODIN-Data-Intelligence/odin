@@ -7,12 +7,12 @@ Namespace: {{ .Release.Namespace }}
 SERVICES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  Inventory Service:  http://{{ .Release.Name }}-inventory-service:8001/swagger-ui.html
-  Harvest Service:    http://{{ .Release.Name }}-harvest-service:8002/swagger-ui.html
-  Lineage Service:    http://{{ .Release.Name }}-lineage-service:8003/swagger-ui.html
-  Search Service:     http://{{ .Release.Name }}-search-service:8004/swagger-ui.html
-  AI Service:         http://{{ .Release.Name }}-ai-service:8005/swagger-ui.html
-  Identity Service:   http://{{ .Release.Name }}-identity-service:8006/swagger-ui.html
+  Inventory Service:  http://{{ include "odin-catalog.fullname" . }}-inventory-service:8001/swagger-ui.html
+  Harvest Service:    http://{{ include "odin-catalog.fullname" . }}-harvest-service:8002/swagger-ui.html
+  Lineage Service:    http://{{ include "odin-catalog.fullname" . }}-lineage-service:8003/swagger-ui.html
+  Search Service:     http://{{ include "odin-catalog.fullname" . }}-search-service:8004/swagger-ui.html
+  AI Service:         http://{{ include "odin-catalog.fullname" . }}-ai-service:8005/swagger-ui.html
+  Identity Service:   http://{{ include "odin-catalog.fullname" . }}-identity-service:8006/swagger-ui.html
 
 {{- if .Values.ingress.enabled }}
 
@@ -33,9 +33,9 @@ INGRESS
 INFRASTRUCTURE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  Keycloak admin:  http://{{ .Release.Name }}-keycloak:8180/admin
-  MinIO console:   http://{{ .Release.Name }}-minio:9001
-  OpenSearch:      http://{{ .Release.Name }}-opensearch:9200
+  Keycloak admin:  http://{{ include "odin-catalog.fullname" . }}-keycloak:8180/admin
+  MinIO console:   http://{{ include "odin-catalog.fullname" . }}-minio:9001
+  OpenSearch:      http://{{ include "odin-catalog.fullname" . }}-opensearch:9200
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FIRST-RUN STEPS

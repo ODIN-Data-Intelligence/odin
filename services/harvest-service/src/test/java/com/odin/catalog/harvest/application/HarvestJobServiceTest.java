@@ -3,6 +3,7 @@ package com.odin.catalog.harvest.application;
 import com.odin.catalog.harvest.api.v1.dto.HarvestJobRequest;
 import com.odin.catalog.harvest.api.v1.dto.HarvestJobResponse;
 import com.odin.catalog.harvest.api.v1.dto.HarvestRunResponse;
+import com.odin.catalog.harvest.batch.HarvestJobLauncher;
 import com.odin.catalog.harvest.infrastructure.jpa.entity.HarvestJobEntity;
 import com.odin.catalog.harvest.infrastructure.jpa.entity.HarvestRunEntity;
 import com.odin.catalog.harvest.infrastructure.jpa.repository.HarvestJobRepository;
@@ -32,6 +33,8 @@ class HarvestJobServiceTest {
 
     @Mock HarvestJobRepository jobRepository;
     @Mock HarvestRunRepository runRepository;
+    @Mock HarvestSourceService sourceService;
+    @Mock HarvestJobLauncher launcher;
 
     @InjectMocks HarvestJobService service;
 
@@ -171,12 +174,12 @@ class HarvestJobServiceTest {
         when(jobRepository.findById(j.getId())).thenReturn(Optional.of(j));
 
         HarvestRunEntity savedRun = run(j.getId(), SOURCE);
-        when(runRepository.save(any())).thenReturn(savedRun);
+        when(runRepository.saveAndFlush(any())).thenReturn(savedRun);
 
         HarvestRunResponse result = service.trigger(j.getId());
 
         ArgumentCaptor<HarvestRunEntity> captor = ArgumentCaptor.forClass(HarvestRunEntity.class);
-        verify(runRepository).save(captor.capture());
+        verify(runRepository).saveAndFlush(captor.capture());
         HarvestRunEntity entity = captor.getValue();
         assertThat(entity.getJobId()).isEqualTo(j.getId());
         assertThat(entity.getSourceId()).isEqualTo(SOURCE);

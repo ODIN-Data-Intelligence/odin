@@ -345,6 +345,8 @@ services:
       SPRING_DATASOURCE_USERNAME: inventory
       SPRING_DATASOURCE_PASSWORD: ${INVENTORY_DB_PASSWORD:-inventory}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
       APP_DEV_AUTH_ENABLED: "true"
     ports:
       - "8001:8001"
@@ -352,6 +354,8 @@ services:
       postgres-inventory:
         condition: service_healthy
       kafka:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks: [catalog-net]
     labels:

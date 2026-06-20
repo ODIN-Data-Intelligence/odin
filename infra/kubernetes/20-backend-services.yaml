@@ -64,6 +64,10 @@ spec:
                 secretKeyRef:
                   name: odin-catalog-postgres
                   key: inventory-password
+            - name: SPRING_DATA_REDIS_HOST
+              value: odin-catalog-redis
+            - name: SPRING_DATA_REDIS_PORT
+              value: "6379"
           resources:
             requests:
               cpu: 250m

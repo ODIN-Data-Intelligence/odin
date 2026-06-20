@@ -92,14 +92,15 @@ public class OpenLineageHandler {
     }
 
     private LineageJobEntity upsertJob(Job job) {
+        // Idempotent across concurrent consumers (multiple replicas): ON CONFLICT DO NOTHING never
+        // raises, so the @Transactional handle() is not poisoned. Only merge the AGE node when this
+        // call actually created the row, to avoid redundant graph writes.
+        if (jobRepository.insertIfAbsent(job.namespace(), job.name()) > 0) {
+            ageGraph.mergeJobNode(job.namespace(), job.name());
+        }
         return jobRepository.findByNamespaceAndName(job.namespace(), job.name())
-            .orElseGet(() -> {
-                LineageJobEntity entity = new LineageJobEntity();
-                entity.setNamespace(job.namespace());
-                entity.setName(job.name());
-                ageGraph.mergeJobNode(job.namespace(), job.name());
-                return jobRepository.save(entity);
-            });
+            .orElseThrow(() -> new IllegalStateException(
+                "Lineage job missing after upsert: " + job.namespace() + "/" + job.name()));
     }
 
     private LineageRunEntity upsertRun(Run run, java.util.UUID jobId, RunEvent event) {
@@ -113,13 +114,12 @@ public class OpenLineageHandler {
     }
 
     private LineageDatasetEntity upsertDataset(String namespace, String name) {
+        // Idempotent across concurrent consumers; ON CONFLICT DO NOTHING never raises. The AGE
+        // dataset node is merged by the caller (key-idempotent) regardless of insert outcome.
+        datasetRepository.insertIfAbsent(namespace, name);
         return datasetRepository.findByNamespaceAndName(namespace, name)
-            .orElseGet(() -> {
-                LineageDatasetEntity entity = new LineageDatasetEntity();
-                entity.setNamespace(namespace);
-                entity.setName(name);
-                return datasetRepository.save(entity);
-            });
+            .orElseThrow(() -> new IllegalStateException(
+                "Lineage dataset missing after upsert: " + namespace + "/" + name));
     }
 
     private OffsetDateTime parseTime(String iso) {

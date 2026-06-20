@@ -12,6 +12,7 @@ import com.odin.catalog.harvest.infrastructure.jpa.repository.HarvestRunReposito
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -79,18 +80,33 @@ public class HarvestJobService {
         jobRepository.deleteById(id);
     }
 
+    private static final List<String> ACTIVE_RUN_STATUSES = List.of("pending", "running");
+
     @Transactional
     public HarvestRunResponse trigger(UUID id) {
         log.info("action=TRIGGER_JOB jobId={}", id);
         HarvestJobEntity job = jobRepository.findById(id)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Harvest job not found: " + id));
+
+        // At most one active run per job. Pre-check rejects the common case; the partial unique
+        // index (uq_harvest_runs_active_per_job) is the hard guard for the concurrent-trigger race
+        // (two clicks / two replicas) that both pass the pre-check.
+        if (runRepository.existsByJobIdAndStatusIn(id, ACTIVE_RUN_STATUSES)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "A harvest run is already active for job: " + id);
+        }
+
         HarvestRunEntity run = new HarvestRunEntity();
         run.setJobId(id);
         run.setSourceId(job.getSourceId());
         run.setStatus("pending");
         run.setTriggeredBy("api");
         run.setFullRefresh(job.isFullRefresh());
-        HarvestRunEntity saved = runRepository.save(run);
+        HarvestRunEntity saved;
+        try {
+            saved = runRepository.saveAndFlush(run);
+        } catch (DataIntegrityViolationException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "A harvest run is already active for job: " + id);
+        }
 
         HarvestRun domainRun = new HarvestRun(
             saved.getId(), saved.getJobId(), saved.getSourceId(),
