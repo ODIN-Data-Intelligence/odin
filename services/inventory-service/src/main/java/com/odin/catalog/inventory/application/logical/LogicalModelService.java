@@ -666,6 +666,66 @@ public class LogicalModelService {
         return after;
     }
 
+    // ── Agentic (proposer/reviewer) recommendations ──────────────────────────────
+
+    /**
+     * Persists the converged output of the ai-service agentic loop onto the model's elements as
+     * pending recommendations. Reuses the same per-dimension writers the single/bulk flows use, so
+     * the existing Accept/Reject recommendation rows render unchanged for the data owner. Each
+     * dimension is applied only when the agent proposed a value for it.
+     */
+    @Transactional
+    public List<LogicalDataElementResponse> applyAgenticRecommendations(
+            UUID modelId, List<AgenticRecommendationsRequest.ElementRecommendation> recommendations) {
+        findModelOrThrow(modelId);
+        if (recommendations == null || recommendations.isEmpty()) return List.of();
+
+        Map<UUID, AgenticRecommendationsRequest.ElementRecommendation> byId = new LinkedHashMap<>();
+        for (AgenticRecommendationsRequest.ElementRecommendation rec : recommendations) {
+            if (rec.elementId() == null) continue;
+            try {
+                byId.put(UUID.fromString(rec.elementId()), rec);
+            } catch (IllegalArgumentException ignored) {
+                log.warn("Skipping agentic recommendation with invalid elementId={}", rec.elementId());
+            }
+        }
+
+        List<LogicalDataElementEntity> entities = elementRepository.findAllById(byId.keySet());
+        OffsetDateTime now = OffsetDateTime.now();
+        for (LogicalDataElementEntity entity : entities) {
+            AgenticRecommendationsRequest.ElementRecommendation rec = byId.get(entity.getId());
+            if (rec == null) continue;
+
+            if (rec.description() != null && !rec.description().isBlank()) {
+                entity.setRecommendedDescription(rec.description());
+                entity.setDescriptionReasoning(rec.descriptionReasoning());
+                entity.setDescriptionRecommendedAt(now);
+            }
+            if (rec.classification() != null && !rec.classification().isBlank()) {
+                applyRecommendation(entity, new ElementClassificationResult(
+                    entity.getId().toString(), rec.classification(), rec.classificationReasoning()));
+            }
+            if (rec.vocabConcepts() != null && !rec.vocabConcepts().isEmpty()) {
+                List<AiServiceClient.RecommendedConcept> concepts = rec.vocabConcepts().stream()
+                    .map(c -> new AiServiceClient.RecommendedConcept(
+                        c.conceptIri(), c.conceptLabel(), c.conceptDefinition(), c.matchType(), c.reasoning()))
+                    .toList();
+                applyVocabRecommendation(entity, new VocabConceptRecommendation(entity.getId().toString(), concepts));
+            }
+            if (rec.isPersonalInformation() != null || rec.isDirectIdentifier() != null) {
+                entity.setRecommendedIsPersonalInformation(rec.isPersonalInformation());
+                entity.setRecommendedIsDirectIdentifier(rec.isDirectIdentifier());
+                entity.setPiiRecommendationReasoning(rec.piiReasoning());
+                entity.setPiiRecommendedAt(now);
+            }
+        }
+
+        List<LogicalDataElementResponse> result = elementRepository.saveAll(entities).stream()
+            .map(this::toElementResponse).toList();
+        log.info("action=AGENTIC_RECOMMENDATIONS_APPLIED modelId={} elementCount={}", modelId, result.size());
+        return result;
+    }
+
     @Transactional(readOnly = true)
     public DatasetSemanticContext getSemanticContext(UUID datasetId) {
         List<LogicalModelEntity> models = modelRepository.findByDatasetIdOrderByCreatedAtDesc(datasetId);

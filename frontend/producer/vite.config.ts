@@ -37,6 +37,7 @@ export default defineConfig({
       '/api/v1/ddl':                  proxyEntry('http://localhost:8003'),
       '/api/v1/catalog-datasets':     proxyEntry('http://localhost:8003'),
       '/api/v1/conversations':        proxyEntry('http://localhost:8005'),
+      '/api/v1/agentic-review':       proxyEntry('http://localhost:8005', AI_PROXY_TIMEOUT_MS),
       '/api/v1/semantic-search':      proxyEntry('http://localhost:8005'),
       '/api/v1/sources':              proxyEntry('http://localhost:8002'),
       '/api/v1/jobs':                 proxyEntry('http://localhost:8002'),

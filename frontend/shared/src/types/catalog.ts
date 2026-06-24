@@ -321,6 +321,50 @@ export interface RecommendedVocabMapping {
   reasoning?: string;
 }
 
+// ── Agentic proposer/reviewer review ────────────────────────────────────────
+
+export type AgenticPhase =
+  | 'CONTEXT' | 'MEMORY' | 'PROPOSING' | 'PROPOSAL' | 'REVIEWING' | 'REVIEW'
+  | 'LOCKED' | 'DONE' | 'MAX_REACHED' | 'ERROR';
+
+export interface AgenticVocabConcept {
+  conceptIri: string;
+  conceptLabel?: string;
+  conceptDefinition?: string;
+  matchType?: string;
+  reasoning?: string;
+}
+
+export interface AgenticElementProposal {
+  elementId: string;
+  name?: string;
+  description?: string;
+  descriptionReasoning?: string;
+  classification?: 'PUBLIC' | 'INTERNAL' | 'CONFIDENTIAL' | 'HIGH_CONFIDENTIAL';
+  classificationReasoning?: string;
+  vocabConcepts?: AgenticVocabConcept[];
+  isPersonalInformation?: boolean;
+  isDirectIdentifier?: boolean;
+  piiReasoning?: string;
+}
+
+export interface AgenticReviewComment {
+  elementId?: string;
+  dimension?: string;
+  issue?: string;
+}
+
+/** One Server-Sent Event from the agentic review stream. Fields populated per `phase`. */
+export interface AgenticEvent {
+  phase: AgenticPhase;
+  iteration?: number;
+  proposal?: { elements: AgenticElementProposal[] };
+  verdict?: 'APPROVE' | 'REJECT';
+  comments?: AgenticReviewComment[];
+  summary?: string;
+  message?: string;
+}
+
 export interface LogicalDataElement {
   id: string;
   logicalModelId: string;

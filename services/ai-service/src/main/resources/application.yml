@@ -91,3 +91,8 @@ springdoc:
 
 app:
   dev-auth-enabled: ${APP_DEV_AUTH_ENABLED:false}
+  agentic:
+    memory:
+      # Long-term proposer memory for the agentic review loop (lessons + exemplars in the vector store)
+      enabled: ${APP_AGENTIC_MEMORY_ENABLED:true}
+      top-k: ${APP_AGENTIC_MEMORY_TOP_K:3}

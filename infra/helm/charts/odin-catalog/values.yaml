@@ -167,7 +167,7 @@ spring:
 
 # ─── AI / Ollama ─────────────────────────────────────────────────────────────
 ai:
-  ollamaBaseUrl: "http://10.0.0.27:11434"
+  ollamaBaseUrl: "http://ollama:11434"
   ollamaChatModel: "llama3.1:latest"
   ollamaEmbeddingModel: "nomic-embed-text"
 

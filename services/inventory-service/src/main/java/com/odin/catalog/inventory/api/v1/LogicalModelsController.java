@@ -539,6 +539,23 @@ public class LogicalModelsController {
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "PII recommendation job not found: " + jobId));
     }
 
+    @Operation(summary = "Persist converged agentic recommendations for a model",
+        description = "Called by ai-service at the end of the agentic proposer/reviewer loop. Writes the "
+            + "converged description, classification, vocabulary concept and PII recommendations onto the "
+            + "model's elements as pending suggestions for the data owner to accept or reject.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Recommendations applied; returns the updated elements"),
+        @ApiResponse(responseCode = "404", description = "Logical model not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @PostMapping("/api/v1/logical-models/{modelId}/agentic-recommendations")
+    public List<LogicalDataElementResponse> applyAgenticRecommendations(
+            @Parameter(description = "Logical model UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
+            @PathVariable UUID modelId,
+            @Valid @RequestBody AgenticRecommendationsRequest request) {
+        return logicalModelService.applyAgenticRecommendations(modelId, request.elements());
+    }
+
     private BulkRecommendationJobResponse toJobResponse(BulkRecommendationJobRegistry.Job job) {
         return new BulkRecommendationJobResponse(
             job.jobId().toString(), job.modelId().toString(), job.status().name(),

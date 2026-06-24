@@ -25,6 +25,7 @@ import DescriptionRecommendationRow from './DescriptionRecommendationRow';
 import VocabRecommendationRow from './VocabRecommendationRow';
 import PiiRecommendationRow from './PiiRecommendationRow';
 import ElementEditRow from './ElementEditRow';
+import AgenticReviewDialog from './AgenticReviewDialog';
 
 const MATCH_TYPE_COLORS: Record<string, 'success' | 'primary' | 'secondary' | 'warning' | 'info'> = {
   exactMatch: 'success',
@@ -74,6 +75,7 @@ export default function LogicalModelEditor({ datasetId, models, canAction }: Pro
   const [piiRecommendError, setPiiRecommendError] = useState<string | null>(null);
   const [bulkPiiJobId, setBulkPiiJobId] = useState<string | null>(null);
   const [editingElementId, setEditingElementId] = useState<string | null>(null);
+  const [agenticOpen, setAgenticOpen] = useState(false);
 
   useEffect(() => {
     if (selectedModelId === null && models.length > 0) setSelectedModelId(models[0].id);
@@ -253,11 +255,24 @@ export default function LogicalModelEditor({ datasetId, models, canAction }: Pro
             <Chip label={selectedModel.status} color={selectedModel.status === 'published' ? 'success' : 'default'} size="small" sx={{ height: 18, fontSize: 11 }} />
           )}
         </Box>
-        {selectedModel?.status === 'draft' && (
-          <Button variant="outlined" size="small" onClick={() => publishMut.mutate(selectedModel.id)} disabled={publishMut.isPending} sx={{ textTransform: 'none' }}>
-            Publish
-          </Button>
-        )}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {selectedModelId && canAction && (
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<AutoAwesomeIcon sx={{ fontSize: 16 }} />}
+              onClick={() => setAgenticOpen(true)}
+              sx={{ textTransform: 'none' }}
+            >
+              AI Agent Review
+            </Button>
+          )}
+          {selectedModel?.status === 'draft' && (
+            <Button variant="outlined" size="small" onClick={() => publishMut.mutate(selectedModel.id)} disabled={publishMut.isPending} sx={{ textTransform: 'none' }}>
+              Publish
+            </Button>
+          )}
+        </Box>
       </Box>
 
       {/* Job running banners */}
@@ -487,6 +502,14 @@ export default function LogicalModelEditor({ datasetId, models, canAction }: Pro
           </TableBody>
         </Table>
       </Paper>
+
+      <AgenticReviewDialog
+        open={agenticOpen}
+        datasetId={datasetId}
+        modelId={selectedModelId}
+        onClose={() => setAgenticOpen(false)}
+        onApplied={() => qc.invalidateQueries({ queryKey: ['logical-elements', selectedModelId] })}
+      />
     </Box>
   );
 }
