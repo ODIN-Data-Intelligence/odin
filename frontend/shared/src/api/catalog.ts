@@ -1,6 +1,8 @@
-import { get, post, put, patch, del } from './client';
+import { get, post, put, patch, del, getAuthToken } from './client';
+import { parseSseBuffer } from './ai';
 import type {
   Catalog, Dataset, DataProduct, Distribution, CsvwColumn, PageResponse,
+  AgenticEvent,
   LogicalModel, LogicalDataElement, LogicalElementVocabMapping,
   Vocabulary, DatasetVocabularyProfile, VocabularyConcept,
   ColumnElementSuggestion, DatasetAuditEntry, LogicalElementAuditEntry,
@@ -140,6 +142,68 @@ export const logicalModelApi = {
     patch<LogicalModel>(`${BASE}/logical-models/${id}/status`, { status }),
   delete: (id: string) => del<void>(`${BASE}/logical-models/${id}`),
   suggestMappings: (id: string) => post<void>(`${BASE}/logical-models/${id}/suggest-mappings`),
+
+  /**
+   * Runs the agentic proposer/reviewer loop on ai-service and streams progress events.
+   * Each SSE `data:` line is a JSON {@link AgenticEvent}. Pass an AbortSignal to cancel the
+   * stream (e.g. when the dialog closes). Resolves once the stream ends.
+   */
+  agenticReview: async (
+    datasetId: string,
+    modelId: string,
+    handlers: {
+      onEvent: (event: AgenticEvent) => void;
+      onDone: () => void;
+      onError: (err: unknown) => void;
+    },
+    signal?: AbortSignal,
+  ): Promise<void> => {
+    const token = getAuthToken();
+    let res: Response;
+    try {
+      res = await fetch(`${BASE}/agentic-review`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          Accept: 'text/event-stream',
+        },
+        body: JSON.stringify({ datasetId, modelId }),
+        signal,
+      });
+    } catch (e) {
+      handlers.onError(e);
+      return;
+    }
+
+    if (!res.ok || !res.body) {
+      handlers.onError(new Error(`${res.status}: ${res.statusText}`));
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const { tokens, remaining } = parseSseBuffer(buffer);
+        buffer = remaining;
+        for (const t of tokens) {
+          try {
+            handlers.onEvent(JSON.parse(t) as AgenticEvent);
+          } catch {
+            // ignore a malformed/partial line — the next chunk will complete it
+          }
+        }
+      }
+      handlers.onDone();
+    } catch (e) {
+      handlers.onError(e);
+    }
+  },
 };
 
 // Logical Data Elements

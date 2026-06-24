@@ -1,4 +1,4 @@
-import { get, post } from './client';
+import { get, post, getAuthToken } from './client';
 
 /**
  * Parses a raw SSE buffer into tokens and a trailing incomplete chunk.
@@ -49,7 +49,7 @@ export const aiApi = {
     post<Array<{ entityId: string; entityType: string; title: string; score: number }>>(`${BASE}/semantic-search`, body),
 
   streamMessage: (conversationId: string, content: string): EventSource => {
-    const token = localStorage.getItem('access_token');
+    const token = getAuthToken();
     const url = `${BASE}/conversations/${conversationId}/messages`;
     // We open an EventSource via a POST-equivalent workaround using fetch + ReadableStream externally.
     // Return a URL-encoded GET EventSource for streaming (the service handles both).
@@ -68,7 +68,7 @@ export const aiApi = {
     focusDatasetId?: string | null,
     focusDatasetIds?: string[] | null
   ): Promise<void> => {
-    const token = localStorage.getItem('access_token');
+    const token = getAuthToken();
     const body: Record<string, unknown> = { content };
     if (focusDatasetId) body.focusDatasetId = focusDatasetId;
     if (focusDatasetIds && focusDatasetIds.length > 0) body.focusDatasetIds = focusDatasetIds;

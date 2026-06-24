@@ -72,7 +72,10 @@ public class ChatService {
         long t3 = System.currentTimeMillis();
         log.info("step=RAG_RETRIEVAL_START topK=8");
         List<Document> ragDocs = vectorStore.similaritySearch(
-            SearchRequest.builder().query(request.content()).topK(8).build()
+            // Restrict to dataset chunks — the shared store also holds AGENT_MEMORY docs
+            // (agentic-review lessons/exemplars) which must never leak into chat answers.
+            SearchRequest.builder().query(request.content()).topK(8)
+                .filterExpression("entityType == 'DATASET'").build()
         );
         log.info("step=RAG_RETRIEVAL_COMPLETE docs.found={} elapsed={}ms",
             ragDocs.size(), elapsed(t3));
