@@ -54,6 +54,56 @@ public record LogicalDataElementResponse(
     OffsetDateTime createdAt,
 
     @Schema(description = "Last modification timestamp", accessMode = Schema.AccessMode.READ_ONLY)
-    OffsetDateTime updatedAt
+    OffsetDateTime updatedAt,
+
+    @Schema(description = "Accepted data classification level",
+        allowableValues = {"PUBLIC", "INTERNAL", "CONFIDENTIAL", "HIGH_CONFIDENTIAL"})
+    String classification,
+
+    @Schema(description = "AI-recommended classification pending review",
+        allowableValues = {"PUBLIC", "INTERNAL", "CONFIDENTIAL", "HIGH_CONFIDENTIAL"})
+    String recommendedClassification,
+
+    @Schema(description = "One-sentence reasoning from the AI for the recommendation")
+    String classificationReasoning,
+
+    @Schema(description = "When the AI recommendation was generated", accessMode = Schema.AccessMode.READ_ONLY)
+    OffsetDateTime classificationRecommendedAt,
+
+    @Schema(description = "AI-recommended description pending review")
+    String recommendedDescription,
+
+    @Schema(description = "One-sentence reasoning from the AI for the description recommendation")
+    String descriptionReasoning,
+
+    @Schema(description = "When the description recommendation was generated", accessMode = Schema.AccessMode.READ_ONLY)
+    OffsetDateTime descriptionRecommendedAt,
+
+    @Schema(description = "AI-recommended vocabulary concept mappings pending review")
+    java.util.List<RecommendedVocabMapping> recommendedVocabMappings,
+
+    @Schema(description = "Overall reasoning for the vocabulary concept recommendations")
+    String vocabMappingReasoning,
+
+    @Schema(description = "When the vocabulary concept recommendations were generated", accessMode = Schema.AccessMode.READ_ONLY)
+    OffsetDateTime vocabMappingRecommendedAt,
+
+    @Schema(description = "Whether this element contains personal information about a natural person")
+    boolean isPersonalInformation,
+
+    @Schema(description = "Whether this element is a direct identifier (name, email, SSN, passport, etc.)")
+    boolean isDirectIdentifier,
+
+    @Schema(description = "AI-recommended personal information flag pending review")
+    Boolean recommendedIsPersonalInformation,
+
+    @Schema(description = "AI-recommended direct identifier flag pending review")
+    Boolean recommendedIsDirectIdentifier,
+
+    @Schema(description = "Reasoning for the PII indicator recommendation")
+    String piiRecommendationReasoning,
+
+    @Schema(description = "When the PII indicator recommendation was generated", accessMode = Schema.AccessMode.READ_ONLY)
+    OffsetDateTime piiRecommendedAt
 
 ) {}

@@ -13,9 +13,10 @@
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://localhost}"
-CATALOG_URL="${BASE_URL}:8001"
-HARVEST_URL="${BASE_URL}:8002"
-LINEAGE_URL="${BASE_URL}:8003"
+CATALOG_URL="${CATALOG_URL:-${BASE_URL}:8001}"
+HARVEST_URL="${HARVEST_URL:-${BASE_URL}:8002}"
+LINEAGE_URL="${LINEAGE_URL:-${BASE_URL}:8003}"
+SEARCH_URL="${SEARCH_URL:-${BASE_URL}:8004}"
 API_KEY="${API_KEY:-dev-local}"
 
 HEADER_AUTH="X-API-Key: ${API_KEY}"
@@ -121,6 +122,22 @@ get_or_create_element() {
     | jq -r '.id'
 }
 
+# Like get_or_create_element but also sets isPersonalInformation and isDirectIdentifier flags.
+get_or_create_pii_element() {
+  local lm="$1" name="$2" label="$3" type="$4" ordinal="$5" required="$6" identifier="$7" is_pii="$8" is_direct="$9"
+  local list existing
+  list=$(curl -sf -H "${HEADER_AUTH}" "${CATALOG_URL}/api/v1/logical-models/${lm}/elements")
+  existing=$(find_by "${list}" "name" "${name}")
+  [ -n "${existing}" ] && { echo "${existing}"; return; }
+  post "${CATALOG_URL}/api/v1/logical-models/${lm}/elements" \
+    "$(jq -n \
+      --arg n "${name}" --arg l "${label}" --arg t "${type}" \
+      --argjson o "${ordinal}" --argjson r "${required}" --argjson i "${identifier}" \
+      --argjson p "${is_pii}" --argjson d "${is_direct}" \
+      '{name:$n,label:$l,logicalType:$t,ordinal:$o,isRequired:$r,isIdentifier:$i,isPersonalInformation:$p,isDirectIdentifier:$d}')" \
+    | jq -r '.id'
+}
+
 # ── Conditional-add helpers (skip if already present) ─────────────────────────
 
 get_or_create_distribution() {
@@ -159,18 +176,22 @@ section "Phase 1 — Fetch vocabulary IDs"
 # ─────────────────────────────────────────────────────────────────────────────
 
 VOCABS=$(curl -sf -H "${HEADER_AUTH}" "${CATALOG_URL}/api/v1/vocabularies")
-VOCAB_SCHEMA=$(echo "${VOCABS}" | jq -r '.[] | select(.prefix=="schema") | .id')
-VOCAB_FND=$(echo "${VOCABS}"   | jq -r '.[] | select(.prefix=="fibo-fnd") | .id')
-VOCAB_FBC=$(echo "${VOCABS}"   | jq -r '.[] | select(.prefix=="fibo-fbc") | .id')
-VOCAB_SEC=$(echo "${VOCABS}"   | jq -r '.[] | select(.prefix=="fibo-sec") | .id')
-VOCAB_MD=$(echo "${VOCABS}"    | jq -r '.[] | select(.prefix=="fibo-md") | .id')
-VOCAB_SKOS=$(echo "${VOCABS}"  | jq -r '.[] | select(.prefix=="skos") | .id')
+VOCAB_SCHEMA=$(echo "${VOCABS}"  | jq -r '.[] | select(.prefix=="schema") | .id')
+VOCAB_FND=$(echo "${VOCABS}"     | jq -r '.[] | select(.prefix=="fibo-fnd") | .id')
+VOCAB_FBC=$(echo "${VOCABS}"     | jq -r '.[] | select(.prefix=="fibo-fbc") | .id')
+VOCAB_SEC=$(echo "${VOCABS}"     | jq -r '.[] | select(.prefix=="fibo-sec") | .id')
+VOCAB_MD=$(echo "${VOCABS}"      | jq -r '.[] | select(.prefix=="fibo-md") | .id')
+VOCAB_SKOS=$(echo "${VOCABS}"    | jq -r '.[] | select(.prefix=="skos") | .id')
+VOCAB_DPV=$(echo "${VOCABS}"     | jq -r '.[] | select(.prefix=="dpv") | .id')
+VOCAB_DPV_PD=$(echo "${VOCABS}"  | jq -r '.[] | select(.prefix=="dpv-pd") | .id')
 
 info "schema.org : ${VOCAB_SCHEMA}"
 info "FIBO FND   : ${VOCAB_FND}"
 info "FIBO FBC   : ${VOCAB_FBC}"
 info "FIBO SEC   : ${VOCAB_SEC}"
 info "FIBO MD    : ${VOCAB_MD}"
+info "DPV        : ${VOCAB_DPV}"
+info "DPV-PD     : ${VOCAB_DPV_PD}"
 
 # ─────────────────────────────────────────────────────────────────────────────
 section "Phase 2 — Catalogs"
@@ -215,6 +236,16 @@ CAT_COMPLIANCE=$(get_or_create_catalog "Compliance & Regulatory Catalog" '{
   "license": "https://rightsstatements.org/vocab/InC/1.0/"
 }')
 success "Compliance & Regulatory Catalog: ${CAT_COMPLIANCE}"
+
+CAT_HR=$(get_or_create_catalog "HR & People Catalog" '{
+  "title": "HR & People Catalog",
+  "description": "Highly restricted catalog for human-resources and people data. Contains employee profiles, trader credentials, and contact information. All datasets carry GDPR personal-data obligations. Access is limited to HR, Compliance, and named system integrations.",
+  "keywords": ["hr","people","employee","gdpr","personal-data","pii"],
+  "themes": ["http://publications.europa.eu/resource/authority/data-theme/GOVE"],
+  "language": ["en"],
+  "license": "https://rightsstatements.org/vocab/InC/1.0/"
+}')
+success "HR & People Catalog: ${CAT_HR}"
 
 # ─────────────────────────────────────────────────────────────────────────────
 section "Phase 3 — Datasets"
@@ -367,6 +398,20 @@ DS_FINREP=$(get_or_create_dataset "$(jq -n --arg cat "${CAT_COMPLIANCE}" '{
 }')")
 success "FinRep Consolidated Financial Statements: ${DS_FINREP}"
 
+DS_EMPLOYEE=$(get_or_create_dataset "$(jq -n --arg cat "${CAT_HR}" '{
+  title: "Employee & Trader Directory",
+  description: "Authoritative HR register of all Meridian Capital employees, with emphasis on trading-floor personnel. Carries full personal data: name, contact details, national identification, and date of birth. The traderId field in Executed Trades and Intraday Order Book resolves against this dataset. Classified HIGH_CONFIDENTIAL under the GDPR personal-data policy.",
+  catalogId: $cat,
+  accrualPeriodicity: "http://purl.org/cld/freq/daily",
+  keywords: ["employees","traders","hr","personal-data","gdpr","pii","contact"],
+  themes: ["http://publications.europa.eu/resource/authority/data-theme/GOVE"],
+  language: ["en"],
+  version: "1.0.0",
+  license: "https://rightsstatements.org/vocab/InC/1.0/",
+  sourceUri: "snowflake://meridian.snowflakecomputing.com/HR/PEOPLE/EMPLOYEE_DIRECTORY"
+}')")
+success "Employee & Trader Directory: ${DS_EMPLOYEE}"
+
 DS_EMIR=$(get_or_create_dataset "$(jq -n --arg cat "${CAT_COMPLIANCE}" '{
   title: "EMIR Derivatives Reporting",
   description: "Trade repository reports for OTC derivatives under EMIR Refit. Includes UTI, LEI pairs, product classification, notional, collateral, and lifecycle events reported to DTCC/REGIS-TR. Double-sided reporting for EU counterparties.",
@@ -390,7 +435,7 @@ info "Creating distributions (idempotent by access/download URL)..."
 
 DIST_TRADES_SF=$(get_or_create_distribution "${DS_TRADES}" "accessUrl" \
   "snowflake://meridian.snowflakecomputing.com/TRADING/TRADE_CAPTURE/EXECUTED_TRADES" \
-  '{"title":"Snowflake Table — Executed Trades","description":"Live Snowflake table; query via Snowsight or JDBC with TRADING role.","accessUrl":"snowflake://meridian.snowflakecomputing.com/TRADING/TRADE_CAPTURE/EXECUTED_TRADES","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available"}')
+  '{"title":"Snowflake Table — Executed Trades","description":"Live Snowflake table; query via Snowsight or JDBC with TRADING role.","accessUrl":"snowflake://meridian.snowflakecomputing.com/TRADING/TRADE_CAPTURE/EXECUTED_TRADES","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available","databaseName":"TRADING","schemaName":"TRADE_CAPTURE","tableName":"EXECUTED_TRADES"}')
 
 DIST_TRADES_PQ=$(get_or_create_distribution "${DS_TRADES}" "downloadUrl" \
   "s3://meridian-datalake/trading/executed_trades/" \
@@ -399,7 +444,7 @@ success "Distributions: Executed Trades (Snowflake=${DIST_TRADES_SF:0:8}… Parq
 
 DIST_POSITIONS_SF=$(get_or_create_distribution "${DS_POSITIONS}" "accessUrl" \
   "snowflake://meridian.snowflakecomputing.com/TRADING/POSITIONS/DAILY_BLOTTER" \
-  '{"title":"Snowflake Table — Daily Positions","accessUrl":"snowflake://meridian.snowflakecomputing.com/TRADING/POSITIONS/DAILY_BLOTTER","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available"}')
+  '{"title":"Snowflake Table — Daily Positions","accessUrl":"snowflake://meridian.snowflakecomputing.com/TRADING/POSITIONS/DAILY_BLOTTER","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available","databaseName":"TRADING","schemaName":"POSITIONS","tableName":"DAILY_BLOTTER"}')
 
 DIST_POSITIONS_REST=$(get_or_create_distribution "${DS_POSITIONS}" "accessUrl" \
   "https://api.meridian.internal/v2/positions" \
@@ -408,7 +453,7 @@ success "Distributions: Daily Position Blotter (Snowflake=${DIST_POSITIONS_SF:0:
 
 DIST_VAR_SF=$(get_or_create_distribution "${DS_VAR}" "accessUrl" \
   "snowflake://meridian.snowflakecomputing.com/RISK/MARKET_RISK/VAR_DAILY" \
-  '{"title":"Snowflake Table — VaR Daily","accessUrl":"snowflake://meridian.snowflakecomputing.com/RISK/MARKET_RISK/VAR_DAILY","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available"}')
+  '{"title":"Snowflake Table — VaR Daily","accessUrl":"snowflake://meridian.snowflakecomputing.com/RISK/MARKET_RISK/VAR_DAILY","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available","databaseName":"RISK","schemaName":"MARKET_RISK","tableName":"VAR_DAILY"}')
 
 DIST_VAR_CSV=$(get_or_create_distribution "${DS_VAR}" "downloadUrl" \
   "https://datahub.meridian.internal/risk/var/history.csv.gz" \
@@ -417,7 +462,7 @@ success "Distributions: Market Risk VaR (Snowflake=${DIST_VAR_SF:0:8}… CSV=${D
 
 DIST_SECURITIES_SF=$(get_or_create_distribution "${DS_SECURITIES}" "accessUrl" \
   "snowflake://meridian.snowflakecomputing.com/REFDATA/SECURITIES/MASTER" \
-  '{"title":"Snowflake Table — Securities Master","accessUrl":"snowflake://meridian.snowflakecomputing.com/REFDATA/SECURITIES/MASTER","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available"}')
+  '{"title":"Snowflake Table — Securities Master","accessUrl":"snowflake://meridian.snowflakecomputing.com/REFDATA/SECURITIES/MASTER","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available","databaseName":"REFDATA","schemaName":"SECURITIES","tableName":"MASTER"}')
 
 DIST_SECURITIES_REST=$(get_or_create_distribution "${DS_SECURITIES}" "accessUrl" \
   "https://api.meridian.internal/v1/securities" \
@@ -428,6 +473,15 @@ DIST_SECURITIES_KAFKA=$(get_or_create_distribution "${DS_SECURITIES}" "accessUrl
   '{"title":"Daily Delta Feed — Securities","description":"Kafka topic carrying incremental security updates (new listings, delistings, corporate actions).","accessUrl":"kafka://kafka.meridian.internal:9092/refdata.securities.changes","mediaType":"application/json","format":"Kafka","availability":"available"}')
 success "Distributions: Securities Master (SF=${DIST_SECURITIES_SF:0:8}… REST=${DIST_SECURITIES_REST:0:8}… Kafka=${DIST_SECURITIES_KAFKA:0:8}…)"
 
+DIST_RISK_METRICS_SF=$(get_or_create_distribution "${DS_RISK_METRICS}" "accessUrl" \
+  "snowflake://meridian.snowflakecomputing.com/RISK/MARKET_RISK/AGG_RISK_METRICS" \
+  '{"title":"Snowflake Table — Aggregated Market Risk Metrics","description":"Snowflake table containing aggregated Greeks and sensitivity metrics per desk and asset class, updated intraday.","accessUrl":"snowflake://meridian.snowflakecomputing.com/RISK/MARKET_RISK/AGG_RISK_METRICS","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available","databaseName":"RISK","schemaName":"MARKET_RISK","tableName":"AGG_RISK_METRICS"}')
+
+DIST_RISK_METRICS_REST=$(get_or_create_distribution "${DS_RISK_METRICS}" "accessUrl" \
+  "https://api.meridian.internal/v1/risk/metrics" \
+  '{"title":"REST API — Risk Metrics Dashboard Feed","description":"JSON REST endpoint returning aggregated risk metrics by desk and asset class. Consumed by the morning risk dashboard.","accessUrl":"https://api.meridian.internal/v1/risk/metrics","mediaType":"application/json","format":"JSON","availability":"available"}')
+success "Distributions: Aggregated Market Risk Metrics (Snowflake=${DIST_RISK_METRICS_SF:0:8}… REST=${DIST_RISK_METRICS_REST:0:8}…)"
+
 DIST_MIFID_XML=$(get_or_create_distribution "${DS_MIFID}" "downloadUrl" \
   "s3://meridian-compliance/mifid2/" \
   '{"title":"XML Report — MiFID II Submission","description":"ISO 20022 XML file submitted to FCA ARM daily by T+1. Retained for 5 years.","downloadUrl":"s3://meridian-compliance/mifid2/","mediaType":"application/xml","format":"ISO 20022 XML","availability":"available"}')
@@ -436,6 +490,60 @@ DIST_MIFID_PQ=$(get_or_create_distribution "${DS_MIFID}" "downloadUrl" \
   "s3://meridian-datalake/compliance/mifid2/" \
   '{"title":"Parquet Archive — MiFID II","description":"Columnar archive for internal analytics and audit queries.","downloadUrl":"s3://meridian-datalake/compliance/mifid2/","mediaType":"application/parquet","format":"Parquet","availability":"available"}')
 success "Distributions: MiFID II (XML=${DIST_MIFID_XML:0:8}… Parquet=${DIST_MIFID_PQ:0:8}…)"
+
+DIST_FX_SF=$(get_or_create_distribution "${DS_FX_RATES}" "accessUrl" \
+  "snowflake://meridian.snowflakecomputing.com/REFDATA/FX/DAILY_RATES" \
+  '{"title":"Snowflake Table — FX Reference Rates","description":"Daily mid, bid, and ask rates for all currency pairs sourced from Reuters and ECB. Updated by 07:00 London time.","accessUrl":"snowflake://meridian.snowflakecomputing.com/REFDATA/FX/DAILY_RATES","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available","databaseName":"REFDATA","schemaName":"FX","tableName":"DAILY_RATES"}')
+
+DIST_FX_REST=$(get_or_create_distribution "${DS_FX_RATES}" "accessUrl" \
+  "https://api.meridian.internal/v1/fx/rates" \
+  '{"title":"REST API — FX Rate Lookup","description":"JSON REST endpoint returning current and historical FX rates by currency pair. Suitable for real-time enrichment use cases.","accessUrl":"https://api.meridian.internal/v1/fx/rates","mediaType":"application/json","format":"JSON","availability":"available"}')
+success "Distributions: FX Reference Rates (Snowflake=${DIST_FX_SF:0:8}… REST=${DIST_FX_REST:0:8}…)"
+
+DIST_CPTY_DIR_SF=$(get_or_create_distribution "${DS_COUNTERPARTY_DIR}" "accessUrl" \
+  "snowflake://meridian.snowflakecomputing.com/REFDATA/COUNTERPARTIES/DIRECTORY" \
+  '{"title":"Snowflake Table — Counterparty Directory","description":"Master counterparty register sourced from the GLEIF LEI database and supplemented with internal credit classifications. Refreshed daily.","accessUrl":"snowflake://meridian.snowflakecomputing.com/REFDATA/COUNTERPARTIES/DIRECTORY","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available","databaseName":"REFDATA","schemaName":"COUNTERPARTIES","tableName":"DIRECTORY"}')
+
+DIST_CPTY_DIR_REST=$(get_or_create_distribution "${DS_COUNTERPARTY_DIR}" "accessUrl" \
+  "https://api.meridian.internal/v1/counterparties" \
+  '{"title":"REST API — Counterparty Lookup","description":"JSON REST endpoint for counterparty lookup by LEI, name, or internal ID. Returns entity hierarchy and registration status.","accessUrl":"https://api.meridian.internal/v1/counterparties","mediaType":"application/json","format":"JSON","availability":"available"}')
+success "Distributions: Counterparty Directory (Snowflake=${DIST_CPTY_DIR_SF:0:8}… REST=${DIST_CPTY_DIR_REST:0:8}…)"
+
+DIST_ORDERBOOK_SF=$(get_or_create_distribution "${DS_ORDERBOOK}" "accessUrl" \
+  "snowflake://meridian.snowflakecomputing.com/TRADING/ORDERBOOK/INTRADAY" \
+  '{"title":"Snowflake Table — Intraday Order Book","description":"Intraday order book snapshot persisted to Snowflake from the Kafka stream every 15 minutes. Retained for T+5 days for best-execution analysis.","accessUrl":"snowflake://meridian.snowflakecomputing.com/TRADING/ORDERBOOK/INTRADAY","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available","databaseName":"TRADING","schemaName":"ORDERBOOK","tableName":"INTRADAY"}')
+
+DIST_ORDERBOOK_KAFKA=$(get_or_create_distribution "${DS_ORDERBOOK}" "accessUrl" \
+  "kafka://kafka.meridian.internal:9092/trading.orderbook.events" \
+  '{"title":"Kafka Topic — Order Book Events","description":"Real-time order events (new, modify, cancel, fill) published to Kafka by the OMS. Consumed by the order-book fill-matcher and downstream risk pre-trade systems.","accessUrl":"kafka://kafka.meridian.internal:9092/trading.orderbook.events","mediaType":"application/json","format":"Kafka","availability":"available"}')
+success "Distributions: Intraday Order Book (Snowflake=${DIST_ORDERBOOK_SF:0:8}… Kafka=${DIST_ORDERBOOK_KAFKA:0:8}…)"
+
+DIST_FINREP_XML=$(get_or_create_distribution "${DS_FINREP}" "downloadUrl" \
+  "s3://meridian-compliance/finrep/" \
+  '{"title":"XML/XBRL — FinRep Submission","description":"EBA XBRL taxonomy-based XML file submitted to the PRA quarterly. Produced by the regulatory reporting pipeline from consolidation entries.","downloadUrl":"s3://meridian-compliance/finrep/","mediaType":"application/xml","format":"XBRL","availability":"available"}')
+
+DIST_FINREP_PQ=$(get_or_create_distribution "${DS_FINREP}" "downloadUrl" \
+  "s3://meridian-datalake/compliance/finrep/" \
+  '{"title":"Parquet Archive — FinRep","description":"Columnar Parquet archive of FinRep cells for internal finance analytics and audit trail queries.","downloadUrl":"s3://meridian-datalake/compliance/finrep/","mediaType":"application/parquet","format":"Parquet","availability":"available"}')
+success "Distributions: FinRep (XML=${DIST_FINREP_XML:0:8}… Parquet=${DIST_FINREP_PQ:0:8}…)"
+
+DIST_EMPLOYEE_SF=$(get_or_create_distribution "${DS_EMPLOYEE}" "accessUrl" \
+  "snowflake://meridian.snowflakecomputing.com/HR/PEOPLE/EMPLOYEE_DIRECTORY" \
+  '{"title":"Snowflake Table — Employee Directory","description":"Live Snowflake table; access requires HR_READ role and a signed data-access agreement. All queries are audited.","accessUrl":"snowflake://meridian.snowflakecomputing.com/HR/PEOPLE/EMPLOYEE_DIRECTORY","mediaType":"application/vnd.snowflake.table","format":"Snowflake","availability":"available","databaseName":"HR","schemaName":"PEOPLE","tableName":"EMPLOYEE_DIRECTORY"}')
+
+DIST_EMPLOYEE_REST=$(get_or_create_distribution "${DS_EMPLOYEE}" "accessUrl" \
+  "https://api.meridian.internal/v1/hr/employees" \
+  '{"title":"REST API — Employee Lookup","description":"JSON REST endpoint for resolving a traderId to employee profile. Returns only the fields permitted by the caller role. Requires HR_CONSUMER OAuth scope.","accessUrl":"https://api.meridian.internal/v1/hr/employees","mediaType":"application/json","format":"JSON","availability":"available"}')
+success "Distributions: Employee & Trader Directory (Snowflake=${DIST_EMPLOYEE_SF:0:8}… REST=${DIST_EMPLOYEE_REST:0:8}…)"
+
+DIST_EMIR_XML=$(get_or_create_distribution "${DS_EMIR}" "downloadUrl" \
+  "s3://meridian-compliance/emir/" \
+  '{"title":"XML — EMIR Trade Report","description":"ISO 20022 EMIR Refit XML submitted to the DTCC trade repository daily. Covers all derivatives in scope of EMIR reporting obligations.","downloadUrl":"s3://meridian-compliance/emir/","mediaType":"application/xml","format":"ISO 20022 XML","availability":"available"}')
+
+DIST_EMIR_PQ=$(get_or_create_distribution "${DS_EMIR}" "downloadUrl" \
+  "s3://meridian-datalake/compliance/emir/" \
+  '{"title":"Parquet Archive — EMIR Derivatives","description":"Parquet archive of EMIR trade report records for internal compliance analytics and regulatory audit queries.","downloadUrl":"s3://meridian-datalake/compliance/emir/","mediaType":"application/parquet","format":"Parquet","availability":"available"}')
+success "Distributions: EMIR (XML=${DIST_EMIR_XML:0:8}… Parquet=${DIST_EMIR_PQ:0:8}…)"
 
 # ─────────────────────────────────────────────────────────────────────────────
 section "Phase 5 — Vocabulary Profiles"
@@ -475,6 +583,14 @@ for DS in "${DS_MIFID}" "${DS_FINREP}" "${DS_EMIR}"; do
 done
 success "Vocabulary profiles: Compliance datasets → FIBO FBC + schema.org"
 
+add_vocab_profile_if_missing "${DS_EMPLOYEE}" "${VOCAB_DPV_PD}" \
+  "$(jq -n --arg v "${VOCAB_DPV_PD}" '{"vocabularyId":$v,"isPrimary":true,"domainTags":["personal-data","gdpr","pii"]}')"
+add_vocab_profile_if_missing "${DS_EMPLOYEE}" "${VOCAB_DPV}" \
+  "$(jq -n --arg v "${VOCAB_DPV}" '{"vocabularyId":$v,"isPrimary":false,"domainTags":["privacy","processing"]}')"
+add_vocab_profile_if_missing "${DS_EMPLOYEE}" "${VOCAB_SCHEMA}" \
+  "$(jq -n --arg v "${VOCAB_SCHEMA}" '{"vocabularyId":$v,"isPrimary":false,"domainTags":["person","contact"]}')"
+success "Vocabulary profiles: Employee Directory → DPV-PD (primary) + DPV + schema.org"
+
 # ─────────────────────────────────────────────────────────────────────────────
 section "Phase 6 — Logical Models with FIBO/schema.org Mappings"
 # ─────────────────────────────────────────────────────────────────────────────
@@ -492,7 +608,7 @@ EL_PRICE=$(      get_or_create_element "${LM_TRADES}" "tradePrice"      "Trade P
 EL_DATE=$(       get_or_create_element "${LM_TRADES}" "tradeDate"       "Trade Date"              "Date"           6 true  false)
 EL_DIRECTION=$(  get_or_create_element "${LM_TRADES}" "direction"       "Buy / Sell Indicator"    "Code"           7 true  false)
 EL_COUNTERPARTY=$(get_or_create_element "${LM_TRADES}" "counterpartyLei" "Counterparty LEI"       "Identifier"     8 true  false)
-EL_VENUE=$(      get_or_create_element "${LM_TRADES}" "executionVenue"  "Execution Venue (MIC)"   "Code"           9 false false)
+EL_VENUE=$(      get_or_create_element "${LM_TRADES}" "executionVenue"  "Execution Venue"         "Code"           9 false false)
 EL_TRADER=$(     get_or_create_element "${LM_TRADES}" "traderId"        "Trader Identifier"       "Identifier"    10 true  false)
 
 add_vocab_mapping_if_missing "${EL_TRADE_ID}"     "${VOCAB_FBC}"    "https://spec.edmcouncil.org/fibo/ontology/FBC/FunctionalEntities/FinancialServicesEntities/TradeIdentifier" "TradeIdentifier"
@@ -513,7 +629,7 @@ EL_POS_PORTFOLIO=$(get_or_create_element "${LM_POSITIONS}" "portfolioId"  "Portf
 EL_POS_ISIN=$(      get_or_create_element "${LM_POSITIONS}" "isin"         "ISIN"                 "Identifier"     2 true false)
 EL_POS_QTY=$(       get_or_create_element "${LM_POSITIONS}" "netQuantity"  "Net Quantity"          "Quantity"       3 true false)
 EL_POS_MV=$(        get_or_create_element "${LM_POSITIONS}" "marketValue"  "Market Value"          "MonetaryAmount" 4 true false)
-EL_POS_PNL=$(       get_or_create_element "${LM_POSITIONS}" "dailyPnl"     "Daily P&L"             "MonetaryAmount" 5 true false)
+EL_POS_PNL=$(       get_or_create_element "${LM_POSITIONS}" "dailyPnl"     "Daily Profit and Loss"  "MonetaryAmount" 5 true false)
 EL_POS_CCY=$(       get_or_create_element "${LM_POSITIONS}" "baseCurrency" "Base Currency"         "Currency"       6 true false)
 EL_POS_DATE=$(      get_or_create_element "${LM_POSITIONS}" "positionDate" "Position Date"         "Date"           7 true false)
 
@@ -550,10 +666,10 @@ LM_VAR=$(get_or_create_logical_model "${DS_VAR}" "VaR Measure Logical Model" \
   '{"name":"VaR Measure Logical Model","description":"Draft logical model for the VaR output dataset. Pending final sign-off from the risk quants team.","version":"0.3","status":"draft"}')
 
 EL_VAR_PORTFOLIO=$(get_or_create_element "${LM_VAR}" "portfolioId"    "Portfolio Identifier"  "Identifier"     1 true true)
-EL_VAR_VALUE=$(    get_or_create_element "${LM_VAR}" "varValue"        "VaR Value (USD)"       "MonetaryAmount" 2 true false)
-EL_VAR_SVAR=$(     get_or_create_element "${LM_VAR}" "stressedVar"     "Stressed VaR (USD)"    "MonetaryAmount" 3 true false)
-EL_VAR_CONF=$(     get_or_create_element "${LM_VAR}" "confidenceLevel" "Confidence Level"      "Percentage"     4 true false)
-EL_VAR_HORIZON=$(  get_or_create_element "${LM_VAR}" "holdingPeriod"   "Holding Period (days)" "Integer"        5 true false)
+EL_VAR_VALUE=$(    get_or_create_element "${LM_VAR}" "varValue"        "Value at Risk"          "MonetaryAmount" 2 true false)
+EL_VAR_SVAR=$(     get_or_create_element "${LM_VAR}" "stressedVar"     "Stressed Value at Risk" "MonetaryAmount" 3 true false)
+EL_VAR_CONF=$(     get_or_create_element "${LM_VAR}" "confidenceLevel" "Confidence Level"       "Percentage"     4 true false)
+EL_VAR_HORIZON=$(  get_or_create_element "${LM_VAR}" "holdingPeriod"   "Holding Period in Days" "Integer"        5 true false)
 EL_VAR_DATE=$(     get_or_create_element "${LM_VAR}" "valuationDate"   "Valuation Date"        "Date"           6 true false)
 
 add_vocab_mapping_if_missing "${EL_VAR_VALUE}" "${VOCAB_FND}" "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/MonetaryAmount" "MonetaryAmount"
@@ -565,15 +681,15 @@ info "Building logical model: MiFID II Transaction Reports..."
 LM_MIFID=$(get_or_create_logical_model "${DS_MIFID}" "MiFID II Report Logical Model" \
   '{"name":"MiFID II Report Logical Model","description":"Logical structure of a MiFID II Article 26 transaction report field set. ESMA field numbering in labels.","version":"2.0","status":"published"}')
 
-EL_MIF_UTI=$(      get_or_create_element "${LM_MIFID}" "uti"               "UTI (Field 1)"                 "Identifier" 1 true  true)
-EL_MIF_ISIN=$(     get_or_create_element "${LM_MIFID}" "instrumentIsin"    "Instrument ISIN (Field 41)"    "Identifier" 2 true  false)
-EL_MIF_PRICE=$(    get_or_create_element "${LM_MIFID}" "price"             "Price (Field 33)"              "Price"      3 true  false)
-EL_MIF_QTY=$(      get_or_create_element "${LM_MIFID}" "quantity"          "Quantity (Field 30)"           "Quantity"   4 true  false)
-EL_MIF_CCY=$(      get_or_create_element "${LM_MIFID}" "priceCurrency"     "Price Currency (Field 34)"     "Currency"   5 true  false)
-EL_MIF_BUY_LEI=$(  get_or_create_element "${LM_MIFID}" "buyerLei"          "Buyer LEI (Field 15)"          "Identifier" 6 true  false)
-EL_MIF_SELL_LEI=$( get_or_create_element "${LM_MIFID}" "sellerLei"         "Seller LEI (Field 16)"         "Identifier" 7 true  false)
-EL_MIF_VENUE=$(    get_or_create_element "${LM_MIFID}" "tradingVenueMic"   "Trading Venue MIC (Field 36)"  "Code"       8 true  false)
-EL_MIF_TS=$(       get_or_create_element "${LM_MIFID}" "executionTimestamp" "Execution Timestamp (Field 28)" "DateTime" 9 true  false)
+EL_MIF_UTI=$(      get_or_create_element "${LM_MIFID}" "uti"               "Unique Transaction Identifier"  "Identifier" 1 true  true)
+EL_MIF_ISIN=$(     get_or_create_element "${LM_MIFID}" "instrumentIsin"    "Instrument ISIN"                "Identifier" 2 true  false)
+EL_MIF_PRICE=$(    get_or_create_element "${LM_MIFID}" "price"             "Transaction Price"              "Price"      3 true  false)
+EL_MIF_QTY=$(      get_or_create_element "${LM_MIFID}" "quantity"          "Transaction Quantity"           "Quantity"   4 true  false)
+EL_MIF_CCY=$(      get_or_create_element "${LM_MIFID}" "priceCurrency"     "Price Currency"                 "Currency"   5 true  false)
+EL_MIF_BUY_LEI=$(  get_or_create_element "${LM_MIFID}" "buyerLei"          "Buyer Legal Entity Identifier"  "Identifier" 6 true  false)
+EL_MIF_SELL_LEI=$( get_or_create_element "${LM_MIFID}" "sellerLei"         "Seller Legal Entity Identifier" "Identifier" 7 true  false)
+EL_MIF_VENUE=$(    get_or_create_element "${LM_MIFID}" "tradingVenueMic"   "Trading Venue"                  "Code"       8 true  false)
+EL_MIF_TS=$(       get_or_create_element "${LM_MIFID}" "executionTimestamp" "Execution Timestamp"           "DateTime"   9 true  false)
 
 add_vocab_mapping_if_missing "${EL_MIF_ISIN}"     "${VOCAB_SEC}" "https://spec.edmcouncil.org/fibo/ontology/SEC/Securities/SecuritiesIdentificationSchemes/InternationalSecuritiesIdentificationNumber" "ISIN"
 add_vocab_mapping_if_missing "${EL_MIF_PRICE}"    "${VOCAB_MD}"  "https://spec.edmcouncil.org/fibo/ontology/MD/TemporalCore/SecurityMarketConcepts/MarketPrice" "MarketPrice"
@@ -583,6 +699,203 @@ add_vocab_mapping_if_missing "${EL_MIF_SELL_LEI}" "${VOCAB_FBC}" "https://spec.e
 add_vocab_mapping_if_missing "${EL_MIF_VENUE}"    "${VOCAB_FBC}" "https://spec.edmcouncil.org/fibo/ontology/FBC/FunctionalEntities/FinancialServicesEntities/MarketIdentifierCode" "MarketIdentifierCode"
 add_vocab_mapping_if_missing "${EL_MIF_TS}"       "${VOCAB_SCHEMA}" "https://schema.org/startDate" "startDate" "closeMatch"
 success "Logical model (published): MiFID II — 9 elements, fully mapped"
+
+info "Building logical model: Counterparty Credit Exposure..."
+LM_COUNTERPARTY=$(get_or_create_logical_model "${DS_COUNTERPARTY}" "Counterparty Credit Exposure Model" \
+  '{"name":"Counterparty Credit Exposure Model","description":"Business-oriented view of counterparty credit risk exposure. Covers current exposure, PFE, CVA/DVA, netting sets, and ISDA agreement references. FIBO-annotated for regulatory and semantic interoperability.","version":"1.0","status":"draft"}')
+
+EL_CE_EXPOSURE_ID=$(  get_or_create_element "${LM_COUNTERPARTY}" "exposureId"               "Exposure Record Identifier"      "Identifier"     1 true  true)
+EL_CE_CP_ID=$(        get_or_create_element "${LM_COUNTERPARTY}" "counterpartyId"            "Counterparty Internal Identifier" "Identifier"    2 true  false)
+EL_CE_CP_LEI=$(       get_or_create_element "${LM_COUNTERPARTY}" "counterpartyLei"           "Counterparty LEI"                "Identifier"     3 true  false)
+EL_CE_CP_NAME=$(      get_or_create_element "${LM_COUNTERPARTY}" "counterpartyName"          "Counterparty Legal Name"         "Text"           4 true  false)
+EL_CE_NETTING=$(      get_or_create_element "${LM_COUNTERPARTY}" "nettingSetId"              "Netting Set Identifier"          "Identifier"     5 true  false)
+EL_CE_AS_OF=$(        get_or_create_element "${LM_COUNTERPARTY}" "asOfDate"                  "As-Of Date"                      "Date"           6 true  false)
+EL_CE_CCY=$(          get_or_create_element "${LM_COUNTERPARTY}" "baseCurrency"              "Base Currency"                   "Currency"       7 true  false)
+EL_CE_CURRENT=$(      get_or_create_element "${LM_COUNTERPARTY}" "currentExposure"           "Current Exposure"                "MonetaryAmount" 8 true  false)
+EL_CE_PFE=$(          get_or_create_element "${LM_COUNTERPARTY}" "potentialFutureExposure"   "Potential Future Exposure"       "MonetaryAmount" 9 true  false)
+EL_CE_EE=$(           get_or_create_element "${LM_COUNTERPARTY}" "expectedExposure"          "Expected Exposure"               "MonetaryAmount" 10 true  false)
+EL_CE_PEAK=$(         get_or_create_element "${LM_COUNTERPARTY}" "peakExposure"              "Peak Exposure"                   "MonetaryAmount" 11 false false)
+EL_CE_CVA=$(          get_or_create_element "${LM_COUNTERPARTY}" "creditValuationAdjustment" "Credit Valuation Adjustment"     "MonetaryAmount" 12 true  false)
+EL_CE_DVA=$(          get_or_create_element "${LM_COUNTERPARTY}" "debitValuationAdjustment"  "Debit Valuation Adjustment"      "MonetaryAmount" 13 false false)
+EL_CE_COL_POST=$(     get_or_create_element "${LM_COUNTERPARTY}" "collateralPostedAmount"    "Collateral Posted Amount"        "MonetaryAmount" 14 false false)
+EL_CE_COL_RECV=$(     get_or_create_element "${LM_COUNTERPARTY}" "collateralReceivedAmount"  "Collateral Received Amount"      "MonetaryAmount" 15 false false)
+EL_CE_NET=$(          get_or_create_element "${LM_COUNTERPARTY}" "netExposure"               "Net Exposure"                    "MonetaryAmount" 16 true  false)
+EL_CE_WWR_FLAG=$(     get_or_create_element "${LM_COUNTERPARTY}" "wrongWayRiskFlag"          "Wrong-Way Risk Flag"             "Boolean"        17 true  false)
+EL_CE_WWR_SCORE=$(    get_or_create_element "${LM_COUNTERPARTY}" "wrongWayRiskScore"         "Wrong-Way Risk Score"            "Decimal"        18 false false)
+EL_CE_ISDA=$(         get_or_create_element "${LM_COUNTERPARTY}" "isdaAgreementId"           "ISDA Master Agreement Identifier" "Identifier"   19 false false)
+EL_CE_RATING=$(       get_or_create_element "${LM_COUNTERPARTY}" "creditRating"              "Credit Rating"                   "Code"           20 false false)
+EL_CE_THRESHOLD=$(    get_or_create_element "${LM_COUNTERPARTY}" "thresholdAmount"           "Threshold Amount"                "MonetaryAmount" 21 false false)
+EL_CE_MTA=$(          get_or_create_element "${LM_COUNTERPARTY}" "minimumTransferAmount"     "Minimum Transfer Amount"         "MonetaryAmount" 22 false false)
+EL_CE_CALC_METHOD=$(  get_or_create_element "${LM_COUNTERPARTY}" "calculationMethod"         "Calculation Method"              "Code"           23 true  false)
+EL_CE_CONF_LVL=$(     get_or_create_element "${LM_COUNTERPARTY}" "confidenceLevel"           "Confidence Level"                "Decimal"        24 true  false)
+EL_CE_HORIZON=$(      get_or_create_element "${LM_COUNTERPARTY}" "timeHorizonDays"           "Time Horizon in Days"            "Integer"        25 true  false)
+
+add_vocab_mapping_if_missing "${EL_CE_CP_LEI}"   "${VOCAB_FBC}"    "https://spec.edmcouncil.org/fibo/ontology/FBC/FunctionalEntities/RegistrationAuthorities/LegalEntityIdentifier" "LegalEntityIdentifier"
+add_vocab_mapping_if_missing "${EL_CE_AS_OF}"    "${VOCAB_SCHEMA}" "https://schema.org/startDate" "startDate"
+add_vocab_mapping_if_missing "${EL_CE_CCY}"      "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/ISO4217-CurrencyCodes/Currency" "Currency"
+add_vocab_mapping_if_missing "${EL_CE_CURRENT}"  "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/MonetaryAmount" "MonetaryAmount"
+add_vocab_mapping_if_missing "${EL_CE_PFE}"      "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/MonetaryAmount" "MonetaryAmount" "closeMatch"
+add_vocab_mapping_if_missing "${EL_CE_EE}"       "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/MonetaryAmount" "MonetaryAmount" "closeMatch"
+add_vocab_mapping_if_missing "${EL_CE_CVA}"      "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/MonetaryAmount" "MonetaryAmount" "closeMatch"
+add_vocab_mapping_if_missing "${EL_CE_NET}"      "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/MonetaryAmount" "MonetaryAmount" "closeMatch"
+success "Logical model (draft): Counterparty Credit Exposure — 25 elements, FIBO-mapped"
+
+info "Building logical model: Aggregated Market Risk Metrics..."
+LM_RISK_METRICS=$(get_or_create_logical_model "${DS_RISK_METRICS}" "Market Risk Metrics Logical Model" \
+  '{"name":"Market Risk Metrics Logical Model","description":"Aggregated first- and second-order sensitivity metrics (Greeks) per trading desk and asset class. Inputs are positions and market data; output drives the daily risk dashboard and CRO report.","version":"1.0","status":"published"}')
+
+EL_RM_DESK=$(      get_or_create_element "${LM_RISK_METRICS}" "deskId"         "Trading Desk Identifier"   "Identifier"     1 true  true)
+EL_RM_ASSET=$(     get_or_create_element "${LM_RISK_METRICS}" "assetClass"     "Asset Class"               "Code"           2 true  false)
+EL_RM_DATE=$(      get_or_create_element "${LM_RISK_METRICS}" "reportDate"     "Report Date"               "Date"           3 true  false)
+EL_RM_DV01=$(      get_or_create_element "${LM_RISK_METRICS}" "dv01"           "Interest Rate Sensitivity (DV01)" "MonetaryAmount" 4 true  false)
+EL_RM_CS01=$(      get_or_create_element "${LM_RISK_METRICS}" "cs01"           "Credit Spread Sensitivity (CS01)" "MonetaryAmount" 5 true  false)
+EL_RM_VEGA=$(      get_or_create_element "${LM_RISK_METRICS}" "vegaExposure"   "Vega Exposure"             "MonetaryAmount" 6 true  false)
+EL_RM_DELTA=$(     get_or_create_element "${LM_RISK_METRICS}" "deltaExposure"  "Delta Exposure"            "MonetaryAmount" 7 true  false)
+EL_RM_GAMMA=$(     get_or_create_element "${LM_RISK_METRICS}" "gammaExposure"  "Gamma Exposure"            "MonetaryAmount" 8 false false)
+
+add_vocab_mapping_if_missing "${EL_RM_DATE}"  "${VOCAB_SCHEMA}" "https://schema.org/startDate" "startDate"
+add_vocab_mapping_if_missing "${EL_RM_DV01}"  "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/MonetaryAmount" "MonetaryAmount"
+add_vocab_mapping_if_missing "${EL_RM_CS01}"  "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/MonetaryAmount" "MonetaryAmount" "closeMatch"
+add_vocab_mapping_if_missing "${EL_RM_VEGA}"  "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/MonetaryAmount" "MonetaryAmount" "closeMatch"
+add_vocab_mapping_if_missing "${EL_RM_DELTA}" "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/MonetaryAmount" "MonetaryAmount" "closeMatch"
+add_vocab_mapping_if_missing "${EL_RM_GAMMA}" "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/MonetaryAmount" "MonetaryAmount" "closeMatch"
+success "Logical model (published): Aggregated Market Risk Metrics — 8 elements, FIBO-mapped"
+
+info "Building logical model: FX Reference Rates..."
+LM_FX=$(get_or_create_logical_model "${DS_FX_RATES}" "FX Reference Rates Logical Model" \
+  '{"name":"FX Reference Rates Logical Model","description":"Daily foreign exchange reference rates. Each row is a currency pair snapshot with mid, bid, and ask rates from a composite source. Used for P&L conversion and trade enrichment.","version":"1.0","status":"published"}')
+
+EL_FX_BASE=$(  get_or_create_element "${LM_FX}" "baseCurrency"  "Base Currency"   "Currency" 1 true  true)
+EL_FX_QUOTE=$( get_or_create_element "${LM_FX}" "quoteCurrency" "Quote Currency"  "Currency" 2 true  false)
+EL_FX_MID=$(   get_or_create_element "${LM_FX}" "midRate"       "Mid Rate"        "Decimal"  3 true  false)
+EL_FX_BID=$(   get_or_create_element "${LM_FX}" "bidRate"       "Bid Rate"        "Decimal"  4 true  false)
+EL_FX_ASK=$(   get_or_create_element "${LM_FX}" "askRate"       "Ask Rate"        "Decimal"  5 true  false)
+EL_FX_DATE=$(  get_or_create_element "${LM_FX}" "rateDate"      "Rate Date"       "Date"     6 true  false)
+EL_FX_SRC=$(   get_or_create_element "${LM_FX}" "rateSource"    "Rate Source"     "Text"     7 true  false)
+
+add_vocab_mapping_if_missing "${EL_FX_BASE}"  "${VOCAB_FND}" "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/ISO4217-CurrencyCodes/Currency" "Currency"
+add_vocab_mapping_if_missing "${EL_FX_QUOTE}" "${VOCAB_FND}" "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/ISO4217-CurrencyCodes/Currency" "Currency"
+add_vocab_mapping_if_missing "${EL_FX_MID}"   "${VOCAB_MD}"  "https://spec.edmcouncil.org/fibo/ontology/MD/TemporalCore/SecurityMarketConcepts/MarketPrice" "MarketPrice"
+add_vocab_mapping_if_missing "${EL_FX_BID}"   "${VOCAB_MD}"  "https://spec.edmcouncil.org/fibo/ontology/MD/TemporalCore/SecurityMarketConcepts/MarketPrice" "MarketPrice" "closeMatch"
+add_vocab_mapping_if_missing "${EL_FX_ASK}"   "${VOCAB_MD}"  "https://spec.edmcouncil.org/fibo/ontology/MD/TemporalCore/SecurityMarketConcepts/MarketPrice" "MarketPrice" "closeMatch"
+add_vocab_mapping_if_missing "${EL_FX_DATE}"  "${VOCAB_SCHEMA}" "https://schema.org/startDate" "startDate"
+success "Logical model (published): FX Reference Rates — 7 elements, FIBO-mapped"
+
+info "Building logical model: Counterparty Directory..."
+LM_CPTY_DIR=$(get_or_create_logical_model "${DS_COUNTERPARTY_DIR}" "Counterparty Directory Logical Model" \
+  '{"name":"Counterparty Directory Logical Model","description":"Legal entity register for all trading counterparties. Sourced from GLEIF and enriched with internal credit status. Provides the authoritative LEI, registration country, jurisdiction, and parent entity hierarchy.","version":"1.0","status":"published"}')
+
+EL_CD_LEI=$(      get_or_create_element "${LM_CPTY_DIR}" "lei"              "Legal Entity Identifier"     "Identifier" 1 true  true)
+EL_CD_NAME=$(     get_or_create_element "${LM_CPTY_DIR}" "legalName"        "Legal Name"                  "Text"       2 true  false)
+EL_CD_COUNTRY=$(  get_or_create_element "${LM_CPTY_DIR}" "country"          "Country of Registration"     "Code"       3 true  false)
+EL_CD_JURIS=$(    get_or_create_element "${LM_CPTY_DIR}" "jurisdiction"     "Jurisdiction"                "Code"       4 true  false)
+EL_CD_TYPE=$(     get_or_create_element "${LM_CPTY_DIR}" "entityType"       "Entity Type"                 "Code"       5 true  false)
+EL_CD_PARENT=$(   get_or_create_element "${LM_CPTY_DIR}" "parentLei"        "Parent Entity LEI"           "Identifier" 6 false false)
+EL_CD_STATUS=$(   get_or_create_element "${LM_CPTY_DIR}" "status"           "Registration Status"         "Code"       7 true  false)
+EL_CD_REG_DATE=$( get_or_create_element "${LM_CPTY_DIR}" "registrationDate" "Registration Date"           "Date"       8 true  false)
+
+add_vocab_mapping_if_missing "${EL_CD_LEI}"      "${VOCAB_FBC}"    "https://spec.edmcouncil.org/fibo/ontology/FBC/FunctionalEntities/RegistrationAuthorities/LegalEntityIdentifier" "LegalEntityIdentifier"
+add_vocab_mapping_if_missing "${EL_CD_PARENT}"   "${VOCAB_FBC}"    "https://spec.edmcouncil.org/fibo/ontology/FBC/FunctionalEntities/RegistrationAuthorities/LegalEntityIdentifier" "LegalEntityIdentifier" "closeMatch"
+add_vocab_mapping_if_missing "${EL_CD_REG_DATE}" "${VOCAB_SCHEMA}" "https://schema.org/startDate" "startDate"
+success "Logical model (published): Counterparty Directory — 8 elements, FIBO-mapped"
+
+info "Building logical model: Intraday Order Book..."
+LM_ORDERBOOK=$(get_or_create_logical_model "${DS_ORDERBOOK}" "Intraday Order Book Logical Model" \
+  '{"name":"Intraday Order Book Logical Model","description":"Logical structure of the intraday order book event feed. Each record represents a single order event (new, amend, cancel, fill) from the OMS. Used for best-execution analysis and MiFID II pre-trade transparency obligations.","version":"1.0","status":"published"}')
+
+EL_OB_ORDER_ID=$(  get_or_create_element "${LM_ORDERBOOK}" "orderId"        "Order Identifier"       "Identifier" 1 true  true)
+EL_OB_ISIN=$(      get_or_create_element "${LM_ORDERBOOK}" "instrumentIsin" "Instrument ISIN"        "Identifier" 2 true  false)
+EL_OB_TYPE=$(      get_or_create_element "${LM_ORDERBOOK}" "orderType"      "Order Type"             "Code"       3 true  false)
+EL_OB_SIDE=$(      get_or_create_element "${LM_ORDERBOOK}" "side"           "Buy / Sell Side"        "Code"       4 true  false)
+EL_OB_PRICE=$(     get_or_create_element "${LM_ORDERBOOK}" "limitPrice"     "Limit Price"            "Price"      5 true  false)
+EL_OB_CCY=$(       get_or_create_element "${LM_ORDERBOOK}" "currency"       "Order Currency"         "Currency"   6 true  false)
+EL_OB_TRADER=$(    get_or_create_element "${LM_ORDERBOOK}" "traderId"       "Trader Identifier"      "Identifier" 7 true  false)
+EL_OB_VENUE=$(     get_or_create_element "${LM_ORDERBOOK}" "venueMic"       "Execution Venue MIC"    "Code"       8 true  false)
+
+add_vocab_mapping_if_missing "${EL_OB_ISIN}"  "${VOCAB_SEC}" "https://spec.edmcouncil.org/fibo/ontology/SEC/Securities/SecuritiesIdentificationSchemes/InternationalSecuritiesIdentificationNumber" "ISIN"
+add_vocab_mapping_if_missing "${EL_OB_PRICE}" "${VOCAB_MD}"  "https://spec.edmcouncil.org/fibo/ontology/MD/TemporalCore/SecurityMarketConcepts/MarketPrice" "MarketPrice"
+add_vocab_mapping_if_missing "${EL_OB_CCY}"   "${VOCAB_FND}" "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/ISO4217-CurrencyCodes/Currency" "Currency"
+add_vocab_mapping_if_missing "${EL_OB_VENUE}" "${VOCAB_FBC}" "https://spec.edmcouncil.org/fibo/ontology/FBC/FunctionalEntities/FinancialServicesEntities/MarketIdentifierCode" "MarketIdentifierCode"
+success "Logical model (published): Intraday Order Book — 8 elements, FIBO-mapped"
+
+info "Building logical model: FinRep Consolidated Financial Statements..."
+LM_FINREP=$(get_or_create_logical_model "${DS_FINREP}" "FinRep Logical Model" \
+  '{"name":"FinRep Logical Model","description":"Logical structure of EBA FinRep regulatory financial reporting. Each row is a single data point (template + row + column) with its monetary value. The model reflects the EBA XBRL taxonomy cell structure used for PRA quarterly submissions.","version":"1.0","status":"published"}')
+
+EL_FR_REPORT_ID=$(  get_or_create_element "${LM_FINREP}" "reportId"           "Report Identifier"            "Identifier"    1 true  true)
+EL_FR_ENTITY=$(     get_or_create_element "${LM_FINREP}" "reportingEntityLei" "Reporting Entity LEI"         "Identifier"    2 true  false)
+EL_FR_PERIOD=$(     get_or_create_element "${LM_FINREP}" "reportingPeriod"    "Reporting Period End Date"    "Date"          3 true  false)
+EL_FR_TEMPLATE=$(   get_or_create_element "${LM_FINREP}" "templateCode"       "EBA Template Code"            "Code"          4 true  false)
+EL_FR_ROW=$(        get_or_create_element "${LM_FINREP}" "rowCode"            "Row Code"                     "Code"          5 true  false)
+EL_FR_COL=$(        get_or_create_element "${LM_FINREP}" "columnCode"         "Column Code"                  "Code"          6 true  false)
+EL_FR_AMOUNT=$(     get_or_create_element "${LM_FINREP}" "monetaryAmount"     "Monetary Amount"              "MonetaryAmount" 7 true  false)
+EL_FR_CCY=$(        get_or_create_element "${LM_FINREP}" "currency"           "Reporting Currency"           "Currency"      8 true  false)
+
+add_vocab_mapping_if_missing "${EL_FR_ENTITY}" "${VOCAB_FBC}"    "https://spec.edmcouncil.org/fibo/ontology/FBC/FunctionalEntities/RegistrationAuthorities/LegalEntityIdentifier" "LegalEntityIdentifier"
+add_vocab_mapping_if_missing "${EL_FR_PERIOD}" "${VOCAB_SCHEMA}" "https://schema.org/startDate" "startDate"
+add_vocab_mapping_if_missing "${EL_FR_AMOUNT}" "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/MonetaryAmount" "MonetaryAmount"
+add_vocab_mapping_if_missing "${EL_FR_CCY}"    "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/ISO4217-CurrencyCodes/Currency" "Currency"
+success "Logical model (published): FinRep — 8 elements, FIBO-mapped"
+
+info "Building logical model: EMIR Derivatives Reporting..."
+LM_EMIR=$(get_or_create_logical_model "${DS_EMIR}" "EMIR Derivatives Report Logical Model" \
+  '{"name":"EMIR Derivatives Report Logical Model","description":"Logical structure of an EMIR Refit derivatives trade report. Each record represents one reportable transaction submitted to the DTCC trade repository under EMIR Article 9. Covers UTI, counterparty LEIs, notional, asset class, and execution venue.","version":"2.0","status":"published"}')
+
+EL_EM_UTI=$(     get_or_create_element "${LM_EMIR}" "uti"                "Unique Transaction Identifier"  "Identifier"    1 true  true)
+EL_EM_DATE=$(    get_or_create_element "${LM_EMIR}" "tradeDate"          "Trade Date"                     "Date"          2 true  false)
+EL_EM_ASSET=$(   get_or_create_element "${LM_EMIR}" "assetClass"         "Asset Class"                    "Code"          3 true  false)
+EL_EM_PROD=$(    get_or_create_element "${LM_EMIR}" "productId"          "Product Identifier"             "Identifier"    4 true  false)
+EL_EM_NOTIONAL=$(get_or_create_element "${LM_EMIR}" "notionalAmount"     "Notional Amount"                "MonetaryAmount" 5 true  false)
+EL_EM_CCY=$(     get_or_create_element "${LM_EMIR}" "notionalCurrency"   "Notional Currency"              "Currency"      6 true  false)
+EL_EM_BUYER=$(   get_or_create_element "${LM_EMIR}" "buyerLei"           "Buyer Legal Entity Identifier"  "Identifier"    7 true  false)
+EL_EM_SELLER=$(  get_or_create_element "${LM_EMIR}" "sellerLei"          "Seller Legal Entity Identifier" "Identifier"    8 true  false)
+EL_EM_VENUE=$(   get_or_create_element "${LM_EMIR}" "executionVenueMic"  "Execution Venue MIC"            "Code"          9 true  false)
+EL_EM_TS=$(      get_or_create_element "${LM_EMIR}" "reportingTimestamp" "Reporting Timestamp"            "DateTime"      10 true false)
+
+add_vocab_mapping_if_missing "${EL_EM_DATE}"     "${VOCAB_SCHEMA}" "https://schema.org/startDate" "startDate"
+add_vocab_mapping_if_missing "${EL_EM_NOTIONAL}" "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/MonetaryAmount" "MonetaryAmount"
+add_vocab_mapping_if_missing "${EL_EM_CCY}"      "${VOCAB_FND}"    "https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/ISO4217-CurrencyCodes/Currency" "Currency"
+add_vocab_mapping_if_missing "${EL_EM_BUYER}"    "${VOCAB_FBC}"    "https://spec.edmcouncil.org/fibo/ontology/FBC/FunctionalEntities/RegistrationAuthorities/LegalEntityIdentifier" "LegalEntityIdentifier"
+add_vocab_mapping_if_missing "${EL_EM_SELLER}"   "${VOCAB_FBC}"    "https://spec.edmcouncil.org/fibo/ontology/FBC/FunctionalEntities/RegistrationAuthorities/LegalEntityIdentifier" "LegalEntityIdentifier" "closeMatch"
+add_vocab_mapping_if_missing "${EL_EM_VENUE}"    "${VOCAB_FBC}"    "https://spec.edmcouncil.org/fibo/ontology/FBC/FunctionalEntities/FinancialServicesEntities/MarketIdentifierCode" "MarketIdentifierCode"
+success "Logical model (published): EMIR Derivatives Report — 10 elements, FIBO-mapped"
+
+info "Building logical model: Employee & Trader Directory (PII dataset)..."
+LM_EMPLOYEE=$(get_or_create_logical_model "${DS_EMPLOYEE}" "Employee Directory Logical Model" \
+  '{"name":"Employee Directory Logical Model","description":"Business view of the HR employee register. All elements that carry personal data about a natural person are marked isPersonalInformation=true; direct identifiers additionally carry isDirectIdentifier=true. DPV-PD vocabulary mappings make the personal-data categories machine-readable for downstream policy evaluation.","version":"1.0","status":"published"}')
+
+# ── Elements — PII-flagged (isPersonalInformation, isDirectIdentifier) ──────────
+EL_EMP_ID=$(     get_or_create_pii_element "${LM_EMPLOYEE}" "employeeId"             "Employee Identifier"           "Identifier" 1  true  true  true  true)
+EL_EMP_FNAME=$(  get_or_create_pii_element "${LM_EMPLOYEE}" "firstName"              "First Name"                    "Text"       2  true  false true  true)
+EL_EMP_LNAME=$(  get_or_create_pii_element "${LM_EMPLOYEE}" "lastName"               "Last Name"                     "Text"       3  true  false true  true)
+EL_EMP_EMAIL=$(  get_or_create_pii_element "${LM_EMPLOYEE}" "emailAddress"           "Work Email Address"            "Text"       4  true  false true  true)
+EL_EMP_PHONE=$(  get_or_create_pii_element "${LM_EMPLOYEE}" "phoneNumber"            "Work Phone Number"             "Text"       5  false false true  false)
+EL_EMP_DOB=$(    get_or_create_pii_element "${LM_EMPLOYEE}" "dateOfBirth"            "Date of Birth"                 "Date"       6  false false true  false)
+EL_EMP_NAT=$(    get_or_create_pii_element "${LM_EMPLOYEE}" "nationality"            "Nationality"                   "Code"       7  false false true  false)
+EL_EMP_NIN=$(    get_or_create_pii_element "${LM_EMPLOYEE}" "nationalInsuranceNumber" "National Insurance Number"    "Text"       8  false false true  true)
+EL_EMP_TITLE=$(  get_or_create_pii_element "${LM_EMPLOYEE}" "jobTitle"               "Job Title"                     "Text"       9  true  false true  false)
+EL_EMP_DEPT=$(   get_or_create_pii_element "${LM_EMPLOYEE}" "department"             "Department"                    "Text"       10 true  false false false)
+EL_EMP_DESK=$(   get_or_create_pii_element "${LM_EMPLOYEE}" "deskId"                 "Trading Desk Identifier"       "Identifier" 11 false false false false)
+EL_EMP_HIRE=$(   get_or_create_pii_element "${LM_EMPLOYEE}" "hireDate"               "Hire Date"                     "Date"       12 true  false true  false)
+
+# ── Vocab mappings — DPV-PD (exact personal data categories) + schema.org ───────
+add_vocab_mapping_if_missing "${EL_EMP_ID}"     "${VOCAB_SCHEMA}" "https://schema.org/identifier"                          "identifier"
+add_vocab_mapping_if_missing "${EL_EMP_FNAME}"  "${VOCAB_SCHEMA}" "https://schema.org/givenName"                           "givenName"
+add_vocab_mapping_if_missing "${EL_EMP_FNAME}"  "${VOCAB_DPV_PD}" "https://w3id.org/dpv/dpv-pd#Name"                      "Name"
+add_vocab_mapping_if_missing "${EL_EMP_LNAME}"  "${VOCAB_SCHEMA}" "https://schema.org/familyName"                          "familyName"
+add_vocab_mapping_if_missing "${EL_EMP_LNAME}"  "${VOCAB_DPV_PD}" "https://w3id.org/dpv/dpv-pd#Name"                      "Name"          "closeMatch"
+add_vocab_mapping_if_missing "${EL_EMP_EMAIL}"  "${VOCAB_SCHEMA}" "https://schema.org/email"                               "email"
+add_vocab_mapping_if_missing "${EL_EMP_EMAIL}"  "${VOCAB_DPV_PD}" "https://w3id.org/dpv/dpv-pd#EmailAddress"               "EmailAddress"
+add_vocab_mapping_if_missing "${EL_EMP_PHONE}"  "${VOCAB_SCHEMA}" "https://schema.org/telephone"                           "telephone"
+add_vocab_mapping_if_missing "${EL_EMP_PHONE}"  "${VOCAB_DPV_PD}" "https://w3id.org/dpv/dpv-pd#PhoneNumber"                "PhoneNumber"
+add_vocab_mapping_if_missing "${EL_EMP_DOB}"    "${VOCAB_SCHEMA}" "https://schema.org/birthDate"                           "birthDate"
+add_vocab_mapping_if_missing "${EL_EMP_DOB}"    "${VOCAB_DPV_PD}" "https://w3id.org/dpv/dpv-pd#BirthDate"                  "BirthDate"
+add_vocab_mapping_if_missing "${EL_EMP_NAT}"    "${VOCAB_SCHEMA}" "https://schema.org/nationality"                         "nationality"
+add_vocab_mapping_if_missing "${EL_EMP_NAT}"    "${VOCAB_DPV_PD}" "https://w3id.org/dpv/dpv-pd#Nationality"                "Nationality"
+add_vocab_mapping_if_missing "${EL_EMP_NIN}"    "${VOCAB_DPV_PD}" "https://w3id.org/dpv/dpv-pd#NationalIdentificationNumber" "NationalIdentificationNumber"
+add_vocab_mapping_if_missing "${EL_EMP_TITLE}"  "${VOCAB_SCHEMA}" "https://schema.org/jobTitle"                            "jobTitle"
+add_vocab_mapping_if_missing "${EL_EMP_HIRE}"   "${VOCAB_SCHEMA}" "https://schema.org/startDate"                           "startDate"
+success "Logical model (published): Employee & Trader Directory — 12 elements, DPV-PD + schema.org mapped, PII-flagged"
 
 # ─────────────────────────────────────────────────────────────────────────────
 section "Phase 7 — Data Products"
@@ -749,6 +1062,15 @@ ol_event "${RUN_OB}" "trading" "order_book_fill_matcher" "COMPLETE" \
   "[$(ds_node "trading" "intraday_order_book")]" "[$(ds_node "trading" "executed_trades")]"
 success "Lineage Job 8: order_book_fill_matcher (order_book → executed_trades)"
 
+RUN_TRADER_ENRICH="aaaaaaaa-0009-0009-0009-000000000009"
+ol_event "${RUN_TRADER_ENRICH}" "trading" "trader_enrichment_job" "START" \
+  "[$(ds_node "hr" "employee_directory")]" \
+  "[$(ds_node "trading" "executed_trades"), $(ds_node "trading" "intraday_order_book")]"
+ol_event "${RUN_TRADER_ENRICH}" "trading" "trader_enrichment_job" "COMPLETE" \
+  "[$(ds_node "hr" "employee_directory")]" \
+  "[$(ds_node "trading" "executed_trades"), $(ds_node "trading" "intraday_order_book")]"
+success "Lineage Job 9: trader_enrichment_job (employee_directory → executed_trades + order_book)"
+
 # ─────────────────────────────────────────────────────────────────────────────
 section "Phase 9 — DDL Lineage Views"
 # ─────────────────────────────────────────────────────────────────────────────
@@ -804,8 +1126,9 @@ catalog_link "reference"  "fx_reference_rates"                       "${DS_FX_RA
 catalog_link "compliance" "mifid_ii_transaction_reports"             "${DS_MIFID}"
 catalog_link "compliance" "finrep_consolidated_financial_statements" "${DS_FINREP}"
 catalog_link "compliance" "emir_derivatives_reporting"               "${DS_EMIR}"
+catalog_link "hr"         "employee_directory"                       "${DS_EMPLOYEE}"
 
-success "Catalog ↔ lineage identity links registered (11 datasets)"
+success "Catalog ↔ lineage identity links registered (12 datasets)"
 
 # ─────────────────────────────────────────────────────────────────────────────
 section "Phase 11 — Harvest Sources & Jobs"
@@ -889,13 +1212,39 @@ get_or_create_harvest_job "ECB Reference Rates DCAT Harvest" \
     '{"sourceId":$sid,"name":"ECB Reference Rates DCAT Harvest","scheduleCron":"30 16 * * 1-5","fullRefresh":false,"enabled":true}')" > /dev/null
 success "Harvest job: ECB DCAT Harvest (16:30 weekdays)"
 
+SRC_FRB_DCAT=$(get_or_create_harvest_source "Federal Reserve — Open Data Catalog" '{
+  "name": "Federal Reserve — Open Data Catalog",
+  "sourceType": "dcat_http",
+  "baseUrl": "https://www.federalreserve.gov/PDC/data.json",
+  "credentialRef": ""
+}')
+success "Harvest source: Federal Reserve DCAT (${SRC_FRB_DCAT})"
+
+JOB_FRB_DCAT=$(get_or_create_harvest_job "Federal Reserve DCAT — Manual Validation" \
+  "$(jq -n --arg sid "${SRC_FRB_DCAT}" \
+    '{"sourceId":$sid,"name":"Federal Reserve DCAT — Manual Validation","fullRefresh":true,"enabled":true}')")
+success "Harvest job: Federal Reserve DCAT manual (${JOB_FRB_DCAT})"
+
+info "Triggering Federal Reserve DCAT harvest for validation..."
+FRB_RUN=$(curl -sf -X POST \
+  -H "${HEADER_AUTH}" \
+  "${HARVEST_URL}/api/v1/jobs/${JOB_FRB_DCAT}/trigger" 2>/dev/null || echo '{}')
+FRB_RUN_ID=$(echo "${FRB_RUN}" | jq -r '.id // empty')
+if [ -n "${FRB_RUN_ID}" ]; then
+  success "Harvest run triggered: ${FRB_RUN_ID}"
+  info "Monitor: curl -sf -H \"X-API-Key: dev-local\" ${HARVEST_URL}/api/v1/runs/${FRB_RUN_ID}"
+else
+  warn "Could not trigger — re-trigger manually once harvest-service is ready:"
+  info "  curl -sf -X POST -H \"X-API-Key: dev-local\" ${HARVEST_URL}/api/v1/jobs/${JOB_FRB_DCAT}/trigger"
+fi
+
 # ─────────────────────────────────────────────────────────────────────────────
 section "Phase 12 — Trigger Search Re-index"
 # ─────────────────────────────────────────────────────────────────────────────
 
 info "Triggering OpenSearch re-index to pick up all new datasets..."
 REINDEX_RESULT=$(curl -sf -H "${HEADER_AUTH}" -H "${HEADER_JSON}" \
-  -X POST "http://localhost:8004/api/v1/admin/reindex" 2>/dev/null || echo '{"note":"reindex endpoint not available, search will sync via Kafka"}')
+  -X POST "${SEARCH_URL}/api/v1/admin/reindex" 2>/dev/null || echo '{"note":"reindex endpoint not available, search will sync via Kafka"}')
 echo "${REINDEX_RESULT}" | python3 -m json.tool 2>/dev/null || echo "${REINDEX_RESULT}"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1029,6 +1378,30 @@ load_physical_schema "${DIST_SECURITIES_KAFKA}" "Securities Master / Kafka" "$(j
   {"name":"maturityDate",        "datatype":"string", "description":"Maturity date ISO 8601 (null for equities)",   "required":false}
 ]')"
 
+# ── Aggregated Market Risk Metrics — Snowflake (8 cols = 8 elements)
+load_physical_schema "${DIST_RISK_METRICS_SF}" "Aggregated Market Risk Metrics / Snowflake" "$(jq -n '[
+  {"name":"DESK_ID",      "datatype":"VARCHAR(32)",  "description":"Trading desk identifier",                                "required":true},
+  {"name":"ASST_CLS",     "datatype":"VARCHAR(32)",  "description":"Asset class (Equity, FI, FX, Rates, Credit)",           "required":true},
+  {"name":"RPT_DT",       "datatype":"DATE",         "description":"Risk report date",                                       "required":true},
+  {"name":"DV01_USD",     "datatype":"NUMBER(18,4)", "description":"Dollar value of 1 basis point — interest rate risk",    "required":true},
+  {"name":"CS01_USD",     "datatype":"NUMBER(18,4)", "description":"Credit spread DV01 — credit risk sensitivity",          "required":true},
+  {"name":"VEGA_USD",     "datatype":"NUMBER(18,4)", "description":"Vega exposure — sensitivity to implied volatility",     "required":true},
+  {"name":"DELTA_USD",    "datatype":"NUMBER(18,4)", "description":"Delta exposure — first-order price sensitivity",         "required":true},
+  {"name":"GAMMA_USD",    "datatype":"NUMBER(18,4)", "description":"Gamma exposure — second-order price sensitivity",        "required":false}
+]')"
+
+# ── Aggregated Market Risk Metrics — REST API (8 cols, camelCase JSON)
+load_physical_schema "${DIST_RISK_METRICS_REST}" "Aggregated Market Risk Metrics / REST API" "$(jq -n '[
+  {"name":"deskId",        "datatype":"string",  "description":"Trading desk identifier",                                   "required":true},
+  {"name":"assetClass",    "datatype":"string",  "description":"Asset class (Equity, FI, FX, Rates, Credit)",              "required":true},
+  {"name":"reportDate",    "datatype":"string",  "description":"Risk report date (ISO 8601)",                               "required":true},
+  {"name":"dv01",          "datatype":"number",  "description":"Dollar value of 1 basis point — interest rate risk (USD)", "required":true},
+  {"name":"cs01",          "datatype":"number",  "description":"Credit spread DV01 — credit risk sensitivity (USD)",       "required":true},
+  {"name":"vegaExposure",  "datatype":"number",  "description":"Vega exposure — sensitivity to implied volatility (USD)",  "required":true},
+  {"name":"deltaExposure", "datatype":"number",  "description":"Delta exposure — first-order price sensitivity (USD)",      "required":true},
+  {"name":"gammaExposure", "datatype":"number",  "description":"Gamma exposure — second-order price sensitivity (USD)",     "required":false}
+]')"
+
 # ── MiFID II — ISO 20022 XML (abbreviated PascalCase element names, 9 cols = 9 elements)
 load_physical_schema "${DIST_MIFID_XML}" "MiFID II / ISO 20022 XML" "$(jq -n '[
   {"name":"TxId",        "datatype":"xs:string",   "description":"Unique Transaction Identifier (RTS 22 Field 1)",     "required":true},
@@ -1053,6 +1426,160 @@ load_physical_schema "${DIST_MIFID_PQ}" "MiFID II / Parquet" "$(jq -n '[
   {"name":"sellerLei",                  "datatype":"string",        "description":"Seller Legal Entity Identifier (Field 16)",      "required":true},
   {"name":"tradingVenueMic",            "datatype":"string",        "description":"Trading venue MIC (Field 36)",                   "required":true},
   {"name":"executionTimestamp",         "datatype":"timestamp",     "description":"Execution timestamp UTC (Field 28)",             "required":true}
+]')"
+
+# ── FX Reference Rates — Snowflake (7 cols = 7 elements, abbreviated UPPER_SNAKE_CASE)
+load_physical_schema "${DIST_FX_SF}" "FX Reference Rates / Snowflake" "$(jq -n '[
+  {"name":"BSE_CCY", "datatype":"CHAR(3)",       "description":"Base currency ISO 4217 (e.g. EUR)",               "required":true},
+  {"name":"QTE_CCY", "datatype":"CHAR(3)",       "description":"Quote currency ISO 4217 (e.g. USD)",              "required":true},
+  {"name":"MID_RT",  "datatype":"NUMBER(18,8)",  "description":"Mid-market exchange rate",                        "required":true},
+  {"name":"BID_RT",  "datatype":"NUMBER(18,8)",  "description":"Bid rate (best bid to buy base currency)",        "required":true},
+  {"name":"ASK_RT",  "datatype":"NUMBER(18,8)",  "description":"Ask rate (best offer to sell base currency)",     "required":true},
+  {"name":"RT_DT",   "datatype":"DATE",          "description":"Rate snapshot date",                              "required":true},
+  {"name":"RT_SRC",  "datatype":"VARCHAR(64)",   "description":"Rate source (e.g. Reuters, ECB)",                 "required":true}
+]')"
+
+# ── FX Reference Rates — REST API (7 cols, camelCase JSON)
+load_physical_schema "${DIST_FX_REST}" "FX Reference Rates / REST API" "$(jq -n '[
+  {"name":"baseCurrency",  "datatype":"string",  "description":"Base currency ISO 4217",                           "required":true},
+  {"name":"quoteCurrency", "datatype":"string",  "description":"Quote currency ISO 4217",                          "required":true},
+  {"name":"midRate",       "datatype":"decimal", "description":"Mid-market exchange rate",                         "required":true},
+  {"name":"bidRate",       "datatype":"decimal", "description":"Bid rate",                                         "required":true},
+  {"name":"askRate",       "datatype":"decimal", "description":"Ask rate",                                         "required":true},
+  {"name":"rateDate",      "datatype":"string",  "description":"Rate snapshot date (ISO 8601)",                    "required":true},
+  {"name":"rateSource",    "datatype":"string",  "description":"Rate provider name",                               "required":true}
+]')"
+
+# ── Counterparty Directory — Snowflake (8 cols = 8 elements, abbreviated UPPER_SNAKE_CASE)
+load_physical_schema "${DIST_CPTY_DIR_SF}" "Counterparty Directory / Snowflake" "$(jq -n '[
+  {"name":"LEI_ID",     "datatype":"CHAR(20)",     "description":"GLEIF Legal Entity Identifier (20-char alphanumeric)", "required":true},
+  {"name":"LEGAL_NM",   "datatype":"VARCHAR(256)", "description":"Official legal name of the entity",                    "required":true},
+  {"name":"CTRY_CD",    "datatype":"CHAR(2)",      "description":"ISO 3166-1 alpha-2 country of registration",           "required":true},
+  {"name":"JRSD_CD",    "datatype":"VARCHAR(32)",  "description":"Jurisdiction code",                                    "required":true},
+  {"name":"ENTITY_TYP", "datatype":"VARCHAR(64)",  "description":"GLEIF entity type (e.g. SOLE_PROPRIETOR, BRANCH)",     "required":true},
+  {"name":"PRNT_LEI",   "datatype":"CHAR(20)",     "description":"Parent entity LEI (null if ultimate parent)",          "required":false},
+  {"name":"STATUS",     "datatype":"VARCHAR(32)",  "description":"GLEIF registration status (ISSUED, LAPSED, MERGED)",   "required":true},
+  {"name":"REG_DT",     "datatype":"DATE",         "description":"Date of first LEI registration",                      "required":true}
+]')"
+
+# ── Counterparty Directory — REST API (8 cols, camelCase JSON)
+load_physical_schema "${DIST_CPTY_DIR_REST}" "Counterparty Directory / REST API" "$(jq -n '[
+  {"name":"lei",              "datatype":"string", "description":"GLEIF Legal Entity Identifier",                        "required":true},
+  {"name":"legalName",        "datatype":"string", "description":"Official legal name of the entity",                    "required":true},
+  {"name":"country",          "datatype":"string", "description":"ISO 3166-1 alpha-2 country of registration",           "required":true},
+  {"name":"jurisdiction",     "datatype":"string", "description":"Jurisdiction code",                                    "required":true},
+  {"name":"entityType",       "datatype":"string", "description":"GLEIF entity type",                                    "required":true},
+  {"name":"parentLei",        "datatype":"string", "description":"Parent entity LEI (null if ultimate parent)",          "required":false},
+  {"name":"status",           "datatype":"string", "description":"GLEIF registration status",                            "required":true},
+  {"name":"registrationDate", "datatype":"string", "description":"Date of first LEI registration (ISO 8601)",            "required":true}
+]')"
+
+# ── Intraday Order Book — Snowflake (8 cols = 8 elements, abbreviated UPPER_SNAKE_CASE)
+load_physical_schema "${DIST_ORDERBOOK_SF}" "Intraday Order Book / Snowflake" "$(jq -n '[
+  {"name":"ORD_ID",      "datatype":"VARCHAR(64)",   "description":"OMS-assigned order identifier",                      "required":true},
+  {"name":"INSTMT_ISIN", "datatype":"CHAR(12)",      "description":"Instrument ISIN",                                    "required":true},
+  {"name":"ORD_TYP",     "datatype":"VARCHAR(16)",   "description":"Order type (LIMIT, MARKET, STOP)",                   "required":true},
+  {"name":"SIDE_IND",    "datatype":"CHAR(4)",       "description":"Buy or sell side indicator",                         "required":true},
+  {"name":"LMT_PRC",     "datatype":"NUMBER(18,8)",  "description":"Limit price in order currency",                      "required":true},
+  {"name":"ORD_CCY",     "datatype":"CHAR(3)",       "description":"Order currency ISO 4217",                            "required":true},
+  {"name":"TRDR_ID",     "datatype":"VARCHAR(32)",   "description":"Trader identifier",                                  "required":true},
+  {"name":"VEN_MIC",     "datatype":"CHAR(4)",       "description":"Execution venue Market Identifier Code (ISO 10383)", "required":true}
+]')"
+
+# ── Intraday Order Book — Kafka JSON (8 cols, camelCase — matches Avro schema on topic)
+load_physical_schema "${DIST_ORDERBOOK_KAFKA}" "Intraday Order Book / Kafka" "$(jq -n '[
+  {"name":"orderId",        "datatype":"string",  "description":"OMS-assigned order identifier",                         "required":true},
+  {"name":"instrumentIsin", "datatype":"string",  "description":"Instrument ISIN",                                       "required":true},
+  {"name":"orderType",      "datatype":"string",  "description":"Order type (LIMIT, MARKET, STOP)",                      "required":true},
+  {"name":"side",           "datatype":"string",  "description":"Buy or sell side (BUY, SELL)",                          "required":true},
+  {"name":"limitPrice",     "datatype":"decimal", "description":"Limit price in order currency",                         "required":true},
+  {"name":"currency",       "datatype":"string",  "description":"Order currency ISO 4217",                               "required":true},
+  {"name":"traderId",       "datatype":"string",  "description":"Trader identifier",                                     "required":true},
+  {"name":"venueMic",       "datatype":"string",  "description":"Execution venue MIC (ISO 10383)",                       "required":true}
+]')"
+
+# ── FinRep — XML/XBRL (8 cols, EBA-style abbreviated PascalCase)
+load_physical_schema "${DIST_FINREP_XML}" "FinRep / XBRL XML" "$(jq -n '[
+  {"name":"RptId",     "datatype":"xs:string",  "description":"Report instance identifier",                              "required":true},
+  {"name":"RptEntyLei","datatype":"xs:string",  "description":"Reporting entity Legal Entity Identifier",               "required":true},
+  {"name":"RptPrd",    "datatype":"xs:date",    "description":"Reporting period end date",                               "required":true},
+  {"name":"TmplCd",    "datatype":"xs:string",  "description":"EBA FinRep template code (e.g. F 01.01)",                "required":true},
+  {"name":"RowCd",     "datatype":"xs:string",  "description":"Template row code",                                      "required":true},
+  {"name":"ColCd",     "datatype":"xs:string",  "description":"Template column code",                                   "required":true},
+  {"name":"Amt",       "datatype":"xs:decimal", "description":"Reported monetary amount in reporting currency",          "required":true},
+  {"name":"Ccy",       "datatype":"xs:string",  "description":"Reporting currency ISO 4217",                            "required":true}
+]')"
+
+# ── FinRep — Parquet (8 cols, camelCase full words)
+load_physical_schema "${DIST_FINREP_PQ}" "FinRep / Parquet" "$(jq -n '[
+  {"name":"reportId",           "datatype":"string",        "description":"Report instance identifier",                  "required":true},
+  {"name":"reportingEntityLei", "datatype":"string",        "description":"Reporting entity LEI",                        "required":true},
+  {"name":"reportingPeriod",    "datatype":"date",          "description":"Reporting period end date (ISO 8601)",         "required":true},
+  {"name":"templateCode",       "datatype":"string",        "description":"EBA FinRep template code",                    "required":true},
+  {"name":"rowCode",            "datatype":"string",        "description":"Template row code",                           "required":true},
+  {"name":"columnCode",         "datatype":"string",        "description":"Template column code",                        "required":true},
+  {"name":"monetaryAmount",     "datatype":"decimal(18,4)", "description":"Reported monetary value",                     "required":true},
+  {"name":"currency",           "datatype":"string",        "description":"Reporting currency ISO 4217",                 "required":true}
+]')"
+
+# ── Employee & Trader Directory — Snowflake (12 cols, abbreviated UPPER_SNAKE_CASE)
+load_physical_schema "${DIST_EMPLOYEE_SF}" "Employee Directory / Snowflake" "$(jq -n '[
+  {"name":"EMP_ID",       "datatype":"VARCHAR(32)",   "description":"Internal employee identifier (surrogate key)",                   "required":true},
+  {"name":"FIRST_NM",     "datatype":"NVARCHAR(128)", "description":"Legal first name",                                               "required":true},
+  {"name":"LAST_NM",      "datatype":"NVARCHAR(128)", "description":"Legal last name",                                                "required":true},
+  {"name":"EMAIL_ADDR",   "datatype":"VARCHAR(256)",  "description":"Corporate email address",                                        "required":true},
+  {"name":"PHONE_NO",     "datatype":"VARCHAR(32)",   "description":"Work phone number in E.164 format",                              "required":false},
+  {"name":"DOB",          "datatype":"DATE",          "description":"Date of birth — restricted access",                              "required":false},
+  {"name":"NATLTY_CD",    "datatype":"CHAR(2)",       "description":"ISO 3166-1 alpha-2 nationality code",                            "required":false},
+  {"name":"NIN",          "datatype":"VARCHAR(16)",   "description":"National Insurance / social security number — highly restricted","required":false},
+  {"name":"JOB_TITLE",    "datatype":"VARCHAR(128)",  "description":"Job title as per HR system of record",                          "required":true},
+  {"name":"DEPT",         "datatype":"VARCHAR(64)",   "description":"Department name",                                                "required":true},
+  {"name":"DESK_ID",      "datatype":"VARCHAR(32)",   "description":"Trading desk identifier (null for non-traders)",                 "required":false},
+  {"name":"HIRE_DT",      "datatype":"DATE",          "description":"Date of first employment",                                       "required":true}
+]')"
+
+# ── Employee & Trader Directory — REST API (12 cols, camelCase JSON)
+load_physical_schema "${DIST_EMPLOYEE_REST}" "Employee Directory / REST API" "$(jq -n '[
+  {"name":"employeeId",             "datatype":"string",  "description":"Internal employee identifier",                        "required":true},
+  {"name":"firstName",              "datatype":"string",  "description":"Legal first name",                                    "required":true},
+  {"name":"lastName",               "datatype":"string",  "description":"Legal last name",                                     "required":true},
+  {"name":"emailAddress",           "datatype":"string",  "description":"Corporate email address",                             "required":true},
+  {"name":"phoneNumber",            "datatype":"string",  "description":"Work phone number in E.164 format",                   "required":false},
+  {"name":"dateOfBirth",            "datatype":"string",  "description":"Date of birth ISO 8601 — restricted field",           "required":false},
+  {"name":"nationality",            "datatype":"string",  "description":"ISO 3166-1 alpha-2 nationality code",                 "required":false},
+  {"name":"nationalInsuranceNumber","datatype":"string",  "description":"National Insurance number — omitted unless HR scope", "required":false},
+  {"name":"jobTitle",               "datatype":"string",  "description":"Job title",                                           "required":true},
+  {"name":"department",             "datatype":"string",  "description":"Department name",                                     "required":true},
+  {"name":"deskId",                 "datatype":"string",  "description":"Trading desk identifier (null for non-traders)",      "required":false},
+  {"name":"hireDate",               "datatype":"string",  "description":"Hire date ISO 8601",                                  "required":true}
+]')"
+
+# ── EMIR Derivatives Report — XML (10 cols, ISO 20022 abbreviated PascalCase)
+load_physical_schema "${DIST_EMIR_XML}" "EMIR Derivatives Report / ISO 20022 XML" "$(jq -n '[
+  {"name":"UTI",      "datatype":"xs:string",   "description":"Unique Transaction Identifier (EMIR Refit Field 1)",      "required":true},
+  {"name":"TradDt",   "datatype":"xs:date",     "description":"Trade date (Field 2)",                                    "required":true},
+  {"name":"AsstCls",  "datatype":"xs:string",   "description":"Asset class (CO, CR, CU, EQ, FX, IR, OT) (Field 5)",    "required":true},
+  {"name":"ProdId",   "datatype":"xs:string",   "description":"Product identifier / ISIN for listed derivatives",        "required":true},
+  {"name":"NtnlAmt",  "datatype":"xs:decimal",  "description":"Notional amount (Field 20)",                             "required":true},
+  {"name":"NtnlCcy",  "datatype":"xs:string",   "description":"Notional currency ISO 4217 (Field 21)",                  "required":true},
+  {"name":"BuyrLei",  "datatype":"xs:string",   "description":"Buyer LEI (Field 15)",                                   "required":true},
+  {"name":"SellrLei", "datatype":"xs:string",   "description":"Seller LEI (Field 16)",                                  "required":true},
+  {"name":"ExecVen",  "datatype":"xs:string",   "description":"Execution venue MIC (Field 50)",                         "required":true},
+  {"name":"RptTs",    "datatype":"xs:dateTime", "description":"Reporting timestamp UTC (Field 1, submission envelope)",  "required":true}
+]')"
+
+# ── EMIR Derivatives Report — Parquet (10 cols, camelCase full words)
+load_physical_schema "${DIST_EMIR_PQ}" "EMIR Derivatives Report / Parquet" "$(jq -n '[
+  {"name":"uti",                  "datatype":"string",        "description":"Unique Transaction Identifier",              "required":true},
+  {"name":"tradeDate",            "datatype":"date",          "description":"Trade date (ISO 8601)",                      "required":true},
+  {"name":"assetClass",           "datatype":"string",        "description":"Asset class code",                           "required":true},
+  {"name":"productId",            "datatype":"string",        "description":"Product identifier / ISIN for listed deriv", "required":true},
+  {"name":"notionalAmount",       "datatype":"decimal(18,4)", "description":"Notional amount",                           "required":true},
+  {"name":"notionalCurrency",     "datatype":"string",        "description":"Notional currency ISO 4217",                 "required":true},
+  {"name":"buyerLei",             "datatype":"string",        "description":"Buyer Legal Entity Identifier",              "required":true},
+  {"name":"sellerLei",            "datatype":"string",        "description":"Seller Legal Entity Identifier",             "required":true},
+  {"name":"executionVenueMic",    "datatype":"string",        "description":"Execution venue MIC (ISO 10383)",            "required":true},
+  {"name":"reportingTimestamp",   "datatype":"timestamp",     "description":"Reporting timestamp UTC",                    "required":true}
 ]')"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1196,6 +1723,475 @@ bind_column "${EL_MIF_SELL_LEI}" "${DIST_MIFID_PQ}" "sellerLei"                 
 bind_column "${EL_MIF_VENUE}"    "${DIST_MIFID_PQ}" "tradingVenueMic"             "tradingVenueMic → tradingVenueMic (PQ)"
 bind_column "${EL_MIF_TS}"       "${DIST_MIFID_PQ}" "executionTimestamp"          "executionTimestamp → executionTimestamp (PQ)"
 
+# ── Aggregated Market Risk Metrics — Snowflake (8 bindings)
+bind_column "${EL_RM_DESK}"  "${DIST_RISK_METRICS_SF}" "DESK_ID"   "deskId → DESK_ID (SF)"
+bind_column "${EL_RM_ASSET}" "${DIST_RISK_METRICS_SF}" "ASST_CLS"  "assetClass → ASST_CLS (SF)"
+bind_column "${EL_RM_DATE}"  "${DIST_RISK_METRICS_SF}" "RPT_DT"    "reportDate → RPT_DT (SF)"
+bind_column "${EL_RM_DV01}"  "${DIST_RISK_METRICS_SF}" "DV01_USD"  "dv01 → DV01_USD (SF)"
+bind_column "${EL_RM_CS01}"  "${DIST_RISK_METRICS_SF}" "CS01_USD"  "cs01 → CS01_USD (SF)"
+bind_column "${EL_RM_VEGA}"  "${DIST_RISK_METRICS_SF}" "VEGA_USD"  "vegaExposure → VEGA_USD (SF)"
+bind_column "${EL_RM_DELTA}" "${DIST_RISK_METRICS_SF}" "DELTA_USD" "deltaExposure → DELTA_USD (SF)"
+bind_column "${EL_RM_GAMMA}" "${DIST_RISK_METRICS_SF}" "GAMMA_USD" "gammaExposure → GAMMA_USD (SF)"
+
+# ── Aggregated Market Risk Metrics — REST API (8 bindings)
+bind_column "${EL_RM_DESK}"  "${DIST_RISK_METRICS_REST}" "deskId"        "deskId → deskId (REST)"
+bind_column "${EL_RM_ASSET}" "${DIST_RISK_METRICS_REST}" "assetClass"    "assetClass → assetClass (REST)"
+bind_column "${EL_RM_DATE}"  "${DIST_RISK_METRICS_REST}" "reportDate"    "reportDate → reportDate (REST)"
+bind_column "${EL_RM_DV01}"  "${DIST_RISK_METRICS_REST}" "dv01"          "dv01 → dv01 (REST)"
+bind_column "${EL_RM_CS01}"  "${DIST_RISK_METRICS_REST}" "cs01"          "cs01 → cs01 (REST)"
+bind_column "${EL_RM_VEGA}"  "${DIST_RISK_METRICS_REST}" "vegaExposure"  "vegaExposure → vegaExposure (REST)"
+bind_column "${EL_RM_DELTA}" "${DIST_RISK_METRICS_REST}" "deltaExposure" "deltaExposure → deltaExposure (REST)"
+bind_column "${EL_RM_GAMMA}" "${DIST_RISK_METRICS_REST}" "gammaExposure" "gammaExposure → gammaExposure (REST)"
+
+# ── FX Reference Rates — Snowflake (7 bindings)
+bind_column "${EL_FX_BASE}"  "${DIST_FX_SF}" "BSE_CCY" "baseCurrency → BSE_CCY (SF)"
+bind_column "${EL_FX_QUOTE}" "${DIST_FX_SF}" "QTE_CCY" "quoteCurrency → QTE_CCY (SF)"
+bind_column "${EL_FX_MID}"   "${DIST_FX_SF}" "MID_RT"  "midRate → MID_RT (SF)"
+bind_column "${EL_FX_BID}"   "${DIST_FX_SF}" "BID_RT"  "bidRate → BID_RT (SF)"
+bind_column "${EL_FX_ASK}"   "${DIST_FX_SF}" "ASK_RT"  "askRate → ASK_RT (SF)"
+bind_column "${EL_FX_DATE}"  "${DIST_FX_SF}" "RT_DT"   "rateDate → RT_DT (SF)"
+bind_column "${EL_FX_SRC}"   "${DIST_FX_SF}" "RT_SRC"  "rateSource → RT_SRC (SF)"
+
+# ── FX Reference Rates — REST API (7 bindings)
+bind_column "${EL_FX_BASE}"  "${DIST_FX_REST}" "baseCurrency"  "baseCurrency → baseCurrency (REST)"
+bind_column "${EL_FX_QUOTE}" "${DIST_FX_REST}" "quoteCurrency" "quoteCurrency → quoteCurrency (REST)"
+bind_column "${EL_FX_MID}"   "${DIST_FX_REST}" "midRate"       "midRate → midRate (REST)"
+bind_column "${EL_FX_BID}"   "${DIST_FX_REST}" "bidRate"       "bidRate → bidRate (REST)"
+bind_column "${EL_FX_ASK}"   "${DIST_FX_REST}" "askRate"       "askRate → askRate (REST)"
+bind_column "${EL_FX_DATE}"  "${DIST_FX_REST}" "rateDate"      "rateDate → rateDate (REST)"
+bind_column "${EL_FX_SRC}"   "${DIST_FX_REST}" "rateSource"    "rateSource → rateSource (REST)"
+
+# ── Counterparty Directory — Snowflake (8 bindings)
+bind_column "${EL_CD_LEI}"      "${DIST_CPTY_DIR_SF}" "LEI_ID"     "lei → LEI_ID (SF)"
+bind_column "${EL_CD_NAME}"     "${DIST_CPTY_DIR_SF}" "LEGAL_NM"   "legalName → LEGAL_NM (SF)"
+bind_column "${EL_CD_COUNTRY}"  "${DIST_CPTY_DIR_SF}" "CTRY_CD"    "country → CTRY_CD (SF)"
+bind_column "${EL_CD_JURIS}"    "${DIST_CPTY_DIR_SF}" "JRSD_CD"    "jurisdiction → JRSD_CD (SF)"
+bind_column "${EL_CD_TYPE}"     "${DIST_CPTY_DIR_SF}" "ENTITY_TYP" "entityType → ENTITY_TYP (SF)"
+bind_column "${EL_CD_PARENT}"   "${DIST_CPTY_DIR_SF}" "PRNT_LEI"   "parentLei → PRNT_LEI (SF)"
+bind_column "${EL_CD_STATUS}"   "${DIST_CPTY_DIR_SF}" "STATUS"     "status → STATUS (SF)"
+bind_column "${EL_CD_REG_DATE}" "${DIST_CPTY_DIR_SF}" "REG_DT"     "registrationDate → REG_DT (SF)"
+
+# ── Counterparty Directory — REST API (8 bindings)
+bind_column "${EL_CD_LEI}"      "${DIST_CPTY_DIR_REST}" "lei"              "lei → lei (REST)"
+bind_column "${EL_CD_NAME}"     "${DIST_CPTY_DIR_REST}" "legalName"        "legalName → legalName (REST)"
+bind_column "${EL_CD_COUNTRY}"  "${DIST_CPTY_DIR_REST}" "country"          "country → country (REST)"
+bind_column "${EL_CD_JURIS}"    "${DIST_CPTY_DIR_REST}" "jurisdiction"     "jurisdiction → jurisdiction (REST)"
+bind_column "${EL_CD_TYPE}"     "${DIST_CPTY_DIR_REST}" "entityType"       "entityType → entityType (REST)"
+bind_column "${EL_CD_PARENT}"   "${DIST_CPTY_DIR_REST}" "parentLei"        "parentLei → parentLei (REST)"
+bind_column "${EL_CD_STATUS}"   "${DIST_CPTY_DIR_REST}" "status"           "status → status (REST)"
+bind_column "${EL_CD_REG_DATE}" "${DIST_CPTY_DIR_REST}" "registrationDate" "registrationDate → registrationDate (REST)"
+
+# ── Intraday Order Book — Snowflake (8 bindings)
+bind_column "${EL_OB_ORDER_ID}" "${DIST_ORDERBOOK_SF}" "ORD_ID"      "orderId → ORD_ID (SF)"
+bind_column "${EL_OB_ISIN}"     "${DIST_ORDERBOOK_SF}" "INSTMT_ISIN" "instrumentIsin → INSTMT_ISIN (SF)"
+bind_column "${EL_OB_TYPE}"     "${DIST_ORDERBOOK_SF}" "ORD_TYP"     "orderType → ORD_TYP (SF)"
+bind_column "${EL_OB_SIDE}"     "${DIST_ORDERBOOK_SF}" "SIDE_IND"    "side → SIDE_IND (SF)"
+bind_column "${EL_OB_PRICE}"    "${DIST_ORDERBOOK_SF}" "LMT_PRC"     "limitPrice → LMT_PRC (SF)"
+bind_column "${EL_OB_CCY}"      "${DIST_ORDERBOOK_SF}" "ORD_CCY"     "currency → ORD_CCY (SF)"
+bind_column "${EL_OB_TRADER}"   "${DIST_ORDERBOOK_SF}" "TRDR_ID"     "traderId → TRDR_ID (SF)"
+bind_column "${EL_OB_VENUE}"    "${DIST_ORDERBOOK_SF}" "VEN_MIC"     "venueMic → VEN_MIC (SF)"
+
+# ── Intraday Order Book — Kafka (8 bindings)
+bind_column "${EL_OB_ORDER_ID}" "${DIST_ORDERBOOK_KAFKA}" "orderId"        "orderId → orderId (Kafka)"
+bind_column "${EL_OB_ISIN}"     "${DIST_ORDERBOOK_KAFKA}" "instrumentIsin" "instrumentIsin → instrumentIsin (Kafka)"
+bind_column "${EL_OB_TYPE}"     "${DIST_ORDERBOOK_KAFKA}" "orderType"      "orderType → orderType (Kafka)"
+bind_column "${EL_OB_SIDE}"     "${DIST_ORDERBOOK_KAFKA}" "side"           "side → side (Kafka)"
+bind_column "${EL_OB_PRICE}"    "${DIST_ORDERBOOK_KAFKA}" "limitPrice"     "limitPrice → limitPrice (Kafka)"
+bind_column "${EL_OB_CCY}"      "${DIST_ORDERBOOK_KAFKA}" "currency"       "currency → currency (Kafka)"
+bind_column "${EL_OB_TRADER}"   "${DIST_ORDERBOOK_KAFKA}" "traderId"       "traderId → traderId (Kafka)"
+bind_column "${EL_OB_VENUE}"    "${DIST_ORDERBOOK_KAFKA}" "venueMic"       "venueMic → venueMic (Kafka)"
+
+# ── Employee Directory — Snowflake (12 bindings)
+bind_column "${EL_EMP_ID}"     "${DIST_EMPLOYEE_SF}" "EMP_ID"     "employeeId → EMP_ID (SF)"
+bind_column "${EL_EMP_FNAME}"  "${DIST_EMPLOYEE_SF}" "FIRST_NM"   "firstName → FIRST_NM (SF)"
+bind_column "${EL_EMP_LNAME}"  "${DIST_EMPLOYEE_SF}" "LAST_NM"    "lastName → LAST_NM (SF)"
+bind_column "${EL_EMP_EMAIL}"  "${DIST_EMPLOYEE_SF}" "EMAIL_ADDR" "emailAddress → EMAIL_ADDR (SF)"
+bind_column "${EL_EMP_PHONE}"  "${DIST_EMPLOYEE_SF}" "PHONE_NO"   "phoneNumber → PHONE_NO (SF)"
+bind_column "${EL_EMP_DOB}"    "${DIST_EMPLOYEE_SF}" "DOB"        "dateOfBirth → DOB (SF)"
+bind_column "${EL_EMP_NAT}"    "${DIST_EMPLOYEE_SF}" "NATLTY_CD"  "nationality → NATLTY_CD (SF)"
+bind_column "${EL_EMP_NIN}"    "${DIST_EMPLOYEE_SF}" "NIN"        "nationalInsuranceNumber → NIN (SF)"
+bind_column "${EL_EMP_TITLE}"  "${DIST_EMPLOYEE_SF}" "JOB_TITLE"  "jobTitle → JOB_TITLE (SF)"
+bind_column "${EL_EMP_DEPT}"   "${DIST_EMPLOYEE_SF}" "DEPT"       "department → DEPT (SF)"
+bind_column "${EL_EMP_DESK}"   "${DIST_EMPLOYEE_SF}" "DESK_ID"    "deskId → DESK_ID (SF)"
+bind_column "${EL_EMP_HIRE}"   "${DIST_EMPLOYEE_SF}" "HIRE_DT"    "hireDate → HIRE_DT (SF)"
+
+# ── Employee Directory — REST API (12 bindings)
+bind_column "${EL_EMP_ID}"     "${DIST_EMPLOYEE_REST}" "employeeId"             "employeeId → employeeId (REST)"
+bind_column "${EL_EMP_FNAME}"  "${DIST_EMPLOYEE_REST}" "firstName"              "firstName → firstName (REST)"
+bind_column "${EL_EMP_LNAME}"  "${DIST_EMPLOYEE_REST}" "lastName"               "lastName → lastName (REST)"
+bind_column "${EL_EMP_EMAIL}"  "${DIST_EMPLOYEE_REST}" "emailAddress"           "emailAddress → emailAddress (REST)"
+bind_column "${EL_EMP_PHONE}"  "${DIST_EMPLOYEE_REST}" "phoneNumber"            "phoneNumber → phoneNumber (REST)"
+bind_column "${EL_EMP_DOB}"    "${DIST_EMPLOYEE_REST}" "dateOfBirth"            "dateOfBirth → dateOfBirth (REST)"
+bind_column "${EL_EMP_NAT}"    "${DIST_EMPLOYEE_REST}" "nationality"            "nationality → nationality (REST)"
+bind_column "${EL_EMP_NIN}"    "${DIST_EMPLOYEE_REST}" "nationalInsuranceNumber" "nationalInsuranceNumber → nationalInsuranceNumber (REST)"
+bind_column "${EL_EMP_TITLE}"  "${DIST_EMPLOYEE_REST}" "jobTitle"               "jobTitle → jobTitle (REST)"
+bind_column "${EL_EMP_DEPT}"   "${DIST_EMPLOYEE_REST}" "department"             "department → department (REST)"
+bind_column "${EL_EMP_DESK}"   "${DIST_EMPLOYEE_REST}" "deskId"                 "deskId → deskId (REST)"
+bind_column "${EL_EMP_HIRE}"   "${DIST_EMPLOYEE_REST}" "hireDate"               "hireDate → hireDate (REST)"
+
+# ── FinRep — XML (8 bindings)
+bind_column "${EL_FR_REPORT_ID}" "${DIST_FINREP_XML}" "RptId"      "reportId → RptId (XML)"
+bind_column "${EL_FR_ENTITY}"    "${DIST_FINREP_XML}" "RptEntyLei" "reportingEntityLei → RptEntyLei (XML)"
+bind_column "${EL_FR_PERIOD}"    "${DIST_FINREP_XML}" "RptPrd"     "reportingPeriod → RptPrd (XML)"
+bind_column "${EL_FR_TEMPLATE}"  "${DIST_FINREP_XML}" "TmplCd"     "templateCode → TmplCd (XML)"
+bind_column "${EL_FR_ROW}"       "${DIST_FINREP_XML}" "RowCd"      "rowCode → RowCd (XML)"
+bind_column "${EL_FR_COL}"       "${DIST_FINREP_XML}" "ColCd"      "columnCode → ColCd (XML)"
+bind_column "${EL_FR_AMOUNT}"    "${DIST_FINREP_XML}" "Amt"        "monetaryAmount → Amt (XML)"
+bind_column "${EL_FR_CCY}"       "${DIST_FINREP_XML}" "Ccy"        "currency → Ccy (XML)"
+
+# ── FinRep — Parquet (8 bindings)
+bind_column "${EL_FR_REPORT_ID}" "${DIST_FINREP_PQ}" "reportId"           "reportId → reportId (PQ)"
+bind_column "${EL_FR_ENTITY}"    "${DIST_FINREP_PQ}" "reportingEntityLei" "reportingEntityLei → reportingEntityLei (PQ)"
+bind_column "${EL_FR_PERIOD}"    "${DIST_FINREP_PQ}" "reportingPeriod"    "reportingPeriod → reportingPeriod (PQ)"
+bind_column "${EL_FR_TEMPLATE}"  "${DIST_FINREP_PQ}" "templateCode"       "templateCode → templateCode (PQ)"
+bind_column "${EL_FR_ROW}"       "${DIST_FINREP_PQ}" "rowCode"            "rowCode → rowCode (PQ)"
+bind_column "${EL_FR_COL}"       "${DIST_FINREP_PQ}" "columnCode"         "columnCode → columnCode (PQ)"
+bind_column "${EL_FR_AMOUNT}"    "${DIST_FINREP_PQ}" "monetaryAmount"     "monetaryAmount → monetaryAmount (PQ)"
+bind_column "${EL_FR_CCY}"       "${DIST_FINREP_PQ}" "currency"           "currency → currency (PQ)"
+
+# ── EMIR — XML (10 bindings)
+bind_column "${EL_EM_UTI}"     "${DIST_EMIR_XML}" "UTI"      "uti → UTI (XML)"
+bind_column "${EL_EM_DATE}"    "${DIST_EMIR_XML}" "TradDt"   "tradeDate → TradDt (XML)"
+bind_column "${EL_EM_ASSET}"   "${DIST_EMIR_XML}" "AsstCls"  "assetClass → AsstCls (XML)"
+bind_column "${EL_EM_PROD}"    "${DIST_EMIR_XML}" "ProdId"   "productId → ProdId (XML)"
+bind_column "${EL_EM_NOTIONAL}" "${DIST_EMIR_XML}" "NtnlAmt" "notionalAmount → NtnlAmt (XML)"
+bind_column "${EL_EM_CCY}"     "${DIST_EMIR_XML}" "NtnlCcy"  "notionalCurrency → NtnlCcy (XML)"
+bind_column "${EL_EM_BUYER}"   "${DIST_EMIR_XML}" "BuyrLei"  "buyerLei → BuyrLei (XML)"
+bind_column "${EL_EM_SELLER}"  "${DIST_EMIR_XML}" "SellrLei" "sellerLei → SellrLei (XML)"
+bind_column "${EL_EM_VENUE}"   "${DIST_EMIR_XML}" "ExecVen"  "executionVenueMic → ExecVen (XML)"
+bind_column "${EL_EM_TS}"      "${DIST_EMIR_XML}" "RptTs"    "reportingTimestamp → RptTs (XML)"
+
+# ── EMIR — Parquet (10 bindings)
+bind_column "${EL_EM_UTI}"      "${DIST_EMIR_PQ}" "uti"                 "uti → uti (PQ)"
+bind_column "${EL_EM_DATE}"     "${DIST_EMIR_PQ}" "tradeDate"           "tradeDate → tradeDate (PQ)"
+bind_column "${EL_EM_ASSET}"    "${DIST_EMIR_PQ}" "assetClass"          "assetClass → assetClass (PQ)"
+bind_column "${EL_EM_PROD}"     "${DIST_EMIR_PQ}" "productId"           "productId → productId (PQ)"
+bind_column "${EL_EM_NOTIONAL}" "${DIST_EMIR_PQ}" "notionalAmount"      "notionalAmount → notionalAmount (PQ)"
+bind_column "${EL_EM_CCY}"      "${DIST_EMIR_PQ}" "notionalCurrency"    "notionalCurrency → notionalCurrency (PQ)"
+bind_column "${EL_EM_BUYER}"    "${DIST_EMIR_PQ}" "buyerLei"            "buyerLei → buyerLei (PQ)"
+bind_column "${EL_EM_SELLER}"   "${DIST_EMIR_PQ}" "sellerLei"           "sellerLei → sellerLei (PQ)"
+bind_column "${EL_EM_VENUE}"    "${DIST_EMIR_PQ}" "executionVenueMic"   "executionVenueMic → executionVenueMic (PQ)"
+bind_column "${EL_EM_TS}"       "${DIST_EMIR_PQ}" "reportingTimestamp"  "reportingTimestamp → reportingTimestamp (PQ)"
+
+# ─────────────────────────────────────────────────────────────────────────────
+section "Phase 15 — Terms-of-Use Policy Sets"
+# ─────────────────────────────────────────────────────────────────────────────
+# The default ACTIVE policy set is seeded by the V11 Flyway migration (identical
+# to the former hard-coded values in TermsOfUseService).  Here we add a DRAFT
+# "Strict Regulatory Compliance Policy" that governance can review and activate
+# when Meridian is ready — demonstrating the full authoring workflow.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Find a policy set by name and return its id; create it if absent.
+get_or_create_terms_policy() {
+  local name="$1" body="$2"
+  local existing
+  existing=$(curl -sf -H "${HEADER_AUTH}" "${CATALOG_URL}/api/v1/terms-policies" \
+    | jq -r --arg n "${name}" '.[] | select(.name == $n) | .id' | head -1)
+  [ -n "${existing}" ] && { echo "${existing}"; return; }
+  post "${CATALOG_URL}/api/v1/terms-policies" "${body}" | jq -r '.id'
+}
+
+# Upsert a classification rule on a DRAFT policy set (PUT is idempotent).
+upsert_classification_rule() {
+  local policy_id="$1" classification="$2" body="$3"
+  curl -sf -X PUT \
+    -H "${HEADER_AUTH}" -H "${HEADER_JSON}" \
+    "${CATALOG_URL}/api/v1/terms-policies/${policy_id}/classification-rules/${classification}" \
+    -d "${body}" > /dev/null
+}
+
+# Add a regulation detection rule unless one with the same pattern already exists.
+add_regulation_rule_if_missing() {
+  local policy_id="$1" pattern="$2" body="$3"
+  local existing
+  existing=$(curl -sf -H "${HEADER_AUTH}" \
+    "${CATALOG_URL}/api/v1/terms-policies/${policy_id}/regulation-rules" \
+    | jq -r --arg p "${pattern}" '.[] | select(.pattern == $p) | .id' | head -1)
+  [ -n "${existing}" ] && return
+  post "${CATALOG_URL}/api/v1/terms-policies/${policy_id}/regulation-rules" "${body}" > /dev/null
+}
+
+# Add a regulation obligation unless one with the same regulation+obligation already exists.
+add_regulation_obligation_if_missing() {
+  local policy_id="$1" regulation="$2" obligation_text="$3" body="$4"
+  local existing
+  existing=$(curl -sf -H "${HEADER_AUTH}" \
+    "${CATALOG_URL}/api/v1/terms-policies/${policy_id}/regulation-obligations" \
+    | jq -r --arg r "${regulation}" --arg o "${obligation_text}" \
+      '.[] | select(.regulationName == $r and .obligation == $o) | .id' | head -1)
+  [ -n "${existing}" ] && return
+  post "${CATALOG_URL}/api/v1/terms-policies/${policy_id}/regulation-obligations" "${body}" > /dev/null
+}
+
+info "Seeding terms-of-use policy sets (idempotent by name)..."
+
+# ── Draft: Strict Regulatory Compliance Policy ────────────────────────────────
+# Drafted in response to DORA compliance readiness and expanded GDPR obligations.
+# Stricter than the default on every classification level; adds 4 new regulation
+# signals and 3 new regulation-triggered obligations.  Activate via the governance
+# UI or: POST /api/v1/terms-policies/<id>/activate
+
+POLICY_STRICT=$(get_or_create_terms_policy "Strict Regulatory Compliance Policy" "$(jq -n '{
+  "name": "Strict Regulatory Compliance Policy",
+  "description": "Stricter data governance policy drafted for DORA compliance readiness (2025-Q3). Tightens classification rules across all levels, extends regulation detection to LEI, SFTR, DORA and PSD2, and adds GDPR-specific obligations including mandatory DPIA. Ready for governance board sign-off before activation."
+}')")
+success "Terms policy (DRAFT): Strict Regulatory Compliance Policy (${POLICY_STRICT})"
+
+# ── Classification rules — full set for the strict policy ─────────────────────
+
+upsert_classification_rule "${POLICY_STRICT}" "PUBLIC" "$(jq -n '{
+  "rank": 0,
+  "accessLevel": "OPEN",
+  "permissions": [
+    "Use and reproduce freely",
+    "Redistribute with attribution",
+    "Incorporate into analytics and data products"
+  ],
+  "prohibitions": [
+    "Remove or obscure data source attribution",
+    "Use in AI/ML training without disclosure in model card"
+  ],
+  "obligations": [
+    "Cite the data source when publishing results",
+    "Register use in the data consumption registry"
+  ],
+  "odrlPermissions": ["use","reproduce","distribute"],
+  "odrlProhibitions": [],
+  "odrlDuties": ["attribute","inform"]
+}')"
+
+upsert_classification_rule "${POLICY_STRICT}" "INTERNAL" "$(jq -n '{
+  "rank": 1,
+  "accessLevel": "INTERNAL_ONLY",
+  "permissions": [
+    "Use for approved internal analytics and reporting"
+  ],
+  "prohibitions": [
+    "Redistribute to external parties",
+    "Sell or sublicense data",
+    "Public disclosure",
+    "Share with third-party contractors without a signed NDA on file"
+  ],
+  "obligations": [
+    "Notify the data steward of intended use before first access",
+    "Log access purpose in the data consumption registry"
+  ],
+  "odrlPermissions": ["use","present"],
+  "odrlProhibitions": ["distribute","sell","reproduce"],
+  "odrlDuties": ["inform","attribute"]
+}')"
+
+upsert_classification_rule "${POLICY_STRICT}" "CONFIDENTIAL" "$(jq -n '{
+  "rank": 2,
+  "accessLevel": "RESTRICTED",
+  "permissions": [
+    "Use for approved internal analytics",
+    "Include in regulatory reporting submissions under explicit data-owner approval"
+  ],
+  "prohibitions": [
+    "Redistribute or share externally",
+    "Reproduce or publish data samples",
+    "Use for commercial purposes",
+    "Use in AI/ML model training without DPO and data-owner sign-off"
+  ],
+  "obligations": [
+    "Obtain data-owner approval before first use",
+    "Notify the data owner before use in AI/ML models",
+    "Document the intended usage purpose",
+    "Complete a Data Protection Impact Assessment if the dataset includes personal data"
+  ],
+  "odrlPermissions": ["use"],
+  "odrlProhibitions": ["distribute","reproduce","present","aggregate"],
+  "odrlDuties": ["notify","obtainConsent"]
+}')"
+
+upsert_classification_rule "${POLICY_STRICT}" "HIGH_CONFIDENTIAL" "$(jq -n '{
+  "rank": 3,
+  "accessLevel": "HIGHLY_RESTRICTED",
+  "permissions": [
+    "Use only with explicit written approval from the data owner and CISO",
+    "Access limited to named authorised personnel who have completed enhanced background verification"
+  ],
+  "prohibitions": [
+    "Redistribute, reproduce, or present externally",
+    "Incorporate into derived data products without separate approval",
+    "Use for any non-approved purpose",
+    "Copy to any non-approved storage system or cloud environment",
+    "Access from outside the approved secure enclave"
+  ],
+  "obligations": [
+    "Obtain explicit consent from the data owner prior to access",
+    "Obtain CISO counter-signature for any programmatic or systemic access",
+    "Maintain an immutable audit trail of all access and usage events",
+    "Report usage to the data governance team quarterly",
+    "Conduct annual access certification reviews"
+  ],
+  "odrlPermissions": ["use"],
+  "odrlProhibitions": ["distribute","reproduce","present","modify","aggregate","derive"],
+  "odrlDuties": ["obtainConsent","notify","attribute"]
+}')"
+success "Classification rules upserted: all 4 levels (strict variant)"
+
+# ── Regulation detection rules — base set (matches default) + new signals ─────
+
+# Base set — replicate default so the policy works standalone when activated
+add_regulation_rule_if_missing "${POLICY_STRICT}" "fibo-fbc" "$(jq -n '{
+  "signalType": "IRI_CONTAINS",
+  "pattern": "fibo-fbc",
+  "regulationName": "Securities & Market Regulation",
+  "signalLabel": "fibo-fbc"
+}')"
+add_regulation_rule_if_missing "${POLICY_STRICT}" "fibo-sec" "$(jq -n '{
+  "signalType": "IRI_CONTAINS",
+  "pattern": "fibo-sec",
+  "regulationName": "Securities & Market Regulation",
+  "signalLabel": "fibo-sec"
+}')"
+add_regulation_rule_if_missing "${POLICY_STRICT}" "fibo-md" "$(jq -n '{
+  "signalType": "IRI_CONTAINS",
+  "pattern": "fibo-md",
+  "regulationName": "Market Data Licensing",
+  "signalLabel": "fibo-md"
+}')"
+add_regulation_rule_if_missing "${POLICY_STRICT}" "fibo-fnd" "$(jq -n '{
+  "signalType": "IRI_CONTAINS",
+  "pattern": "fibo-fnd",
+  "regulationName": "Financial Foundations Standards",
+  "signalLabel": "fibo-fnd"
+}')"
+add_regulation_rule_if_missing "${POLICY_STRICT}" "mifid" "$(jq -n '{
+  "signalType": "KEYWORD",
+  "pattern": "mifid",
+  "regulationName": "MiFID II Transaction Reporting",
+  "signalLabel": "mifid"
+}')"
+add_regulation_rule_if_missing "${POLICY_STRICT}" "emir" "$(jq -n '{
+  "signalType": "KEYWORD",
+  "pattern": "emir",
+  "regulationName": "EMIR Derivatives Reporting",
+  "signalLabel": "emir"
+}')"
+add_regulation_rule_if_missing "${POLICY_STRICT}" "finrep" "$(jq -n '{
+  "signalType": "KEYWORD",
+  "pattern": "finrep",
+  "regulationName": "EBA FinRep Reporting",
+  "signalLabel": "finrep"
+}')"
+add_regulation_rule_if_missing "${POLICY_STRICT}" "gdpr" "$(jq -n '{
+  "signalType": "KEYWORD",
+  "pattern": "gdpr",
+  "regulationName": "GDPR Data Protection",
+  "signalLabel": "gdpr"
+}')"
+add_regulation_rule_if_missing "${POLICY_STRICT}" "basel" "$(jq -n '{
+  "signalType": "KEYWORD",
+  "pattern": "basel",
+  "regulationName": "Basel III Capital Requirements",
+  "signalLabel": "basel"
+}')"
+
+# New signals specific to the strict policy
+add_regulation_rule_if_missing "${POLICY_STRICT}" "fibo-lei" "$(jq -n '{
+  "signalType": "IRI_CONTAINS",
+  "pattern": "fibo-lei",
+  "regulationName": "LEI Registration Obligation",
+  "signalLabel": "fibo-lei"
+}')"
+add_regulation_rule_if_missing "${POLICY_STRICT}" "sftr" "$(jq -n '{
+  "signalType": "KEYWORD",
+  "pattern": "sftr",
+  "regulationName": "SFTR Securities Financing Reporting",
+  "signalLabel": "sftr"
+}')"
+add_regulation_rule_if_missing "${POLICY_STRICT}" "dora" "$(jq -n '{
+  "signalType": "KEYWORD",
+  "pattern": "dora",
+  "regulationName": "DORA Digital Operational Resilience",
+  "signalLabel": "dora"
+}')"
+add_regulation_rule_if_missing "${POLICY_STRICT}" "psd2" "$(jq -n '{
+  "signalType": "KEYWORD",
+  "pattern": "psd2",
+  "regulationName": "PSD2 Payment Services Directive",
+  "signalLabel": "psd2"
+}')"
+
+# FCRA — triggers on any dataset with personal-data elements (HAS_PII_ELEMENTS) or
+# explicit "credit" keyword, covering consumer-report obligations under US law.
+add_regulation_rule_if_missing "${POLICY_STRICT}" "pii" "$(jq -n '{
+  "signalType": "HAS_PII_ELEMENTS",
+  "pattern": "pii",
+  "regulationName": "FCRA Consumer Data Protection",
+  "signalLabel": "Personal data elements present"
+}')"
+add_regulation_rule_if_missing "${POLICY_STRICT}" "credit" "$(jq -n '{
+  "signalType": "KEYWORD",
+  "pattern": "credit",
+  "regulationName": "FCRA Consumer Data Protection",
+  "signalLabel": "credit"
+}')"
+success "Regulation rules: 9 base + 4 new signals (LEI, SFTR, DORA, PSD2) + 2 FCRA signals (PII, credit)"
+
+# ── Regulation-triggered obligations ─────────────────────────────────────────
+
+add_regulation_obligation_if_missing "${POLICY_STRICT}" \
+  "Market Data Licensing" \
+  "Comply with market data vendor licence terms" "$(jq -n '{
+    "regulationName": "Market Data Licensing",
+    "obligation": "Comply with market data vendor licence terms",
+    "odrlDuty": "licenseMarketData"
+  }')"
+
+add_regulation_obligation_if_missing "${POLICY_STRICT}" \
+  "GDPR Data Protection" \
+  "Conduct a Data Protection Impact Assessment (DPIA) before processing" "$(jq -n '{
+    "regulationName": "GDPR Data Protection",
+    "obligation": "Conduct a Data Protection Impact Assessment (DPIA) before processing",
+    "odrlDuty": "obtainConsent"
+  }')"
+
+add_regulation_obligation_if_missing "${POLICY_STRICT}" \
+  "GDPR Data Protection" \
+  "Appoint a Data Protection Officer for this processing activity" "$(jq -n '{
+    "regulationName": "GDPR Data Protection",
+    "obligation": "Appoint a Data Protection Officer for this processing activity",
+    "odrlDuty": "notify"
+  }')"
+
+add_regulation_obligation_if_missing "${POLICY_STRICT}" \
+  "SFTR Securities Financing Reporting" \
+  "Submit securities financing transaction report to the trade repository within T+1" "$(jq -n '{
+    "regulationName": "SFTR Securities Financing Reporting",
+    "obligation": "Submit securities financing transaction report to the trade repository within T+1",
+    "odrlDuty": "report"
+  }')"
+
+add_regulation_obligation_if_missing "${POLICY_STRICT}" \
+  "DORA Digital Operational Resilience" \
+  "Register this data service in the ICT asset register and conduct annual resilience testing" "$(jq -n '{
+    "regulationName": "DORA Digital Operational Resilience",
+    "obligation": "Register this data service in the ICT asset register and conduct annual resilience testing",
+    "odrlDuty": "inform"
+  }')"
+
+add_regulation_obligation_if_missing "${POLICY_STRICT}" \
+  "FCRA Consumer Data Protection" \
+  "Ensure permissible purpose for any consumer report use; provide adverse action notice when required" "$(jq -n '{
+    "regulationName": "FCRA Consumer Data Protection",
+    "obligation": "Ensure permissible purpose for any consumer report use; provide adverse action notice when required",
+    "odrlDuty": "obtainConsent"
+  }')"
+
+add_regulation_obligation_if_missing "${POLICY_STRICT}" \
+  "FCRA Consumer Data Protection" \
+  "Maintain data accuracy and provide consumer dispute resolution procedures" "$(jq -n '{
+    "regulationName": "FCRA Consumer Data Protection",
+    "obligation": "Maintain data accuracy and provide consumer dispute resolution procedures",
+    "odrlDuty": "attribute"
+  }')"
+success "Regulation obligations: Market Data, GDPR (×2), SFTR, DORA, FCRA (×2)"
+
 # ─────────────────────────────────────────────────────────────────────────────
 section "Seed Complete"
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1205,19 +2201,26 @@ echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━
 echo -e "${GREEN} ODIN Catalog seed data loaded — Meridian Capital scenario${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo "  Catalogs   :  4 (Trading, Risk, Reference Data, Compliance)"
-echo "  Datasets   : 12 (trades, positions, orders, VAR, CCR, risk metrics,"
-echo "                securities, counterparties, FX rates, MiFID, FinRep, EMIR)"
-echo "  Distrib.   : 14 (Snowflake, Parquet, REST, Kafka, XML)"
-echo "  Phys.schema: 11 (one per distribution — Snowflake abbreviated, lake/REST/Kafka camelCase, XML ISO 20022)"
-echo "  Vocab      : FIBO (FND/FBC/SEC/MD) + schema.org profiles on all datasets"
-echo "  Log.models :  5 (Trades, Positions, Securities, VaR, MiFID) — 40 elements"
-echo "  Phys.binds : 88 (each element bound to its column in every distribution format)"
+echo "  Catalogs   :  5 (Trading, Risk, Reference Data, Compliance, HR & People)"
+echo "  Datasets   : 13 (trades, positions, orders, VAR, CCR, risk metrics,"
+echo "                securities, counterparties, FX rates, MiFID, FinRep, EMIR,"
+echo "                + Employee & Trader Directory [PII / GDPR])"
+echo "  Distrib.   : 28 (Snowflake, Parquet, REST, Kafka, XML)"
+echo "  Phys.schema: 25 (one per distribution — Snowflake abbreviated, lake/REST/Kafka camelCase, XML ISO 20022)"
+echo "  Vocab      : FIBO (FND/FBC/SEC/MD) + schema.org + DPV/DPV-PD profiles"
+echo "  Log.models : 13 (Trades, Positions, Securities, VaR, MiFID, CCR, RiskMetrics, FX, CptyDir, OrderBook, FinRep, EMIR, EmployeeDir) — 126 elements"
+echo "  PII flags  :  Employee Directory — 10/12 elements marked isPersonalInformation=true,"
+echo "                7/12 marked isDirectIdentifier=true (name, email, NIN, employeeId)"
+echo "  Phys.binds : 210 (each element bound to its column in every distribution format)"
 echo "  FIBO maps  : 25+ concept mappings (ISIN, LEI, MonetaryAmount, Currency, ...)"
+echo "  DPV-PD maps: 10 concept mappings on Employee Directory (Name, Email, Phone, DOB, NIN, ...)"
 echo "  Data Prods :  5 (Consume×2, Deploy, Build, Design lifecycle stages)"
-echo "  Lineage    :  8 OpenLineage jobs — 4-hop pipeline (securities→finrep)"
+echo "  Lineage    :  9 OpenLineage jobs — 4-hop pipeline (securities→finrep) + employee enrichment"
 echo "  DDL views  :  3 (v_counterparty_exposure, v_mifid_enriched, v_daily_risk_summary)"
 echo "  Harvest    :  5 sources (Snowflake×3, AWS Glue, ECB DCAT) + 5 scheduled jobs"
+echo "  Policies   :  2 terms-of-use policy sets (default ACTIVE + Strict DRAFT with FCRA)"
+echo "                  ACTIVE: Default Terms Policy (seeded by V11 migration)"
+echo "                  DRAFT:  Strict Regulatory Compliance Policy (13 signals, 4 rules, 5 obligations)"
 echo ""
 echo "  All phases are idempotent — safe to re-run without creating duplicates."
 echo ""

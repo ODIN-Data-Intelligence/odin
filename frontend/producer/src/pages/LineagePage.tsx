@@ -1,71 +1,307 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { lineageApi } from '@datacatalog/shared';
-import PageHeader from '../components/ui/PageHeader';
-import LineageGraph from '../components/lineage/LineageGraph';
+import { useSearchParams, useNavigate, useParams } from 'react-router-dom';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import InputLabel from '@mui/material/InputLabel';
+import FormControl from '@mui/material/FormControl';
+import Alert from '@mui/material/Alert';
+import { lineageApi, logicalModelApi, logicalElementApi, PageHeader } from '@datacatalog/shared';
+import type { LineageGraph as LineageGraphData, LineageNode, LineageEdge } from '@datacatalog/shared';
+import ReactFlow, { Background, Controls, MiniMap, Handle, Position, type Node, type Edge, type NodeMouseHandler, type NodeProps } from 'reactflow';
+import 'reactflow/dist/style.css';
 
-export default function LineagePage() {
-  const [namespace, setNamespace] = useState('');
-  const [name, setName] = useState('');
-  const [submitted, setSubmitted] = useState<{ ns: string; name: string } | null>(null);
-  const [direction, setDirection] = useState<'upstream' | 'downstream'>('downstream');
+type Direction = 'upstream' | 'downstream' | 'both';
 
-  const { data: graph, isLoading } = useQuery({
-    queryKey: ['lineage', submitted?.ns, submitted?.name, direction],
-    queryFn: () => lineageApi.getDatasetLineage(submitted!.ns, submitted!.name, direction, 5),
-    enabled: !!submitted,
+const COL_WIDTH  = 240;
+const ROW_HEIGHT = 100;
+const DATASET_COLOR = '#dbeafe';
+const JOB_COLOR     = '#fef3c7';
+const FOCAL_COLOR   = '#bfdbfe';
+const EXPANDED_EXTRA_HEIGHT = 185;
+
+function DatasetNode({ id, data, sourcePosition = Position.Right, targetPosition = Position.Left }: NodeProps) {
+  const expanded = !!(data.expanded as boolean);
+
+  const { data: models } = useQuery({
+    queryKey: ['lineage-node-models', data.catalogId],
+    queryFn: () => logicalModelApi.list(data.catalogId as string),
+    enabled: expanded && !!(data.catalogId),
+  });
+
+  const publishedModel = models?.find((m: { status: string }) => m.status === 'published') ?? models?.[0];
+
+  const { data: elements = [], isLoading: elementsLoading } = useQuery({
+    queryKey: ['lineage-node-elements', publishedModel?.id],
+    queryFn: () => logicalElementApi.list(publishedModel!.id),
+    enabled: !!publishedModel,
   });
 
   return (
-    <div className="flex flex-col h-full">
-      <PageHeader title="Lineage Explorer" description="Explore data lineage across your catalog" />
-      <div className="p-4 bg-white border-b flex items-end gap-3">
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Namespace</label>
-          <input
-            value={namespace}
-            onChange={e => setNamespace(e.target.value)}
-            placeholder="e.g. snowflake://my-account/mydb"
-            className="border border-gray-300 rounded px-3 py-1.5 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+    <>
+      <Handle type="target" position={targetPosition} />
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {data.label as string}
+          </span>
+          {data.catalogId && (
+            <>
+              <button
+                onClick={(e) => { e.stopPropagation(); (data.onToggleExpand as ((id: string) => void) | undefined)?.(id); }}
+                title={expanded ? 'Collapse' : 'Show data elements'}
+                style={{ flexShrink: 0, cursor: 'pointer', opacity: 0.5, lineHeight: 1, padding: 0, background: 'none', border: 'none', color: 'inherit' }}
+                onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.5'; }}
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                  {expanded
+                    ? <path d="M2 6.5L5 3.5L8 6.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    : <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  }
+                </svg>
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); (data.onNavigate as ((cid: string) => void) | undefined)?.(data.catalogId as string); }}
+                title="Open in catalog"
+                style={{ flexShrink: 0, cursor: 'pointer', opacity: 0.5, lineHeight: 1, padding: 0, background: 'none', border: 'none', color: 'inherit' }}
+                onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.5'; }}
+              >
+                <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                  <path d="M5 2H2a1 1 0 00-1 1v7a1 1 0 001 1h7a1 1 0 001-1V7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M8 1h3m0 0v3m0-3L6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            </>
+          )}
         </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Dataset name</label>
-          <input
-            value={name}
-            onChange={e => setName(e.target.value)}
-            placeholder="e.g. trades"
-            className="border border-gray-300 rounded px-3 py-1.5 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Direction</label>
-          <select
-            value={direction}
-            onChange={e => setDirection(e.target.value as 'upstream' | 'downstream')}
-            className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="downstream">Downstream</option>
-            <option value="upstream">Upstream</option>
-          </select>
-        </div>
-        <button
-          onClick={() => setSubmitted({ ns: namespace, name })}
-          disabled={!namespace || !name}
-          className="px-4 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-        >
-          Explore
-        </button>
-      </div>
-      <div className="flex-1 relative">
-        {isLoading && <div className="absolute inset-0 flex items-center justify-center text-sm text-gray-500">Loading lineage...</div>}
-        {graph && <LineageGraph graph={graph} />}
-        {!graph && !isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center text-sm text-gray-400">
-            Enter a dataset namespace and name to explore its lineage
+        {expanded && (
+          <div style={{ marginTop: 5, borderTop: '1px solid rgba(0,0,0,0.1)', paddingTop: 4, maxHeight: 160, overflowY: 'auto', minWidth: 140 }}>
+            {elementsLoading && <div style={{ fontSize: 9, color: '#94a3b8', textAlign: 'center' }}>…</div>}
+            {!elementsLoading && elements.length === 0 && <div style={{ fontSize: 9, color: '#94a3b8', fontStyle: 'italic' }}>No elements</div>}
+            {(elements as { id: string; name: string; logicalType?: string }[]).map(el => (
+              <div key={el.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 9, padding: '1.5px 0', gap: 6, cursor: 'default' }}
+                onMouseEnter={() => (data.onHighlightNode as ((nid: string | null) => void) | undefined)?.(id)}
+                onMouseLeave={() => (data.onHighlightNode as ((nid: string | null) => void) | undefined)?.(null)}
+              >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{el.name}</span>
+                {el.logicalType && <span style={{ color: '#94a3b8', flexShrink: 0, fontSize: 8 }}>{el.logicalType}</span>}
+              </div>
+            ))}
           </div>
         )}
       </div>
-    </div>
+      <Handle type="source" position={sourcePosition} />
+    </>
+  );
+}
+
+const NODE_TYPES = { dataset: DatasetNode };
+
+function resolveHandles(nodes: Node[], edges: Edge[]): Node[] {
+  const xOf = new Map(nodes.map(n => [n.id, n.position.x]));
+  const sp = new Map<string, Position>();
+  const tp = new Map<string, Position>();
+  for (const e of edges) {
+    const sx = xOf.get(e.source) ?? 0;
+    const tx = xOf.get(e.target) ?? 0;
+    sp.set(e.source, sx <= tx ? Position.Right : Position.Left);
+    tp.set(e.target, sx <= tx ? Position.Left  : Position.Right);
+  }
+  return nodes.map(n => ({ ...n, sourcePosition: sp.get(n.id) ?? Position.Right, targetPosition: tp.get(n.id) ?? Position.Left }));
+}
+
+function applyExpansionOffsets(nodes: Node[], expandedNodeIds: Set<string>, extraHeight: number): Node[] {
+  if (expandedNodeIds.size === 0) return nodes;
+  const byX = new Map<number, Node[]>();
+  for (const n of nodes) { if (!byX.has(n.position.x)) byX.set(n.position.x, []); byX.get(n.position.x)!.push(n); }
+  const result = [...nodes];
+  const idxOf = new Map(result.map((n, i) => [n.id, i]));
+  for (const col of byX.values()) {
+    col.sort((a, b) => a.position.y - b.position.y);
+    let offset = 0;
+    for (const node of col) {
+      if (offset > 0) { const i = idxOf.get(node.id)!; result[i] = { ...result[i], position: { ...result[i].position, y: result[i].position.y + offset } }; }
+      if (expandedNodeIds.has(node.id)) offset += extraHeight;
+    }
+  }
+  return result;
+}
+
+function edgeFromLineage(e: LineageEdge, i: number, highlightedNodeId?: string | null): Edge {
+  const highlighted = !!highlightedNodeId && e.toId === highlightedNodeId;
+  return { id: `e-${i}`, source: e.fromId, target: e.toId, label: e.edgeType, labelStyle: { fontSize: 10 }, style: highlighted ? { stroke: '#3b82f6', strokeWidth: 2.5 } : { stroke: '#94a3b8', strokeWidth: 1.5 }, animated: e.edgeType === 'DERIVED_FROM' };
+}
+
+function buildSingleElements(graph: LineageGraphData, upstream = false, onNavigate?: (catalogId: string) => void, highlightedNodeId?: string | null, onHighlightNode?: (id: string | null) => void, expandedNodeIds?: Set<string>, onToggleExpand?: (id: string) => void): { nodes: Node[]; edges: Edge[] } {
+  const buckets = new Map<number, LineageNode[]>();
+  graph.nodes.forEach(n => { const d = n.depth ?? 0; if (!buckets.has(d)) buckets.set(d, []); buckets.get(d)!.push(n); });
+  const nodes: Node[] = graph.nodes.map(n => {
+    const d = n.depth ?? 0; const bucket = buckets.get(d)!; const rowIdx = bucket.indexOf(n); const totalInDepth = bucket.length;
+    return { id: n.id, type: 'dataset', data: { label: n.name, namespace: n.namespace, name: n.name, catalogId: n.catalogId, onNavigate, onHighlightNode, expanded: expandedNodeIds?.has(n.id) ?? false, onToggleExpand }, position: { x: (upstream ? -d : d) * COL_WIDTH, y: (rowIdx - (totalInDepth - 1) / 2) * ROW_HEIGHT }, style: { background: n.id === graph.rootId ? FOCAL_COLOR : n.type === 'Job' ? JOB_COLOR : DATASET_COLOR, border: n.id === graph.rootId ? '2px solid #3b82f6' : '1px solid #cbd5e1', borderRadius: 8, padding: '8px 12px', fontSize: 12, maxWidth: 200, fontWeight: n.id === graph.rootId ? 600 : 400 } };
+  });
+  const edges: Edge[] = graph.edges.map((e, i) => edgeFromLineage(e, i, highlightedNodeId));
+  const withHandles = resolveHandles(nodes, edges);
+  return { nodes: expandedNodeIds ? applyExpansionOffsets(withHandles, expandedNodeIds, EXPANDED_EXTRA_HEIGHT) : withHandles, edges };
+}
+
+function buildBothElements(upGraph: LineageGraphData, downGraph: LineageGraphData, onNavigate?: (catalogId: string) => void, highlightedNodeId?: string | null, onHighlightNode?: (id: string | null) => void, expandedNodeIds?: Set<string>, onToggleExpand?: (id: string) => void): { nodes: Node[]; edges: Edge[] } {
+  const signedDepths = new Map<string, number>();
+  const nodeById = new Map<string, LineageNode>();
+  for (const n of downGraph.nodes) { signedDepths.set(n.id, n.depth ?? 0); nodeById.set(n.id, n); }
+  for (const n of upGraph.nodes) { const sd = -(n.depth ?? 0); if (sd === 0) continue; signedDepths.set(n.id, sd); nodeById.set(n.id, n); }
+  const colBuckets = new Map<number, string[]>();
+  for (const [id, sd] of signedDepths) { if (!colBuckets.has(sd)) colBuckets.set(sd, []); colBuckets.get(sd)!.push(id); }
+  const nodes: Node[] = [];
+  for (const [id, sd] of signedDepths) {
+    const n = nodeById.get(id)!; const col = colBuckets.get(sd)!; const rowIdx = col.indexOf(id); const total = col.length;
+    nodes.push({ id, type: 'dataset', data: { label: n.name, namespace: n.namespace, name: n.name, catalogId: n.catalogId, onNavigate, onHighlightNode, expanded: expandedNodeIds?.has(id) ?? false, onToggleExpand }, position: { x: sd * COL_WIDTH, y: (rowIdx - (total - 1) / 2) * ROW_HEIGHT }, style: { background: sd === 0 ? FOCAL_COLOR : n.type === 'Job' ? JOB_COLOR : DATASET_COLOR, border: sd === 0 ? '2px solid #3b82f6' : '1px solid #cbd5e1', borderRadius: 8, padding: '8px 12px', fontSize: 12, maxWidth: 200, fontWeight: sd === 0 ? 600 : 400 } });
+  }
+  const seen = new Set<string>(); const edges: Edge[] = [];
+  for (const e of [...upGraph.edges, ...downGraph.edges]) {
+    const eid = `${e.fromId}->${e.toId}`;
+    if (!seen.has(eid)) { seen.add(eid); edges.push(edgeFromLineage(e, edges.length, highlightedNodeId)); }
+  }
+  const withHandles = resolveHandles(nodes, edges);
+  return { nodes: expandedNodeIds ? applyExpansionOffsets(withHandles, expandedNodeIds, EXPANDED_EXTRA_HEIGHT) : withHandles, edges };
+}
+
+export default function LineagePage() {
+  const [searchParams] = useSearchParams();
+  const { tenant } = useParams<{ tenant: string }>();
+  const navigate = useNavigate();
+  const initNs        = searchParams.get('ns')        ?? '';
+  const initName      = searchParams.get('name')      ?? '';
+  const initDirection = (searchParams.get('direction') ?? 'downstream') as Direction;
+
+  const [namespace, setNamespace] = useState(initNs);
+  const [name, setName] = useState(initName);
+  const [direction, setDirection] = useState<Direction>(initDirection);
+  const [submitted, setSubmitted] = useState<{ id: string } | null>(null);
+  const [lookupError, setLookupError] = useState(false);
+  const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null);
+  const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(new Set());
+
+  const handleToggleExpand = useCallback((nodeId: string) => {
+    setExpandedNodeIds(prev => { const next = new Set(prev); if (next.has(nodeId)) next.delete(nodeId); else next.add(nodeId); return next; });
+  }, []);
+
+  const handleExplore = async () => {
+    setLookupError(false);
+    try {
+      const { id } = await lineageApi.lookupDataset(namespace, name);
+      setSubmitted({ id });
+    } catch {
+      setLookupError(true);
+    }
+  };
+
+  const handleNavigate = useCallback((catalogId: string) => {
+    navigate(`/${tenant}/datasets/${catalogId}`);
+  }, [navigate, tenant]);
+
+  const { data: downGraph, isLoading: downLoading } = useQuery({
+    queryKey: ['lineage', submitted?.id, 'downstream'],
+    queryFn:  () => lineageApi.getDatasetLineage(submitted!.id, 'downstream', 5),
+    enabled:  !!submitted && (direction === 'downstream' || direction === 'both'),
+  });
+
+  const { data: upGraph, isLoading: upLoading } = useQuery({
+    queryKey: ['lineage', submitted?.id, 'upstream'],
+    queryFn:  () => lineageApi.getDatasetLineage(submitted!.id, 'upstream', 5),
+    enabled:  !!submitted && (direction === 'upstream' || direction === 'both'),
+  });
+
+  const isLoading = direction === 'both' ? (upLoading || downLoading) : direction === 'upstream' ? upLoading : downLoading;
+
+  let flowElements: { nodes: Node[]; edges: Edge[] } | null = null;
+  if (direction === 'both'       && upGraph && downGraph) flowElements = buildBothElements(upGraph, downGraph, handleNavigate, highlightedNodeId, setHighlightedNodeId, expandedNodeIds, handleToggleExpand);
+  if (direction === 'upstream'   && upGraph)              flowElements = buildSingleElements(upGraph, true, handleNavigate, highlightedNodeId, setHighlightedNodeId, expandedNodeIds, handleToggleExpand);
+  if (direction === 'downstream' && downGraph)            flowElements = buildSingleElements(downGraph, false, handleNavigate, highlightedNodeId, setHighlightedNodeId, expandedNodeIds, handleToggleExpand);
+
+  const onNodeDoubleClick: NodeMouseHandler = useCallback((_evt, node) => {
+    const { catalogId } = node.data as { catalogId?: string };
+    if (catalogId) navigate(`/${tenant}/datasets/${catalogId}`);
+  }, [navigate, tenant]);
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <PageHeader title="Lineage Explorer" description="Explore data lineage across your catalog" />
+
+      <Box sx={{ p: 2, bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'flex-end', gap: 2, flexWrap: 'wrap' }}>
+        <TextField
+          value={namespace}
+          onChange={e => setNamespace(e.target.value)}
+          label="Namespace"
+          placeholder="e.g. snowflake://my-account/mydb"
+          size="small"
+          sx={{ minWidth: 280 }}
+        />
+        <TextField
+          value={name}
+          onChange={e => setName(e.target.value)}
+          label="Dataset name"
+          placeholder="e.g. trades"
+          size="small"
+          sx={{ minWidth: 180 }}
+        />
+        <FormControl size="small" sx={{ minWidth: 140 }}>
+          <InputLabel>Direction</InputLabel>
+          <Select value={direction} label="Direction" onChange={e => setDirection(e.target.value as Direction)}>
+            <MenuItem value="downstream">Downstream</MenuItem>
+            <MenuItem value="upstream">Upstream</MenuItem>
+            <MenuItem value="both">Both</MenuItem>
+          </Select>
+        </FormControl>
+        <Box>
+          <Button
+            variant="contained"
+            onClick={handleExplore}
+            disabled={!namespace || !name}
+            sx={{ textTransform: 'none' }}
+          >
+            Explore
+          </Button>
+          {lookupError && (
+            <Typography variant="caption" color="error" sx={{ display: 'block', mt: 0.5 }}>Dataset not found in lineage graph</Typography>
+          )}
+        </Box>
+      </Box>
+
+      <Box sx={{ flex: 1, position: 'relative' }}>
+        {isLoading && (
+          <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Typography variant="body2" color="text.secondary">Loading lineage…</Typography>
+          </Box>
+        )}
+        {flowElements && (
+          <ReactFlow
+            nodes={flowElements.nodes}
+            edges={flowElements.edges}
+            nodeTypes={NODE_TYPES}
+            fitView
+            onNodeDoubleClick={onNodeDoubleClick}
+            nodesDraggable={false}
+            nodesConnectable={false}
+            elementsSelectable={false}
+            attributionPosition="bottom-right"
+          >
+            <Background gap={20} color="#e2e8f0" />
+            <Controls />
+            <MiniMap nodeColor={n => n.style?.background as string ?? DATASET_COLOR} />
+          </ReactFlow>
+        )}
+        {!flowElements && !isLoading && (
+          <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Typography variant="body2" color="text.secondary">Enter a dataset namespace and name to explore its lineage</Typography>
+          </Box>
+        )}
+      </Box>
+    </Box>
   );
 }

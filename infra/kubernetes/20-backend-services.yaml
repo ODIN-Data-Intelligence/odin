@@ -1,0 +1,530 @@
+# Image registry prefix is injected at deploy time by deploy.sh via envsubst.
+# Override with: IMAGE_REGISTRY=myregistry.example.com/ ./infra/kubernetes/deploy.sh
+
+---
+# ── inventory-service ─────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: odin-catalog-inventory-service
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/name: inventory-service
+    app.kubernetes.io/component: inventory-service
+    app.kubernetes.io/part-of: odin-catalog
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8001
+      targetPort: 8001
+  selector:
+    app.kubernetes.io/name: inventory-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: odin-catalog-inventory-service
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/name: inventory-service
+    app.kubernetes.io/component: inventory-service
+    app.kubernetes.io/part-of: odin-catalog
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: inventory-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: inventory-service
+        app.kubernetes.io/component: inventory-service
+        app.kubernetes.io/part-of: odin-catalog
+    spec:
+      serviceAccountName: odin-catalog
+      containers:
+        - name: inventory-service
+          image: ${IMAGE_REGISTRY}odin/inventory-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8001
+          envFrom:
+            - configMapRef:
+                name: odin-catalog-common
+          env:
+            - name: SERVER_PORT
+              value: "8001"
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://odin-catalog-postgres-inventory:5432/inventory"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: inventory
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: odin-catalog-postgres
+                  key: inventory-password
+            - name: SPRING_DATA_REDIS_HOST
+              value: odin-catalog-redis
+            - name: SPRING_DATA_REDIS_PORT
+              value: "6379"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8001
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8001
+            initialDelaySeconds: 60
+            periodSeconds: 20
+
+---
+# ── harvest-service ───────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: odin-catalog-harvest-service
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/name: harvest-service
+    app.kubernetes.io/component: harvest-service
+    app.kubernetes.io/part-of: odin-catalog
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8002
+      targetPort: 8002
+  selector:
+    app.kubernetes.io/name: harvest-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: odin-catalog-harvest-service
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/name: harvest-service
+    app.kubernetes.io/component: harvest-service
+    app.kubernetes.io/part-of: odin-catalog
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: harvest-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: harvest-service
+        app.kubernetes.io/component: harvest-service
+        app.kubernetes.io/part-of: odin-catalog
+    spec:
+      serviceAccountName: odin-catalog
+      containers:
+        - name: harvest-service
+          image: ${IMAGE_REGISTRY}odin/harvest-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8002
+          envFrom:
+            - configMapRef:
+                name: odin-catalog-common
+          env:
+            - name: SERVER_PORT
+              value: "8002"
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://odin-catalog-postgres-harvest:5432/harvest"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: harvest
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: odin-catalog-postgres
+                  key: harvest-password
+            - name: MINIO_ENDPOINT
+              value: "http://odin-catalog-minio:9000"
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: odin-catalog-minio
+                  key: root-user
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: odin-catalog-minio
+                  key: root-password
+            - name: SPRING_QUARTZ_DATASOURCE_URL
+              value: "jdbc:postgresql://odin-catalog-postgres-harvest:5432/harvest"
+            - name: SPRING_REDIS_HOST
+              value: "odin-catalog-redis"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8002
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8002
+            initialDelaySeconds: 60
+            periodSeconds: 20
+
+---
+# ── lineage-service ───────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: odin-catalog-lineage-service
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/name: lineage-service
+    app.kubernetes.io/component: lineage-service
+    app.kubernetes.io/part-of: odin-catalog
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8003
+      targetPort: 8003
+  selector:
+    app.kubernetes.io/name: lineage-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: odin-catalog-lineage-service
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/name: lineage-service
+    app.kubernetes.io/component: lineage-service
+    app.kubernetes.io/part-of: odin-catalog
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lineage-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: lineage-service
+        app.kubernetes.io/component: lineage-service
+        app.kubernetes.io/part-of: odin-catalog
+    spec:
+      serviceAccountName: odin-catalog
+      containers:
+        - name: lineage-service
+          image: ${IMAGE_REGISTRY}odin/lineage-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8003
+          envFrom:
+            - configMapRef:
+                name: odin-catalog-common
+          env:
+            - name: SERVER_PORT
+              value: "8003"
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://odin-catalog-postgres-lineage:5432/lineage"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: lineage
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: odin-catalog-postgres
+                  key: lineage-password
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8003
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8003
+            initialDelaySeconds: 60
+            periodSeconds: 20
+
+---
+# ── search-service ────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: odin-catalog-search-service
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/name: search-service
+    app.kubernetes.io/component: search-service
+    app.kubernetes.io/part-of: odin-catalog
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8004
+      targetPort: 8004
+  selector:
+    app.kubernetes.io/name: search-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: odin-catalog-search-service
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/name: search-service
+    app.kubernetes.io/component: search-service
+    app.kubernetes.io/part-of: odin-catalog
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: search-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: search-service
+        app.kubernetes.io/component: search-service
+        app.kubernetes.io/part-of: odin-catalog
+    spec:
+      serviceAccountName: odin-catalog
+      containers:
+        - name: search-service
+          image: ${IMAGE_REGISTRY}odin/search-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8004
+          envFrom:
+            - configMapRef:
+                name: odin-catalog-common
+          env:
+            - name: SERVER_PORT
+              value: "8004"
+            - name: OPENSEARCH_URIS
+              value: "http://odin-catalog-opensearch:9200"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8004
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8004
+            initialDelaySeconds: 60
+            periodSeconds: 20
+
+---
+# ── ai-service ────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: odin-catalog-ai-service
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/name: ai-service
+    app.kubernetes.io/component: ai-service
+    app.kubernetes.io/part-of: odin-catalog
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8005
+      targetPort: 8005
+  selector:
+    app.kubernetes.io/name: ai-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: odin-catalog-ai-service
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/name: ai-service
+    app.kubernetes.io/component: ai-service
+    app.kubernetes.io/part-of: odin-catalog
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ai-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ai-service
+        app.kubernetes.io/component: ai-service
+        app.kubernetes.io/part-of: odin-catalog
+    spec:
+      serviceAccountName: odin-catalog
+      containers:
+        - name: ai-service
+          image: ${IMAGE_REGISTRY}odin/ai-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8005
+          envFrom:
+            - configMapRef:
+                name: odin-catalog-common
+          env:
+            - name: SERVER_PORT
+              value: "8005"
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://odin-catalog-postgres-ai:5432/ai"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: ai
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: odin-catalog-postgres
+                  key: ai-password
+            - name: SPRING_AI_VECTORSTORE_PGVECTOR_INDEX_TYPE
+              value: "ivfflat"
+            - name: SPRING_AI_VECTORSTORE_PGVECTOR_DISTANCE_TYPE
+              value: "cosine_distance"
+            - name: SPRING_AI_VECTORSTORE_PGVECTOR_DIMENSIONS
+              value: "768"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8005
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8005
+            initialDelaySeconds: 60
+            periodSeconds: 20
+
+---
+# ── identity-service ──────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: odin-catalog-identity-service
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/name: identity-service
+    app.kubernetes.io/component: identity-service
+    app.kubernetes.io/part-of: odin-catalog
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8006
+      targetPort: 8006
+  selector:
+    app.kubernetes.io/name: identity-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: odin-catalog-identity-service
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/name: identity-service
+    app.kubernetes.io/component: identity-service
+    app.kubernetes.io/part-of: odin-catalog
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: identity-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: identity-service
+        app.kubernetes.io/component: identity-service
+        app.kubernetes.io/part-of: odin-catalog
+    spec:
+      serviceAccountName: odin-catalog
+      containers:
+        - name: identity-service
+          image: ${IMAGE_REGISTRY}odin/identity-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8006
+          envFrom:
+            - configMapRef:
+                name: odin-catalog-common
+          env:
+            - name: SERVER_PORT
+              value: "8006"
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://odin-catalog-postgres-identity:5432/identity"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: identity
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: odin-catalog-postgres
+                  key: identity-password
+            - name: KEYCLOAK_SERVER_URL
+              value: "http://odin-catalog-keycloak:8180"
+            - name: KEYCLOAK_REALM
+              value: datacatalog
+            - name: KEYCLOAK_CLIENT_ID
+              value: odin-catalog
+            - name: KEYCLOAK_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: odin-catalog-keycloak
+                  key: client-secret
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8006
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8006
+            initialDelaySeconds: 60
+            periodSeconds: 20

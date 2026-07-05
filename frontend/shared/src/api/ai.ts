@@ -1,4 +1,21 @@
-import { get, post } from './client';
+import { get, post, getAuthToken } from './client';
+
+/**
+ * Parses a raw SSE buffer into tokens and a trailing incomplete chunk.
+ * Extracted as a pure function for unit testing without HTTP or ReadableStream.
+ */
+export function parseSseBuffer(buffer: string): { tokens: string[]; remaining: string } {
+  const parts = buffer.split('\n\n');
+  const remaining = parts.pop() ?? '';
+  const tokens: string[] = [];
+  for (const part of parts) {
+    const dataLines = part.split('\n').filter(l => l.startsWith('data:')).map(l => l.slice(5));
+    if (dataLines.length === 0) continue;
+    const content = dataLines.join('\n');
+    tokens.push(content || '\n');
+  }
+  return { tokens, remaining };
+}
 
 const BASE = '/api/v1';
 
@@ -32,7 +49,7 @@ export const aiApi = {
     post<Array<{ entityId: string; entityType: string; title: string; score: number }>>(`${BASE}/semantic-search`, body),
 
   streamMessage: (conversationId: string, content: string): EventSource => {
-    const token = localStorage.getItem('access_token');
+    const token = getAuthToken();
     const url = `${BASE}/conversations/${conversationId}/messages`;
     // We open an EventSource via a POST-equivalent workaround using fetch + ReadableStream externally.
     // Return a URL-encoded GET EventSource for streaming (the service handles both).
@@ -48,9 +65,13 @@ export const aiApi = {
     onToken: (token: string) => void,
     onDone: () => void,
     onError: (err: unknown) => void,
-    focusDatasetId?: string | null
+    focusDatasetId?: string | null,
+    focusDatasetIds?: string[] | null
   ): Promise<void> => {
-    const token = localStorage.getItem('access_token');
+    const token = getAuthToken();
+    const body: Record<string, unknown> = { content };
+    if (focusDatasetId) body.focusDatasetId = focusDatasetId;
+    if (focusDatasetIds && focusDatasetIds.length > 0) body.focusDatasetIds = focusDatasetIds;
     const res = await fetch(`${BASE}/conversations/${conversationId}/messages`, {
       method: 'POST',
       headers: {
@@ -58,7 +79,7 @@ export const aiApi = {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         Accept: 'text/event-stream',
       },
-      body: JSON.stringify({ content, ...(focusDatasetId ? { focusDatasetId } : {}) }),
+      body: JSON.stringify(body),
     });
 
     if (!res.ok || !res.body) {
@@ -75,17 +96,9 @@ export const aiApi = {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        // Split on SSE event boundaries (\n\n); keep the last incomplete chunk in buffer
-        const parts = buffer.split('\n\n');
-        buffer = parts.pop() ?? '';
-        for (const part of parts) {
-          // An SSE event may have multiple data: lines (for content containing \n)
-          const dataLines = part.split('\n').filter(l => l.startsWith('data:')).map(l => l.slice(5));
-          if (dataLines.length === 0) continue;
-          const content = dataLines.join('\n');
-          // Empty data line = the token was a bare \n character
-          onToken(content || '\n');
-        }
+        const { tokens, remaining } = parseSseBuffer(buffer);
+        buffer = remaining;
+        for (const token of tokens) onToken(token);
       }
       onDone();
     } catch (e) {

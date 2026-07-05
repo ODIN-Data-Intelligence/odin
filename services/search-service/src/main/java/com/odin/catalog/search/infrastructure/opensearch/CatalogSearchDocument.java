@@ -30,6 +30,7 @@ public record CatalogSearchDocument(
     boolean hasLineage,
     boolean hasLogicalModel,
     int distributionCount,
+    List<String> distributionFormats,
     // Logical model fields
     List<String> logicalElementNames,
     List<String> logicalElementLabels,
@@ -38,7 +39,10 @@ public record CatalogSearchDocument(
     List<String> vocabConceptLabels,
     List<String> vocabularyTypes,
     List<String> fiboConcepts,
+    List<String> semanticTypes,
     // Physical schema fields
     List<String> columnNames,
-    List<String> columnDescriptions
+    List<String> columnDescriptions,
+    // Parent reference — set for DISTRIBUTION documents only
+    String datasetId
 ) {}

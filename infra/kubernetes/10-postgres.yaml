@@ -1,0 +1,457 @@
+# Five PostgreSQL StatefulSets — one per service.
+# lineage uses apache/age (PostgreSQL + AGE graph extension).
+# ai uses pgvector/pgvector.
+# All others use postgres:16-alpine.
+
+---
+# ── inventory ────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: odin-catalog-postgres-inventory
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/name: postgres-inventory
+    app.kubernetes.io/component: postgres-inventory
+    app.kubernetes.io/part-of: odin-catalog
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+  selector:
+    app.kubernetes.io/name: postgres-inventory
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: odin-catalog-postgres-inventory
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/name: postgres-inventory
+    app.kubernetes.io/component: postgres-inventory
+    app.kubernetes.io/part-of: odin-catalog
+spec:
+  serviceName: odin-catalog-postgres-inventory
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres-inventory
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres-inventory
+        app.kubernetes.io/component: postgres-inventory
+        app.kubernetes.io/part-of: odin-catalog
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: inventory
+            - name: POSTGRES_USER
+              value: inventory
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: odin-catalog-postgres
+                  key: inventory-password
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "inventory", "-d", "inventory"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "inventory", "-d", "inventory"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
+
+---
+# ── harvest ──────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: odin-catalog-postgres-harvest
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/name: postgres-harvest
+    app.kubernetes.io/component: postgres-harvest
+    app.kubernetes.io/part-of: odin-catalog
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+  selector:
+    app.kubernetes.io/name: postgres-harvest
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: odin-catalog-postgres-harvest
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/name: postgres-harvest
+    app.kubernetes.io/component: postgres-harvest
+    app.kubernetes.io/part-of: odin-catalog
+spec:
+  serviceName: odin-catalog-postgres-harvest
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres-harvest
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres-harvest
+        app.kubernetes.io/component: postgres-harvest
+        app.kubernetes.io/part-of: odin-catalog
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: harvest
+            - name: POSTGRES_USER
+              value: harvest
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: odin-catalog-postgres
+                  key: harvest-password
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "harvest", "-d", "harvest"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "harvest", "-d", "harvest"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
+
+---
+# ── lineage (Apache AGE) ─────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: odin-catalog-postgres-lineage
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/name: postgres-lineage
+    app.kubernetes.io/component: postgres-lineage
+    app.kubernetes.io/part-of: odin-catalog
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+  selector:
+    app.kubernetes.io/name: postgres-lineage
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: odin-catalog-postgres-lineage
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/name: postgres-lineage
+    app.kubernetes.io/component: postgres-lineage
+    app.kubernetes.io/part-of: odin-catalog
+spec:
+  serviceName: odin-catalog-postgres-lineage
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres-lineage
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres-lineage
+        app.kubernetes.io/component: postgres-lineage
+        app.kubernetes.io/part-of: odin-catalog
+    spec:
+      containers:
+        - name: postgres
+          image: apache/age:latest
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: lineage
+            - name: POSTGRES_USER
+              value: lineage
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: odin-catalog-postgres
+                  key: lineage-password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d/lineage-init.sql
+              subPath: lineage-init.sql
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "lineage", "-d", "lineage"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "lineage", "-d", "lineage"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: init-scripts
+          configMap:
+            name: odin-catalog-postgres-init
+            defaultMode: 0755
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
+
+---
+# ── identity ─────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: odin-catalog-postgres-identity
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/name: postgres-identity
+    app.kubernetes.io/component: postgres-identity
+    app.kubernetes.io/part-of: odin-catalog
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+  selector:
+    app.kubernetes.io/name: postgres-identity
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: odin-catalog-postgres-identity
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/name: postgres-identity
+    app.kubernetes.io/component: postgres-identity
+    app.kubernetes.io/part-of: odin-catalog
+spec:
+  serviceName: odin-catalog-postgres-identity
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres-identity
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres-identity
+        app.kubernetes.io/component: postgres-identity
+        app.kubernetes.io/part-of: odin-catalog
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: identity
+            - name: POSTGRES_USER
+              value: identity
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: odin-catalog-postgres
+                  key: identity-password
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d/identity-init.sql
+              subPath: identity-init.sql
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "identity", "-d", "identity"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "identity", "-d", "identity"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: init-scripts
+          configMap:
+            name: odin-catalog-postgres-init
+            defaultMode: 0755
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+
+---
+# ── ai (pgvector) ────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: odin-catalog-postgres-ai
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/name: postgres-ai
+    app.kubernetes.io/component: postgres-ai
+    app.kubernetes.io/part-of: odin-catalog
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+  selector:
+    app.kubernetes.io/name: postgres-ai
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: odin-catalog-postgres-ai
+  namespace: odin-catalog
+  labels:
+    app.kubernetes.io/name: postgres-ai
+    app.kubernetes.io/component: postgres-ai
+    app.kubernetes.io/part-of: odin-catalog
+spec:
+  serviceName: odin-catalog-postgres-ai
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres-ai
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres-ai
+        app.kubernetes.io/component: postgres-ai
+        app.kubernetes.io/part-of: odin-catalog
+    spec:
+      containers:
+        - name: postgres
+          image: pgvector/pgvector:pg16
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: ai
+            - name: POSTGRES_USER
+              value: ai
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: odin-catalog-postgres
+                  key: ai-password
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "ai", "-d", "ai"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "ai", "-d", "ai"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 20Gi

@@ -1,5 +1,8 @@
 import { useRef } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { Link } from 'react-router-dom';
+import Box from '@mui/material/Box';
+import Container from '@mui/material/Container';
+import Typography from '@mui/material/Typography';
 import SearchBar from '../components/SearchBar';
 import TrendingDatasets from '../components/TrendingDatasets';
 import RecentlyViewed from '../components/RecentlyViewed';
@@ -11,26 +14,48 @@ export default function HomePage() {
   const { openDatasetId } = useDrawerStore();
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl mx-auto px-6 py-16">
-          <div className="text-center mb-10">
-            <h1 className="text-4xl font-bold text-gray-900 mb-3">Find Your Data</h1>
-            <p className="text-gray-500 text-lg">Search thousands of datasets, data products, and schemas</p>
-          </div>
-          <SearchBar ref={localRef} large />
-          <p className="text-center text-xs text-gray-400 mt-3">Press <kbd className="px-1.5 py-0.5 bg-gray-100 rounded">/</kbd> to focus search · <kbd className="px-1.5 py-0.5 bg-gray-100 rounded">⌘K</kbd> to open AI chat</p>
+    <Box sx={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+      <Box sx={{ flex: 1, overflowY: 'auto' }}>
+        <Container maxWidth="md" sx={{ px: 3, py: 8 }}>
+          <Box sx={{ textAlign: 'center', mb: 5 }}>
+            <Typography variant="h3" fontWeight={700} gutterBottom>Find Your Data</Typography>
+            <Typography variant="h6" color="text.secondary" fontWeight={400}>
+              Search thousands of datasets, data products, and schemas
+            </Typography>
+          </Box>
 
-          <div className="mt-12 space-y-8">
+          <SearchBar ref={localRef} large />
+
+          <Box sx={{ textAlign: 'center', mt: 1.5 }}>
+            <Typography variant="caption" color="text.disabled">
+              Press{' '}
+              <Box component="kbd" sx={{ px: 0.75, py: 0.25, bgcolor: 'grey.100', borderRadius: 0.5, fontFamily: 'monospace', fontSize: 12 }}>/</Box>
+              {' '}to focus search ·{' '}
+              <Box component="kbd" sx={{ px: 0.75, py: 0.25, bgcolor: 'grey.100', borderRadius: 0.5, fontFamily: 'monospace', fontSize: 12 }}>⌘K</Box>
+              {' '}to open AI chat
+            </Typography>
+          </Box>
+
+          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1.5 }}>
+            <Typography
+              component={Link}
+              to="/bookmarks"
+              variant="caption"
+              color="warning.main"
+              sx={{ display: 'flex', alignItems: 'center', gap: 0.75, textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+            >
+              ★ My Bookmarks
+            </Typography>
+          </Box>
+
+          <Box sx={{ mt: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
             <RecentlyViewed />
             <TrendingDatasets />
-          </div>
-        </div>
-      </div>
+          </Box>
+        </Container>
+      </Box>
 
-      {openDatasetId && (
-        <DatasetDetailDrawer />
-      )}
-    </div>
+      {openDatasetId && <DatasetDetailDrawer />}
+    </Box>
   );
 }

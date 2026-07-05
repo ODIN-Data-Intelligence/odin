@@ -2,6 +2,7 @@ package com.odin.catalog.harvest.config;
 
 import com.odin.catalog.shared.auth.filter.ApiKeyAuthenticationFilter;
 import com.odin.catalog.shared.auth.filter.TenantExtractionFilter;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -11,6 +12,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
@@ -25,7 +27,7 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .addFilterBefore(apiKeyFilter, UsernamePasswordAuthenticationFilter.class)
-            .addFilterAfter(tenantFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterAfter(tenantFilter, BearerTokenAuthenticationFilter.class)
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/**", "/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/error").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/**").hasAnyAuthority("SCOPE_catalog:read", "SCOPE_catalog:admin")
@@ -46,9 +48,10 @@ public class SecurityConfig {
     }
 
     @Bean
-    public ApiKeyAuthenticationFilter apiKeyAuthenticationFilter() {
+    public ApiKeyAuthenticationFilter apiKeyAuthenticationFilter(
+            @Value("${app.dev-auth-enabled:false}") boolean devAuthEnabled) {
         return new ApiKeyAuthenticationFilter(key -> {
-            if (key != null && key.startsWith("dev-")) {
+            if (devAuthEnabled && key != null && key.startsWith("dev-")) {
                 return new ApiKeyAuthenticationFilter.ApiKeyPrincipal(
                     key, "00000000-0000-0000-0000-000000000001",
                     "system", java.util.List.of("catalog:read", "catalog:write", "catalog:admin"), true

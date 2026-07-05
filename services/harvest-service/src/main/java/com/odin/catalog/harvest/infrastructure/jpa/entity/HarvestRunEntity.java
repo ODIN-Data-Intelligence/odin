@@ -16,6 +16,10 @@ public class HarvestRunEntity {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    @Version
+    @Column(nullable = false)
+    private Long lockVersion;
+
     @Column(nullable = false)
     private UUID jobId;
 

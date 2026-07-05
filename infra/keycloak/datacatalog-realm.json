@@ -8,10 +8,8 @@
   "resetPasswordAllowed": true,
   "editUsernameAllowed": false,
   "bruteForceProtected": true,
-
   "accessTokenLifespan": 3600,
   "refreshTokenMaxReuse": 0,
-
   "clients": [
     {
       "clientId": "catalog-frontend",
@@ -27,9 +25,79 @@
         "http://localhost:3000/*",
         "http://localhost:3001/*"
       ],
-      "webOrigins": ["+"],
+      "webOrigins": [
+        "+"
+      ],
       "protocol": "openid-connect",
-      "defaultClientScopes": ["openid", "profile", "email", "catalog-scopes"]
+      "defaultClientScopes": [
+        "openid",
+        "catalog-scopes"
+      ],
+      "protocolMappers": [
+        {
+          "name": "full name",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-full-name-mapper",
+          "config": {
+            "full.path": "name",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "given name",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "config": {
+            "user.attribute": "firstName",
+            "claim.name": "given_name",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "family name",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "config": {
+            "user.attribute": "lastName",
+            "claim.name": "family_name",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "email",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "config": {
+            "user.attribute": "email",
+            "claim.name": "email",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "config": {
+            "user.attribute": "username",
+            "claim.name": "preferred_username",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
     },
     {
       "clientId": "identity-service",
@@ -41,7 +109,22 @@
       "serviceAccountsEnabled": true,
       "standardFlowEnabled": false,
       "directAccessGrantsEnabled": false,
-      "protocol": "openid-connect"
+      "protocol": "openid-connect",
+      "protocolMappers": [
+        {
+          "name": "realm-management-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "access.token.claim": "true",
+            "claim.name": "resource_access.${client_id}.roles",
+            "jsonType.label": "String",
+            "usermodel.clientRoleMapping.clientId": "realm-management"
+          }
+        }
+      ]
     },
     {
       "clientId": "catalog-api",
@@ -52,15 +135,18 @@
       "secret": "catalog-api-secret",
       "bearerOnly": true,
       "protocol": "openid-connect",
-      "defaultClientScopes": ["catalog-scopes"]
+      "defaultClientScopes": [
+        "catalog-scopes"
+      ]
     }
   ],
-
   "clientScopes": [
     {
       "name": "catalog-scopes",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "true" },
+      "attributes": {
+        "include.in.token.scope": "true"
+      },
       "protocolMappers": [
         {
           "name": "tenant_id",
@@ -81,25 +167,46 @@
           "config": {
             "user.attribute": "permissions",
             "claim.name": "permissions",
-            "jsonType.label": "JSON",
+            "jsonType.label": "String",
             "access.token.claim": "true",
+            "multivalued": "true"
+          }
+        },
+        {
+          "name": "realm_roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": {
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
             "multivalued": "true"
           }
         }
       ]
     }
   ],
-
   "roles": {
     "realm": [
-      { "name": "catalog-admin",    "description": "Full catalog administration" },
-      { "name": "data-steward",     "description": "Can publish and govern datasets" },
-      { "name": "data-owner",       "description": "Owns data products in their domain" },
-      { "name": "data-engineer",    "description": "Configures harvest sources and jobs" },
-      { "name": "data-consumer",    "description": "Can discover and read datasets" }
+      {
+        "name": "administrator",
+        "description": "Full platform administration \u2014 manages users, all data assets, harvest sources, and settings"
+      },
+      {
+        "name": "data-governance",
+        "description": "Data Governance officer \u2014 governs data quality and compliance across domains"
+      },
+      {
+        "name": "data-owner",
+        "description": "Data Owner \u2014 owns and manages data products and datasets within their domain"
+      },
+      {
+        "name": "data-steward",
+        "description": "Data Steward \u2014 curates metadata, semantic annotations, and logical models"
+      }
     ]
   },
-
   "users": [
     {
       "username": "admin@datacatalog.local",
@@ -107,9 +214,261 @@
       "firstName": "Catalog",
       "lastName": "Admin",
       "enabled": true,
-      "credentials": [{ "type": "password", "value": "admin", "temporary": false }],
-      "realmRoles": ["catalog-admin"],
-      "attributes": { "tenant_id": ["00000000-0000-0000-0000-000000000001"] }
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin",
+          "temporary": true
+        }
+      ],
+      "realmRoles": [
+        "administrator"
+      ],
+      "attributes": {
+        "tenant_id": [
+          "00000000-0000-0000-0000-000000000001"
+        ],
+        "permissions": [
+          "catalog:read",
+          "catalog:write",
+          "catalog:admin"
+        ]
+      }
+    },
+    {
+      "username": "governance@datacatalog.local",
+      "email": "governance@datacatalog.local",
+      "firstName": "Grace",
+      "lastName": "Governance",
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": true
+        }
+      ],
+      "realmRoles": [
+        "data-governance"
+      ],
+      "attributes": {
+        "tenant_id": [
+          "00000000-0000-0000-0000-000000000001"
+        ],
+        "permissions": [
+          "catalog:read",
+          "catalog:write"
+        ]
+      }
+    },
+    {
+      "username": "owner@datacatalog.local",
+      "email": "owner@datacatalog.local",
+      "firstName": "Owen",
+      "lastName": "Owner",
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": true
+        }
+      ],
+      "realmRoles": [
+        "data-owner"
+      ],
+      "attributes": {
+        "tenant_id": [
+          "00000000-0000-0000-0000-000000000001"
+        ],
+        "permissions": [
+          "catalog:read",
+          "catalog:write"
+        ]
+      }
+    },
+    {
+      "username": "steward@datacatalog.local",
+      "email": "steward@datacatalog.local",
+      "firstName": "Sam",
+      "lastName": "Steward",
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": true
+        }
+      ],
+      "realmRoles": [
+        "data-steward"
+      ],
+      "attributes": {
+        "tenant_id": [
+          "00000000-0000-0000-0000-000000000001"
+        ],
+        "permissions": [
+          "catalog:read",
+          "catalog:write"
+        ]
+      }
+    },
+    {
+      "username": "trading.owner@datacatalog.local",
+      "email": "trading.owner@datacatalog.local",
+      "firstName": "Alice",
+      "lastName": "Chen",
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": true
+        }
+      ],
+      "realmRoles": [
+        "data-owner"
+      ],
+      "attributes": {
+        "tenant_id": [
+          "00000000-0000-0000-0000-000000000001"
+        ],
+        "permissions": [
+          "catalog:read",
+          "catalog:write"
+        ]
+      }
+    },
+    {
+      "username": "risk.owner@datacatalog.local",
+      "email": "risk.owner@datacatalog.local",
+      "firstName": "Marcus",
+      "lastName": "Webb",
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": true
+        }
+      ],
+      "realmRoles": [
+        "data-owner"
+      ],
+      "attributes": {
+        "tenant_id": [
+          "00000000-0000-0000-0000-000000000001"
+        ],
+        "permissions": [
+          "catalog:read",
+          "catalog:write"
+        ]
+      }
+    },
+    {
+      "username": "refdata.owner@datacatalog.local",
+      "email": "refdata.owner@datacatalog.local",
+      "firstName": "Priya",
+      "lastName": "Nair",
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": true
+        }
+      ],
+      "realmRoles": [
+        "data-owner"
+      ],
+      "attributes": {
+        "tenant_id": [
+          "00000000-0000-0000-0000-000000000001"
+        ],
+        "permissions": [
+          "catalog:read",
+          "catalog:write"
+        ]
+      }
+    },
+    {
+      "username": "compliance.owner@datacatalog.local",
+      "email": "compliance.owner@datacatalog.local",
+      "firstName": "David",
+      "lastName": "Park",
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": true
+        }
+      ],
+      "realmRoles": [
+        "data-owner"
+      ],
+      "attributes": {
+        "tenant_id": [
+          "00000000-0000-0000-0000-000000000001"
+        ],
+        "permissions": [
+          "catalog:read",
+          "catalog:write"
+        ]
+      }
+    },
+    {
+      "username": "finance.owner@datacatalog.local",
+      "email": "finance.owner@datacatalog.local",
+      "firstName": "Sofia",
+      "lastName": "Reyes",
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": true
+        }
+      ],
+      "realmRoles": [
+        "data-owner"
+      ],
+      "attributes": {
+        "tenant_id": [
+          "00000000-0000-0000-0000-000000000001"
+        ],
+        "permissions": [
+          "catalog:read",
+          "catalog:write"
+        ]
+      }
+    },
+    {
+      "username": "service-account-identity-service",
+      "serviceAccountClientId": "identity-service",
+      "enabled": true,
+      "clientRoles": {
+        "realm-management": [
+          "view-users",
+          "manage-users",
+          "query-users",
+          "query-roles",
+          "view-realm"
+        ]
+      }
     }
-  ]
+  ],
+  "components": {
+    "org.keycloak.userprofile.UserProfileProvider": [
+      {
+        "providerId": "declarative-user-profile",
+        "subComponents": {},
+        "config": {
+          "kc.user.profile.config": [
+            "{\"attributes\":[{\"name\":\"username\",\"displayName\":\"${username}\",\"validations\":{\"length\":{\"min\":3,\"max\":255},\"username-prohibited-characters\":{},\"up-username-not-idn-homograph\":{}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]}},{\"name\":\"email\",\"displayName\":\"${email}\",\"validations\":{\"email\":{},\"length\":{\"max\":255}},\"required\":{\"roles\":[\"user\"]},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]}},{\"name\":\"firstName\",\"displayName\":\"${firstName}\",\"validations\":{\"length\":{\"max\":255},\"person-name-prohibited-characters\":{}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]}},{\"name\":\"lastName\",\"displayName\":\"${lastName}\",\"validations\":{\"length\":{\"max\":255},\"person-name-prohibited-characters\":{}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]}},{\"name\":\"tenant_id\",\"displayName\":\"Tenant ID\",\"multivalued\":false,\"permissions\":{\"view\":[\"admin\"],\"edit\":[\"admin\"]}},{\"name\":\"permissions\",\"displayName\":\"Permissions\",\"multivalued\":true,\"permissions\":{\"view\":[\"admin\"],\"edit\":[\"admin\"]}}],\"groups\":[]}"
+          ]
+        }
+      }
+    ]
+  }
 }

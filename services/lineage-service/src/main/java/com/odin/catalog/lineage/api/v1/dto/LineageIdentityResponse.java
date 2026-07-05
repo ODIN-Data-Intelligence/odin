@@ -1,0 +1,5 @@
+package com.odin.catalog.lineage.api.v1.dto;
+
+import java.util.UUID;
+
+public record LineageIdentityResponse(UUID id, String namespace, String name) {}

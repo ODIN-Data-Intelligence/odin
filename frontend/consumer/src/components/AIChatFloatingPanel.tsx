@@ -1,6 +1,16 @@
 import { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
+import Drawer from '@mui/material/Drawer';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
+import TextField from '@mui/material/TextField';
+import Button from '@mui/material/Button';
+import Paper from '@mui/material/Paper';
+import Divider from '@mui/material/Divider';
+import CloseIcon from '@mui/icons-material/Close';
+import SendIcon from '@mui/icons-material/Send';
 import { aiApi } from '@datacatalog/shared';
 import { useDrawerStore } from '../store/drawerStore';
 
@@ -11,39 +21,44 @@ interface Message {
 }
 
 const mdComponents: React.ComponentProps<typeof ReactMarkdown>['components'] = {
-  p:          ({ children }) => <p className="mb-1 last:mb-0 leading-snug">{children}</p>,
-  strong:     ({ children }) => <strong className="font-semibold">{children}</strong>,
-  em:         ({ children }) => <em className="italic">{children}</em>,
-  ul:         ({ children }) => <ul className="list-disc list-inside mb-1 space-y-0.5">{children}</ul>,
-  ol:         ({ children }) => <ol className="list-decimal list-inside mb-1 space-y-0.5">{children}</ol>,
-  li:         ({ children }) => <li className="leading-snug">{children}</li>,
-  h1:         ({ children }) => <h1 className="text-sm font-bold mt-2 mb-1">{children}</h1>,
-  h2:         ({ children }) => <h2 className="text-sm font-bold mt-2 mb-1">{children}</h2>,
-  h3:         ({ children }) => <h3 className="text-sm font-semibold mt-1 mb-0.5">{children}</h3>,
-  blockquote: ({ children }) => <blockquote className="border-l-2 border-gray-300 pl-2 italic text-gray-500 my-1">{children}</blockquote>,
-  pre:        ({ children }) => <pre className="bg-gray-200/70 rounded p-2 text-xs font-mono overflow-x-auto my-1 whitespace-pre-wrap">{children}</pre>,
+  p:          ({ children }) => <Typography variant="body2" component="p" sx={{ mb: 0.5, lineHeight: 1.5 }}>{children}</Typography>,
+  strong:     ({ children }) => <Box component="strong" sx={{ fontWeight: 600 }}>{children}</Box>,
+  ul:         ({ children }) => <Box component="ul" sx={{ pl: 2, mb: 0.5 }}>{children}</Box>,
+  ol:         ({ children }) => <Box component="ol" sx={{ pl: 2, mb: 0.5 }}>{children}</Box>,
+  li:         ({ children }) => <Typography component="li" variant="body2" sx={{ lineHeight: 1.5 }}>{children}</Typography>,
+  h1:         ({ children }) => <Typography variant="subtitle2" fontWeight={700} sx={{ mt: 1, mb: 0.5 }}>{children}</Typography>,
+  h2:         ({ children }) => <Typography variant="subtitle2" fontWeight={700} sx={{ mt: 1, mb: 0.5 }}>{children}</Typography>,
+  h3:         ({ children }) => <Typography variant="body2" fontWeight={600} sx={{ mt: 0.5, mb: 0.25 }}>{children}</Typography>,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   code:       ({ className, children, ...props }: any) =>
     className?.startsWith('language-')
-      ? <code className={className} {...props}>{children}</code>
-      : <code className="bg-gray-200/70 rounded px-1 py-0.5 text-xs font-mono">{children}</code>,
+      ? <Box component="code" className={className} sx={{ fontFamily: 'monospace', fontSize: 12 }} {...props}>{children}</Box>
+      : <Box component="code" sx={{ bgcolor: 'rgba(0,0,0,0.08)', borderRadius: 0.5, px: 0.5, fontFamily: 'monospace', fontSize: 12 }}>{children}</Box>,
+  pre:        ({ children }) => (
+    <Box component="pre" sx={{ bgcolor: 'rgba(0,0,0,0.06)', borderRadius: 1, p: 1.5, fontSize: 12, fontFamily: 'monospace', overflowX: 'auto', whiteSpace: 'pre-wrap', my: 0.75 }}>
+      {children}
+    </Box>
+  ),
 };
 
 function ThinkingDots() {
   return (
-    <span className="flex items-center gap-1 py-0.5">
-      <span className="block w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0ms' }} />
-      <span className="block w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '150ms' }} />
-      <span className="block w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '300ms' }} />
-    </span>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.5 }}>
+      {[0, 150, 300].map(delay => (
+        <Box key={delay} sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'text.disabled', animation: 'bounce 1s infinite', animationDelay: `${delay}ms`,
+          '@keyframes bounce': { '0%,100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-4px)' } }
+        }} />
+      ))}
+    </Box>
   );
 }
 
 interface AIChatFloatingPanelProps {
+  open: boolean;
   onClose: () => void;
 }
 
-export default function AIChatFloatingPanel({ onClose }: AIChatFloatingPanelProps) {
+export default function AIChatFloatingPanel({ open, onClose }: AIChatFloatingPanelProps) {
   const { openDatasetId } = useDrawerStore();
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -110,89 +125,112 @@ export default function AIChatFloatingPanel({ onClose }: AIChatFloatingPanelProp
     );
   }
 
+  const suggestions = [
+    'What datasets contain customer data?',
+    'Show me financial datasets with FIBO concepts',
+    openDatasetId ? 'Tell me about this dataset' : 'Which datasets have lineage tracked?',
+  ];
+
   return (
-    <div className="fixed inset-y-0 right-0 w-96 bg-white shadow-2xl border-l border-gray-200 flex flex-col z-50">
-      <div className="px-4 py-3 border-b bg-blue-600 text-white flex items-center justify-between">
-        <div>
-          <h3 className="font-semibold text-sm">AI Assistant</h3>
-          <p className="text-xs text-blue-200">Ask anything about your data catalog</p>
-        </div>
-        <button onClick={onClose} className="text-blue-200 hover:text-white text-xl leading-none">&times;</button>
-      </div>
+    <Drawer anchor="right" open={open} onClose={onClose} sx={{ zIndex: (theme) => theme.zIndex.tooltip + 1 }} PaperProps={{ sx: { width: { xs: '100vw', sm: 480 }, maxWidth: '100vw' } }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        {/* Header */}
+        <Box sx={{ px: 2, py: 1.5, bgcolor: 'primary.main', color: 'primary.contrastText', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box>
+            <Typography variant="subtitle2" fontWeight={600}>AI Assistant</Typography>
+            <Typography variant="caption" sx={{ opacity: 0.8 }}>Ask anything about your data catalog</Typography>
+          </Box>
+          <IconButton onClick={onClose} sx={{ color: 'primary.contrastText', opacity: 0.8, '&:hover': { opacity: 1 } }} size="small">
+            <CloseIcon />
+          </IconButton>
+        </Box>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-        {messages.length === 0 && (
-          <div className="text-center py-8">
-            <p className="text-sm text-gray-500 mb-4">How can I help you discover and understand your data?</p>
-            <div className="space-y-2">
-              {[
-                'What datasets contain customer data?',
-                'Show me financial datasets with FIBO concepts',
-                openDatasetId ? `Tell me about this dataset` : 'Which datasets have lineage tracked?',
-              ].map(suggestion => (
-                <button
-                  key={suggestion}
-                  onClick={() => setInput(suggestion)}
-                  className="block w-full text-left text-xs px-3 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100"
-                >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Messages */}
+        <Box sx={{ flex: 1, overflowY: 'auto', px: 2, py: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {messages.length === 0 && (
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                How can I help you discover and understand your data?
+              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {suggestions.map(s => (
+                  <Button
+                    key={s}
+                    variant="outlined"
+                    size="small"
+                    onClick={() => setInput(s)}
+                    sx={{ textAlign: 'left', justifyContent: 'flex-start', textTransform: 'none' }}
+                  >
+                    {s}
+                  </Button>
+                ))}
+              </Box>
+            </Box>
+          )}
 
-        {messages.map((msg, i) => (
-          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div
-              className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${
-                msg.role === 'user'
-                  ? 'bg-blue-600 text-white rounded-br-sm'
-                  : 'bg-gray-100 text-gray-800 rounded-bl-sm'
-              }`}
-            >
-              {msg.role === 'assistant' ? (
-                msg.streaming && msg.content === '' ? (
-                  <ThinkingDots />
+          {messages.map((msg, i) => (
+            <Box key={i} sx={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
+              <Paper
+                elevation={0}
+                sx={{
+                  maxWidth: '85%',
+                  px: 1.5,
+                  py: 1,
+                  borderRadius: msg.role === 'user' ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
+                  bgcolor: msg.role === 'user' ? 'primary.main' : 'grey.100',
+                  color: msg.role === 'user' ? 'primary.contrastText' : 'text.primary',
+                }}
+              >
+                {msg.role === 'assistant' ? (
+                  msg.streaming && msg.content === '' ? (
+                    <ThinkingDots />
+                  ) : (
+                    <Box>
+                      <ReactMarkdown remarkPlugins={[remarkBreaks]} components={mdComponents}>
+                        {msg.content}
+                      </ReactMarkdown>
+                      {msg.streaming && (
+                        <Box component="span" sx={{ display: 'inline-block', width: 6, height: 16, bgcolor: 'text.disabled', ml: 0.5, animation: 'pulse 1s infinite', '@keyframes pulse': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.3 } }, verticalAlign: 'middle' }} />
+                      )}
+                    </Box>
+                  )
                 ) : (
-                  <div className="space-y-1">
-                    <ReactMarkdown remarkPlugins={[remarkBreaks]} components={mdComponents}>
-                      {msg.content}
-                    </ReactMarkdown>
-                    {msg.streaming && (
-                      <span className="inline-block w-1.5 h-4 bg-gray-400 ml-0.5 animate-pulse align-middle" />
-                    )}
-                  </div>
-                )
-              ) : (
-                msg.content
-              )}
-            </div>
-          </div>
-        ))}
-        <div ref={bottomRef} />
-      </div>
+                  <Typography variant="body2">{msg.content}</Typography>
+                )}
+              </Paper>
+            </Box>
+          ))}
+          <div ref={bottomRef} />
+        </Box>
 
-      <div className="px-4 py-3 border-t">
-        <div className="flex gap-2">
-          <input
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-            placeholder="Ask about datasets..."
-            disabled={isStreaming}
-            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-          />
-          <button
-            onClick={sendMessage}
-            disabled={isStreaming || !input.trim()}
-            className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm"
-          >
-            ↑
-          </button>
-        </div>
-        <p className="text-xs text-gray-400 mt-1.5">Enter to send · Powered by Ollama / OpenAI</p>
-      </div>
-    </div>
+        {/* Input */}
+        <Divider />
+        <Box sx={{ px: 2, py: 1.5 }}>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <TextField
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+              placeholder="Ask about datasets..."
+              disabled={isStreaming}
+              size="small"
+              fullWidth
+              variant="outlined"
+            />
+            <IconButton
+              onClick={sendMessage}
+              disabled={isStreaming || !input.trim()}
+              color="primary"
+              sx={{ bgcolor: 'primary.main', color: 'primary.contrastText', borderRadius: 2, '&:hover': { bgcolor: 'primary.dark' }, '&:disabled': { bgcolor: 'grey.200' } }}
+            >
+              <SendIcon fontSize="small" />
+            </IconButton>
+          </Box>
+          <Typography variant="caption" color="text.disabled" sx={{ mt: 0.75, display: 'block' }}>
+            Enter to send · Powered by Ollama / OpenAI
+          </Typography>
+        </Box>
+      </Box>
+    </Drawer>
   );
 }

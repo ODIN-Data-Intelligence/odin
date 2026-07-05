@@ -18,4 +18,7 @@ public final class CatalogTopics {
     public static final String AI_EMBEDDINGS_REQUESTED  = "ai.embeddings.requested";
 
     public static final String IDENTITY_USERS_CHANGES   = "identity.users.changes";
+
+    public static final String POLICY_RECORDS_CHANGES        = "policy.records.changes";
+    public static final String POLICY_EVALUATIONS_COMPLETED  = "policy.evaluations.completed";
 }

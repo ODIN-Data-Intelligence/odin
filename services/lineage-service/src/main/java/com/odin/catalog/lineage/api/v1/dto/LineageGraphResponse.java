@@ -8,6 +8,9 @@ import java.util.Map;
 @Schema(description = "Lineage graph response — nodes and directed edges for the requested dataset subgraph")
 public record LineageGraphResponse(
 
+    @Schema(description = "Lineage service UUID of the root dataset")
+    java.util.UUID rootId,
+
     @Schema(description = "Namespace of the root dataset", example = "snowflake://trading_dw")
     String rootNamespace,
 
@@ -22,10 +25,10 @@ public record LineageGraphResponse(
     @Schema(description = "Maximum number of hops traversed from the root", example = "5")
     int depth,
 
-    @Schema(description = "Graph nodes — each node contains namespace, name, and optional facets")
+    @Schema(description = "Graph nodes — each node contains id, namespace, name, depth, and optional catalogId")
     List<Map<String, Object>> nodes,
 
-    @Schema(description = "Directed edges in the subgraph — each edge has from_ns, from_name, to_ns, to_name")
+    @Schema(description = "Directed edges in the subgraph — each edge has fromId and toId (lineage dataset UUIDs)")
     List<Map<String, Object>> edges
 
 ) {}

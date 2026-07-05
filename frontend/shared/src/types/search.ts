@@ -10,12 +10,14 @@ export interface SearchResult {
   lifecycleStatus?: string;
   format?: string;
   mediaType?: string;
+  distributionFormats?: string[];
   sourceUri?: string;
   hasLineage?: boolean;
   hasLogicalModel?: boolean;
   logicalElementNames?: string[];
   vocabConceptLabels?: string[];
   fiboConcepts?: string[];
+  semanticTypes?: string[];
   score?: number;
   updatedAt?: string;
 }
@@ -35,6 +37,7 @@ export interface SearchFacets {
   keywords?: SearchFacet[];
   themes?: SearchFacet[];
   vocabConcepts?: SearchFacet[];
+  semanticTypes?: SearchFacet[];
 }
 
 export interface SearchResponse {
@@ -48,6 +51,7 @@ export interface SearchResponse {
 export interface SearchRequest {
   q?: string;
   type?: string;
+  types?: string;
   domain?: string;
   lifecycleStatus?: string;
   format?: string;
@@ -57,6 +61,7 @@ export interface SearchRequest {
   keyword?: string;
   theme?: string;
   vocabConcept?: string;
+  semanticType?: string;
   page?: number;
   size?: number;
 }

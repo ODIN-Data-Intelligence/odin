@@ -5,7 +5,7 @@
 <h1 align="center">ODIN Catalog</h1>
 
 <p align="center">
-  Open-source data catalog built on W3C/OMG standards — DCAT 3.0, DPROD, CSV-W, OpenLineage, FIBO, and SKOS.
+  Open-source data catalog built on W3C/OMG standards — DCAT 3.0, DPROD, CSV-W, OpenLineage, FIBO, SKOS, and W3C DPV.
 </p>
 
 ---
@@ -22,18 +22,29 @@ Lineage is tracked using the OpenLineage standard via an Apache AGE graph databa
 
 ---
 
+## Key Capabilities
+
+- **Role-based access** — the producer UI is protected by Keycloak OIDC login with four defined roles (Administrator, Data Governance, Data Owner, Data Steward) that gate both UI navigation and backend permissions.
+- **Ownership governance** — datasets carry an owner, an ownership-transfer proposal workflow (propose → approve/reject), and an immutable audit history of every change.
+- **AI-assisted semantics** — RAG chat, AI element classification, description, vocabulary concept, and PII/direct-identifier recommendations. Every suggestion is owner-gated; vocab concept chips and PII flags use the same accept/reject pattern. DPV-PD vocabulary IRIs and field name heuristics drive the PII detection.
+- **Dataset semantic types** — domain types (e.g. `Customer`, `DebitCardAccount`) are derived from FIBO/schema.org vocabulary mappings, exposed as search facets and surfaced as badges in the consumer UI.
+- **Human-readable metadata** — an IRI→label translation API renders controlled-vocabulary IRIs as friendly labels throughout the UI.
+
+---
+
 ## Architecture
 
-Six Spring Boot 3.3 / Java 21 microservices, each with its own database:
+Seven Spring Boot 3.3 / Java 21 microservices, each with its own database:
 
 | Service | Port | Database | Responsibility |
 |---------|------|----------|---------------|
-| `inventory-service` | 8001 | PostgreSQL | Catalogs, Datasets, Distributions, Data Products, Logical Models, Vocabularies |
+| `inventory-service` | 8001 | PostgreSQL | Catalogs, Datasets, Distributions, Data Products, Logical Models, Vocabularies, Semantic Tags, Ownership Governance |
 | `harvest-service` | 8002 | PostgreSQL + MinIO | Connector pipeline — DCAT HTTP, AWS Glue, Snowflake, Teradata |
 | `lineage-service` | 8003 | PostgreSQL + Apache AGE | OpenLineage ingestion, DDL lineage, Cypher graph traversal |
-| `search-service` | 8004 | OpenSearch | Full-text search, faceted filtering, semantic facets (FIBO concepts) |
-| `ai-service` | 8005 | PostgreSQL + pgvector | RAG chat, semantic search, embedding pipeline (Ollama / OpenAI) |
+| `search-service` | 8004 | OpenSearch | Full-text search, semantic type facets, FIBO concept facets |
+| `ai-service` | 8005 | PostgreSQL + pgvector | RAG chat, semantic recommendations, element classification, PII detection, embedding pipeline (Ollama / OpenAI) |
 | `identity-service` | 8006 | PostgreSQL | Organisations, domains, users, roles, ABAC policies, API keys |
+| `policy-service` | 8007 | PostgreSQL | ODRL policy registry and ODRE enforcement engine (PDP). Evaluates A-Level and B1-Level policies at request time; Kafka-driven sync from dataset changes |
 
 Two React 18 + TypeScript + Vite frontends:
 
@@ -83,6 +94,7 @@ Once up:
 | `http://localhost:8004/swagger-ui.html` | search-service API docs |
 | `http://localhost:8005/swagger-ui.html` | ai-service API docs |
 | `http://localhost:8006/swagger-ui.html` | identity-service API docs |
+| `http://localhost:8007/swagger-ui.html` | policy-service API docs |
 | `http://localhost:8180` | Keycloak admin console |
 | `http://localhost:9000` | MinIO console |
 
@@ -151,8 +163,103 @@ make seed
 | [CSV-W](https://www.w3.org/TR/tabular-data-primer/) | Physical schema descriptor (columns, datatypes, constraints) |
 | [OpenLineage](https://openlineage.io/) | Job/Run/Dataset lineage events; compatible with Marquez and dbt |
 | [SKOS](https://www.w3.org/TR/skos-reference/) | Vocabulary mapping properties (exactMatch, closeMatch, …) |
+| [W3C DPV](https://www.w3.org/TR/dpv/) | Data Privacy Vocabulary — DPV-PD personal data category IRIs drive AI-based PII and direct-identifier detection on logical model elements |
 | [FIBO](https://spec.edmcouncil.org/fibo/) | Financial industry business ontology for semantic annotation |
 | [schema.org](https://schema.org/) | General-purpose vocabulary for non-financial datasets |
+
+---
+
+## Kubernetes / Helm Deployment
+
+A single Helm chart covers the full stack. Requires Helm 3.x and a running Kubernetes cluster.
+
+### Install
+
+```bash
+# Add to your cluster in a dedicated namespace
+helm install odin infra/helm/charts/odin-catalog/ \
+  --namespace odin-catalog \
+  --create-namespace
+
+# Watch pods come up
+kubectl get pods -n odin-catalog -w
+```
+
+Two post-install Jobs run automatically:
+
+- **kafka-init** — creates all 10 Kafka topics with correct partition counts and cleanup policies
+- **opensearch-init** — creates the `catalog_entities` index with the English analyzer mapping
+
+Both Jobs complete in under 30 seconds and are deleted on success.
+
+### Configure
+
+Override values with `--set` or a values file:
+
+```bash
+# Minimal production overrides
+helm install odin infra/helm/charts/odin-catalog/ \
+  --namespace odin-catalog --create-namespace \
+  --set postgres.inventory.password=<secret> \
+  --set postgres.harvest.password=<secret> \
+  --set postgres.lineage.password=<secret> \
+  --set postgres.identity.password=<secret> \
+  --set postgres.ai.password=<secret> \
+  --set keycloak.adminPassword=<secret> \
+  --set keycloak.clientSecret=<secret> \
+  --set minio.rootPassword=<secret> \
+  --set ingress.consumerHost=catalog.example.com \
+  --set ingress.producerHost=manage.catalog.example.com \
+  --set ingress.apiHost=api.catalog.example.com
+```
+
+Or use a values file:
+
+```bash
+cp infra/helm/charts/odin-catalog/values.yaml my-values.yaml
+# edit my-values.yaml
+helm install odin infra/helm/charts/odin-catalog/ -f my-values.yaml -n odin-catalog --create-namespace
+```
+
+### Ingress
+
+The chart creates three Ingress resources (requires an nginx ingress controller):
+
+| Ingress | Default host | Routes to |
+|---------|-------------|-----------|
+| consumer | `catalog.local` | Consumer (discovery) frontend |
+| producer | `manage.catalog.local` | Producer (management) frontend |
+| api | `api.catalog.local` | API gateway — `/inventory/`, `/harvest/`, `/lineage/`, `/search/`, `/ai/`, `/identity/` |
+
+Disable ingress with `--set ingress.enabled=false` and use `kubectl port-forward` instead.
+
+### Upgrade and uninstall
+
+```bash
+# Apply chart changes or value updates
+helm upgrade odin infra/helm/charts/odin-catalog/ -n odin-catalog -f my-values.yaml
+
+# Remove all resources (PVCs are retained by default)
+helm uninstall odin -n odin-catalog
+```
+
+### Resource customisation
+
+Default resource requests are conservative (250 m CPU / 512 Mi for backends). Override per environment:
+
+```yaml
+# values-prod.yaml
+resources:
+  backend:
+    requests: { cpu: 500m, memory: 1Gi }
+    limits:   { cpu: "2",  memory: 2Gi }
+  opensearch:
+    requests: { cpu: "1",  memory: 2Gi }
+    limits:   { cpu: "2",  memory: 4Gi }
+  kafka:
+    requests: { cpu: 500m, memory: 1Gi }
+    limits:   { cpu: "1",  memory: 2Gi }
+```
 
 ---
 
@@ -165,8 +272,9 @@ data-catalog/
 │   ├── harvest-service/      # Connectors, Spring Batch pipeline, Quartz scheduler
 │   ├── lineage-service/      # OpenLineage ingestion, Apache AGE graph
 │   ├── search-service/       # OpenSearch indexing and query
-│   ├── ai-service/           # RAG chat, embeddings, semantic search
-│   └── identity-service/     # Users, roles, ABAC, API keys, Keycloak integration
+│   ├── ai-service/           # RAG chat, embeddings, PII detection, semantic search
+│   ├── identity-service/     # Users, roles, ABAC, API keys, Keycloak integration
+│   └── policy-service/       # ODRL policy registry, ODRE enforcement engine (PDP)
 ├── shared/
 │   ├── shared-models/        # Java records for DCAT, DPROD, CSV-W, Kafka envelopes
 │   ├── kafka-client/         # KafkaEventPublisher, KafkaEventConsumer, topic constants
@@ -179,7 +287,9 @@ data-catalog/
 │   ├── traefik/              # Traefik routing config
 │   ├── kafka/                # Topic definitions
 │   ├── keycloak/             # Realm export
-│   └── opensearch/           # Index mappings
+│   ├── opensearch/           # Index mappings
+│   └── helm/charts/odin-catalog/  # Helm chart (52 Kubernetes resources)
+├── marketing/                # Marketing landing page
 ├── docker-compose.yml
 ├── Makefile
 └── gradle/libs.versions.toml # Gradle version catalog
@@ -187,14 +297,61 @@ data-catalog/
 
 ---
 
-## API Authentication
+## Authentication & Access Control
+
+### Producer UI login
+
+The producer (management) UI is protected by **Keycloak OIDC login** — opening it redirects to
+the Keycloak login page (`login-required`). It authenticates against the `catalog-frontend`
+public PKCE client in the `datacatalog` realm. The issued Bearer token carries `tenant_id` and
+`permissions` claims, which drive multi-tenancy and authorization on every backend call. The
+consumer (discovery) UI is read-only and unauthenticated.
+
+### Backend authentication
 
 All backend endpoints accept either:
 
 - `Authorization: Bearer <JWT>` — Keycloak-issued OIDC token
 - `X-API-Key: <key>` — long-lived API key (managed by identity-service)
 
-For local development, use `X-API-Key: dev-inventory` (or `dev-harvest`, `dev-search`, etc.) to bypass JWT validation.
+JWTs are validated against Keycloak's JWKS (`jwk-set-uri`), so a token works regardless of the
+issuer hostname (e.g. `localhost` in the browser vs. `keycloak` inside the Docker network).
+Authorization is enforced from the token's `permissions` claim: `GET` requests need
+`catalog:read`; mutations need `catalog:write`; `catalog:admin` grants both.
+
+### Roles
+
+| Role (Keycloak) | `permissions` claim | Producer UI access |
+|-----------------|---------------------|--------------------|
+| Administrator (`administrator`) | `catalog:read`, `catalog:write`, `catalog:admin` | Everything, incl. Admin › Harvest, Domains, Users, Settings |
+| Data Governance (`data-governance`) | `catalog:read`, `catalog:write` | All content + Admin › Domains |
+| Data Owner (`data-owner`) | `catalog:read`, `catalog:write` | All content; no Admin section |
+| Data Steward (`data-steward`) | `catalog:read`, `catalog:write` | All content; no Admin section |
+
+### Default users
+
+The realm seeds one account per role plus five additional data owners for development and testing (change these before any non-local deployment):
+
+| Username | Name | Role | Password |
+|----------|------|------|----------|
+| `admin@datacatalog.local` | Catalog Admin | Administrator | `admin` |
+| `governance@datacatalog.local` | Grace Governance | Data Governance | `password` |
+| `owner@datacatalog.local` | Owen Owner | Data Owner | `password` |
+| `steward@datacatalog.local` | Sam Steward | Data Steward | `password` |
+| `trading.owner@datacatalog.local` | Alice Chen | Data Owner | `password` |
+| `risk.owner@datacatalog.local` | Marcus Webb | Data Owner | `password` |
+| `refdata.owner@datacatalog.local` | Priya Nair | Data Owner | `password` |
+| `compliance.owner@datacatalog.local` | David Park | Data Owner | `password` |
+| `finance.owner@datacatalog.local` | Sofia Reyes | Data Owner | `password` |
+
+Manage users via the producer **Admin › Users** page (administrator only) or the identity-service
+endpoints (backed by the Keycloak Admin API) — invite, list, and deactivate.
+
+### Local development
+
+For local development you can bypass JWT validation with a dev API key — any key starting with
+`dev-` (e.g. `X-API-Key: dev-local`) is accepted and granted read/write/admin on the default
+tenant. **Never enable this path outside local development.**
 
 ---
 

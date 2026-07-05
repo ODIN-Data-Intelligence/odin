@@ -25,8 +25,183 @@ export interface Dataset extends Resource {
   spatial?: Record<string, unknown>;
   version?: string;
   isVersionOf?: string;
+  ownerId?: string;
   distributions?: Distribution[];
   logicalModels?: LogicalModel[];
+  semanticTypes?: string[];
+  hasPolicy?: string;
+}
+
+export interface TermsOfUseDerivationDetails {
+  totalPublishedElementCount: number;
+  classifiedElementCount: number;
+  elementsWithVocabCount: number;
+  distinctClassifications: string[];
+  vocabConceptCount: number;
+  matchedSignals: string[];
+  readyToAccept: boolean;
+}
+
+export interface PolicyComponent {
+  pieceType: string;
+  dimensionKey: string;
+  label: string;
+  policyFragment?: Record<string, unknown>;
+}
+
+export interface TermsOfUse {
+  effectiveClassification?: string;
+  accessLevel?: 'OPEN' | 'INTERNAL_ONLY' | 'RESTRICTED' | 'HIGHLY_RESTRICTED';
+  permissions: string[];
+  prohibitions: string[];
+  obligations: string[];
+  applicableRegulations: string[];
+  odrlPolicy?: Record<string, unknown>;
+  policySource?: 'derived' | 'explicit' | 'fallback';
+  derivationDetails?: TermsOfUseDerivationDetails;
+  policyComponents?: PolicyComponent[];
+}
+
+// policy-service types
+
+export interface PolicyRecord {
+  id: string;
+  datasetId: string;
+  tenantId: string;
+  policyLevel: string;
+  policyJson: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PolicyComponentSummary {
+  pieceId: string;
+  pieceType: string;
+  dimensionKey: string;
+  label?: string;
+  policyLevel: string;
+  policyFragment: Record<string, unknown>;
+  appliedAt: string;
+}
+
+export interface PolicyComponentsResponse {
+  datasetId: string;
+  tenantId: string;
+  components: PolicyComponentSummary[];
+  assembledPolicy: Record<string, unknown>;
+}
+
+export interface EvaluationDecision {
+  action: string;
+  result: string;
+  delegated: boolean;
+}
+
+export interface EvaluationResponse {
+  granted: boolean;
+  policyLevel: string;
+  decisions: EvaluationDecision[];
+}
+
+export interface EvaluationLogEntry {
+  id: string;
+  datasetId: string;
+  action: string;
+  granted: boolean;
+  createdAt: string;
+}
+
+export interface AcceptedSemanticTag {
+  id: string;
+  datasetId: string;
+  type: string;
+  vocabularyIri?: string;
+  createdAt: string;
+}
+
+export interface DatasetSemanticContext {
+  semanticTypes: string[];
+  vocabConceptLabels: string[];
+  vocabConceptIris: string[];
+  fiboConcepts: string[];
+  logicalElementNames: string[];
+  logicalTypes: string[];
+  acceptedTags: AcceptedSemanticTag[];
+}
+
+export interface RecommendedSemanticType {
+  type: string;
+  rationale: string;
+  vocabularyHint?: string;
+}
+
+export interface SemanticContextRecommendation {
+  types: RecommendedSemanticType[];
+  rationale: string;
+}
+
+export interface DatasetAuditEntry {
+  id: string;
+  datasetId: string;
+  eventType: string;
+  changedById?: string;
+  changedByEmail?: string;
+  payloadBefore?: string;
+  payloadAfter?: string;
+  createdAt: string;
+}
+
+export interface LogicalElementAuditEntry {
+  id: string;
+  logicalElementId: string;
+  logicalModelId: string;
+  datasetId: string;
+  elementName?: string;
+  eventType: string;
+  changedById?: string;
+  changedByEmail?: string;
+  payloadBefore?: string;
+  payloadAfter?: string;
+  createdAt: string;
+}
+
+export interface LogicalModelAuditEntry {
+  id: string;
+  logicalModelId: string;
+  datasetId: string;
+  modelName?: string;
+  eventType: string;
+  changedById?: string;
+  changedByEmail?: string;
+  payloadBefore?: string;
+  payloadAfter?: string;
+  createdAt: string;
+}
+
+export interface DatasetActivityEntry {
+  id: string;
+  scope: 'DATASET' | 'MODEL' | 'ELEMENT';
+  datasetId: string;
+  logicalModelId?: string;
+  logicalElementId?: string;
+  entityName?: string;
+  eventType: string;
+  changedById?: string;
+  changedByEmail?: string;
+  payloadBefore?: string;
+  payloadAfter?: string;
+  createdAt: string;
+}
+
+export interface OwnershipProposal {
+  id: string;
+  datasetId: string;
+  proposedOwnerId: string;
+  proposedById: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  createdAt: string;
+  resolvedAt?: string;
+  note?: string;
 }
 
 export interface Distribution extends Resource {
@@ -41,6 +216,9 @@ export interface Distribution extends Resource {
   csvwTableId?: string;
   compressFormat?: string;
   availability?: string;
+  databaseName?: string;
+  schemaName?: string;
+  tableName?: string;
 }
 
 export interface DataProduct extends Resource {
@@ -135,6 +313,58 @@ export interface LogicalModel {
   updatedAt: string;
 }
 
+export interface RecommendedVocabMapping {
+  conceptIri: string;
+  conceptLabel?: string;
+  conceptDefinition?: string;
+  matchType: string;
+  reasoning?: string;
+}
+
+// ── Agentic proposer/reviewer review ────────────────────────────────────────
+
+export type AgenticPhase =
+  | 'CONTEXT' | 'MEMORY' | 'PROPOSING' | 'PROPOSAL' | 'REVIEWING' | 'REVIEW'
+  | 'LOCKED' | 'DONE' | 'MAX_REACHED' | 'ERROR';
+
+export interface AgenticVocabConcept {
+  conceptIri: string;
+  conceptLabel?: string;
+  conceptDefinition?: string;
+  matchType?: string;
+  reasoning?: string;
+}
+
+export interface AgenticElementProposal {
+  elementId: string;
+  name?: string;
+  description?: string;
+  descriptionReasoning?: string;
+  classification?: 'PUBLIC' | 'INTERNAL' | 'CONFIDENTIAL' | 'HIGH_CONFIDENTIAL';
+  classificationReasoning?: string;
+  vocabConcepts?: AgenticVocabConcept[];
+  isPersonalInformation?: boolean;
+  isDirectIdentifier?: boolean;
+  piiReasoning?: string;
+}
+
+export interface AgenticReviewComment {
+  elementId?: string;
+  dimension?: string;
+  issue?: string;
+}
+
+/** One Server-Sent Event from the agentic review stream. Fields populated per `phase`. */
+export interface AgenticEvent {
+  phase: AgenticPhase;
+  iteration?: number;
+  proposal?: { elements: AgenticElementProposal[] };
+  verdict?: 'APPROVE' | 'REJECT';
+  comments?: AgenticReviewComment[];
+  summary?: string;
+  message?: string;
+}
+
 export interface LogicalDataElement {
   id: string;
   logicalModelId: string;
@@ -152,6 +382,22 @@ export interface LogicalDataElement {
   vocabMappings?: LogicalElementVocabMapping[];
   createdAt: string;
   updatedAt: string;
+  classification?: 'PUBLIC' | 'INTERNAL' | 'CONFIDENTIAL' | 'HIGH_CONFIDENTIAL';
+  recommendedClassification?: 'PUBLIC' | 'INTERNAL' | 'CONFIDENTIAL' | 'HIGH_CONFIDENTIAL';
+  classificationReasoning?: string;
+  classificationRecommendedAt?: string;
+  recommendedDescription?: string;
+  descriptionReasoning?: string;
+  descriptionRecommendedAt?: string;
+  recommendedVocabMappings?: RecommendedVocabMapping[];
+  vocabMappingReasoning?: string;
+  vocabMappingRecommendedAt?: string;
+  isPersonalInformation: boolean;
+  isDirectIdentifier: boolean;
+  recommendedIsPersonalInformation?: boolean;
+  recommendedIsDirectIdentifier?: boolean;
+  piiRecommendationReasoning?: string;
+  piiRecommendedAt?: string;
 }
 
 export interface LogicalElementVocabMapping {
@@ -164,6 +410,15 @@ export interface LogicalElementVocabMapping {
   conceptDefinition?: string;
   matchType: 'exactMatch' | 'closeMatch' | 'relatedMatch' | 'broadMatch' | 'narrowMatch';
   createdAt: string;
+}
+
+export interface BulkRecommendationJob {
+  jobId: string;
+  modelId: string;
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  createdAt: string;
+  completedAt?: string;
+  error?: string;
 }
 
 export interface ColumnElementSuggestion {
@@ -180,4 +435,81 @@ export interface PageResponse<T> {
   totalPages: number;
   size: number;
   number: number;
+}
+
+export interface DashboardSummary {
+  ownedDatasetCount: number;
+  ownedDataProductCount: number;
+  pendingTransferRequests: OwnershipProposal[];
+}
+
+export interface ActivityProposal {
+  id: string;
+  datasetId: string;
+  datasetTitle: string;
+  proposedOwnerId: string;
+  proposedById: string;
+  role: 'PROPOSER' | 'NOMINEE';
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  createdAt: string;
+  resolvedAt?: string;
+  note?: string;
+}
+
+export interface ActivityChange {
+  id: string;
+  datasetId: string;
+  datasetTitle: string;
+  eventType: string;
+  createdAt: string;
+}
+
+export interface UserActivity {
+  proposals: ActivityProposal[];
+  changes: ActivityChange[];
+}
+
+export interface TermsPolicySet {
+  id: string;
+  name: string;
+  description: string | null;
+  status: 'DRAFT' | 'ACTIVE' | 'ARCHIVED';
+  version: number;
+  effectiveFrom: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TermsClassificationRule {
+  id: string;
+  classification: string;
+  rank: number;
+  accessLevel: string;
+  permissions: string[];
+  prohibitions: string[];
+  obligations: string[];
+  odrlPermissions: string[];
+  odrlProhibitions: string[];
+  odrlDuties: string[];
+}
+
+export interface TermsRegulationRule {
+  id: string;
+  signalType: string;
+  pattern: string;
+  regulationName: string;
+  signalLabel: string;
+}
+
+export interface TermsRegulationObligation {
+  id: string;
+  regulationName: string;
+  obligation: string;
+  odrlDuty: string | null;
+}
+
+export interface TermsPolicyDetail extends TermsPolicySet {
+  classificationRules: TermsClassificationRule[];
+  regulationRules: TermsRegulationRule[];
+  regulationObligations: TermsRegulationObligation[];
 }

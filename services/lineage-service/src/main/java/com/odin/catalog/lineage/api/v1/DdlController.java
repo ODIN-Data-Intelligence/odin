@@ -1,5 +1,6 @@
 package com.odin.catalog.lineage.api.v1;
 
+import com.odin.catalog.lineage.api.v1.dto.DdlSubmitRequest;
 import com.odin.catalog.lineage.ingestion.DdlLineageParser;
 import com.odin.catalog.shared.models.events.HarvestDdlDiscoveredPayload;
 import io.swagger.v3.oas.annotations.Operation;
@@ -8,17 +9,20 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.Map;
 
 @Tag(name = "DDL", description = "DDL-based lineage extraction — parse CREATE VIEW / TABLE AS SELECT statements to derive DERIVED_FROM edges in the graph")
 @RestController
 @RequestMapping("/api/v1/ddl")
 @RequiredArgsConstructor
 public class DdlController {
+
+    private static final Logger log = LoggerFactory.getLogger(DdlController.class);
 
     private final DdlLineageParser ddlParser;
 
@@ -33,29 +37,19 @@ public class DdlController {
         @ApiResponse(responseCode = "400", description = "Missing required 'ddl' field", content = @Content),
         @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
     })
-    @io.swagger.v3.oas.annotations.parameters.RequestBody(
-        description = "DDL statement and optional metadata",
-        required = true,
-        content = @Content(schema = @Schema(example = """
-            {
-              "ddl": "CREATE VIEW risk.daily_pnl AS SELECT t.trade_id, t.pnl FROM trades.positions t",
-              "namespace": "snowflake://trading_dw",
-              "outputName": "daily_pnl",
-              "dialect": "ANSI"
-            }""")))
     @PostMapping("/submit")
     @ResponseStatus(HttpStatus.ACCEPTED)
-    public void submit(@RequestBody Map<String, String> body) {
-        String ddl = body.get("ddl");
-        String outputName = body.containsKey("outputName")
-            ? body.get("outputName")
-            : extractObjectName(ddl);
+    public void submit(@Valid @RequestBody DdlSubmitRequest request) {
+        String outputName = request.outputName() != null
+            ? request.outputName()
+            : extractObjectName(request.ddl());
+        log.info("action=SUBMIT_DDL outputName={}", outputName);
         var payload = new HarvestDdlDiscoveredPayload(
             null, null, null, "VIEW",
-            body.getOrDefault("namespace", "default"),
+            request.namespace() != null ? request.namespace() : "default",
             outputName,
-            body.getOrDefault("dialect", "ANSI"),
-            ddl
+            request.dialect() != null ? request.dialect() : "ANSI",
+            request.ddl()
         );
         ddlParser.process(payload);
     }

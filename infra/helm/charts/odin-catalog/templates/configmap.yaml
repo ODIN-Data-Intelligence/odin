@@ -5,10 +5,20 @@ metadata:
   labels: {{- include "odin-catalog.labels" . | nindent 4 }}
 data:
   SPRING_KAFKA_BOOTSTRAP_SERVERS: {{ include "odin-catalog.kafkaBootstrap" . | quote }}
-  SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: {{ include "odin-catalog.keycloakIssuer" . | quote }}
+  SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: {{ printf "http://%s-keycloak:8180/realms/%s/protocol/openid-connect/certs" (include "odin-catalog.fullname" .) .Values.keycloak.realm | quote }}
   SPRING_JPA_HIBERNATE_DDL_AUTO: "validate"
   MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,prometheus"
   MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: "always"
+  APP_DEV_AUTH_ENABLED: {{ .Values.app.devAuthEnabled | quote }}
+  SPRING_AI_OLLAMA_BASE_URL: {{ .Values.ai.ollamaBaseUrl | quote }}
+  OLLAMA_CHAT_MODEL: {{ .Values.ai.ollamaChatModel | quote }}
+  OLLAMA_EMBEDDING_MODEL: {{ .Values.ai.ollamaEmbeddingModel | quote }}
+  AI_SERVICE_URL: {{ printf "http://%s-ai-service:%d" (include "odin-catalog.fullname" .) (.Values.services.aiService.port | int) | quote }}
+  CATALOG_SERVICE_URL: {{ printf "http://%s-inventory-service:%d" (include "odin-catalog.fullname" .) (.Values.services.inventoryService.port | int) | quote }}
+  INVENTORY_SERVICE_URL: {{ printf "http://%s-inventory-service:%d" (include "odin-catalog.fullname" .) (.Values.services.inventoryService.port | int) | quote }}
+  SEARCH_SERVICE_URL: {{ printf "http://%s-search-service:%d" (include "odin-catalog.fullname" .) (.Values.services.searchService.port | int) | quote }}
+  KEYCLOAK_SERVER_URL: {{ printf "http://%s-keycloak:8180" (include "odin-catalog.fullname" .) | quote }}
+  KEYCLOAK_REALM: {{ .Values.keycloak.realm | quote }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -54,18 +64,22 @@ data:
   init-index.sh: |
     #!/bin/bash
     set -e
-    OPENSEARCH_URL="http://{{ .Release.Name }}-opensearch:9200"
+    OPENSEARCH_URL="http://{{ include "odin-catalog.fullname" . }}-opensearch:9200"
 
     until curl -sf "$OPENSEARCH_URL/_cluster/health" > /dev/null; do
       echo "Waiting for OpenSearch..."
       sleep 5
     done
 
-    echo "Creating catalog_entities index..."
-    curl -sf -X PUT "$OPENSEARCH_URL/catalog_entities" \
-      -H 'Content-Type: application/json' \
-      -d @/config/catalog_entities.json
-    echo ""
+    if curl -sf "$OPENSEARCH_URL/catalog_entities" > /dev/null 2>&1; then
+      echo "Index catalog_entities already exists, skipping creation."
+    else
+      echo "Creating catalog_entities index..."
+      curl -sf -X PUT "$OPENSEARCH_URL/catalog_entities" \
+        -H 'Content-Type: application/json' \
+        -d @/config/catalog_entities.json
+      echo ""
+    fi
     echo "OpenSearch index ready."
   catalog_entities.json: |
 {{ .Files.Get "files/catalog_entities.json" | indent 4 }}
@@ -89,3 +103,193 @@ data:
 {{ .Files.Get "files/lineage-init.sql" | indent 4 }}
   identity-init.sql: |
 {{ .Files.Get "files/identity-init.sql" | indent 4 }}
+---
+{{/* ── Frontend nginx configs with Kubernetes service names ──────────────── */}}
+{{- $fn := include "odin-catalog.fullname" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fn }}-frontend-producer-nginx
+  labels: {{- include "odin-catalog.labels" . | nindent 4 }}
+data:
+  default.conf: |
+    server {
+        listen 8080;
+        server_name _;
+        root /usr/share/nginx/html;
+        index index.html;
+
+        gzip on;
+        gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+
+        add_header X-Frame-Options        "SAMEORIGIN"  always;
+        add_header X-Content-Type-Options "nosniff"     always;
+        add_header X-XSS-Protection       "1; mode=block" always;
+        add_header Referrer-Policy        "strict-origin-when-cross-origin" always;
+        add_header Permissions-Policy     "geolocation=(), microphone=(), camera=()" always;
+
+        proxy_set_header Host          $host;
+        proxy_set_header X-Real-IP     $remote_addr;
+        proxy_set_header Authorization $http_authorization;
+        {{- if .Values.app.producerApiKey }}
+        proxy_set_header X-API-Key     {{ .Values.app.producerApiKey | quote }};
+        {{- end }}
+
+        location = /index.html {
+            add_header Cache-Control "no-cache, no-store, must-revalidate";
+            add_header Pragma "no-cache";
+            add_header Expires 0;
+        }
+
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+
+        location /api/v1/search {
+            proxy_pass http://{{ $fn }}-search-service:{{ .Values.services.searchService.port }};
+        }
+        location /api/v1/lineage {
+            proxy_pass http://{{ $fn }}-lineage-service:{{ .Values.services.lineageService.port }};
+        }
+        location /api/v1/ddl/ {
+            proxy_pass http://{{ $fn }}-lineage-service:{{ .Values.services.lineageService.port }};
+        }
+        location ~ ^/api/v1/datasets/[^/]+/(lineage|impact|column-lineage) {
+            proxy_pass http://{{ $fn }}-lineage-service:{{ .Values.services.lineageService.port }};
+        }
+        location /api/v1/datasets/lookup {
+            proxy_pass http://{{ $fn }}-lineage-service:{{ .Values.services.lineageService.port }};
+        }
+        location ~ ^/api/v1/datasets/[^/]+/[^/]+/catalog-link {
+            proxy_pass http://{{ $fn }}-lineage-service:{{ .Values.services.lineageService.port }};
+        }
+        location /api/v1/catalog-datasets/ {
+            proxy_pass http://{{ $fn }}-lineage-service:{{ .Values.services.lineageService.port }};
+        }
+        location /api/v1/sources {
+            proxy_pass http://{{ $fn }}-harvest-service:{{ .Values.services.harvestService.port }};
+        }
+        location /api/v1/jobs {
+            proxy_pass http://{{ $fn }}-harvest-service:{{ .Values.services.harvestService.port }};
+        }
+        location /api/v1/runs {
+            proxy_pass http://{{ $fn }}-harvest-service:{{ .Values.services.harvestService.port }};
+        }
+        location /api/v1/policies {
+            proxy_pass http://{{ $fn }}-policy-service:{{ .Values.services.policyService.port }};
+        }
+        location /api/v1/users {
+            proxy_pass http://{{ $fn }}-identity-service:{{ .Values.services.identityService.port }};
+        }
+        location /api/v1/domains {
+            proxy_pass http://{{ $fn }}-identity-service:{{ .Values.services.identityService.port }};
+        }
+        location /api/v1/conversations {
+            proxy_pass http://{{ $fn }}-ai-service:{{ .Values.services.aiService.port }};
+            proxy_http_version      1.1;
+            proxy_read_timeout      600s;
+            proxy_send_timeout      600s;
+            proxy_connect_timeout   30s;
+            proxy_buffering         off;
+            proxy_cache             off;
+            chunked_transfer_encoding on;
+        }
+        location /api/v1/semantic-search {
+            proxy_pass http://{{ $fn }}-ai-service:{{ .Values.services.aiService.port }};
+        }
+        location /api/ {
+            proxy_pass http://{{ $fn }}-inventory-service:{{ .Values.services.inventoryService.port }};
+        }
+        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff2?)$ {
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+        }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fn }}-frontend-consumer-nginx
+  labels: {{- include "odin-catalog.labels" . | nindent 4 }}
+data:
+  default.conf.tmpl: |
+    server {
+        listen 8080;
+        server_name _;
+        root /usr/share/nginx/html;
+        index index.html;
+
+        gzip on;
+        gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+
+        add_header X-Frame-Options        "SAMEORIGIN"  always;
+        add_header X-Content-Type-Options "nosniff"     always;
+        add_header X-XSS-Protection       "1; mode=block" always;
+        add_header Referrer-Policy        "strict-origin-when-cross-origin" always;
+        add_header Permissions-Policy     "geolocation=(), microphone=(), camera=()" always;
+
+        proxy_set_header Host       $host;
+        proxy_set_header X-Real-IP  $remote_addr;
+        proxy_set_header X-API-Key  "${CONSUMER_API_KEY}";
+
+        location = /index.html {
+            add_header Cache-Control "no-cache, no-store, must-revalidate";
+            add_header Pragma "no-cache";
+            add_header Expires 0;
+        }
+
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+
+        location /api/v1/search {
+            proxy_pass http://{{ $fn }}-search-service:{{ .Values.services.searchService.port }};
+        }
+        location /api/v1/lineage {
+            proxy_pass http://{{ $fn }}-lineage-service:{{ .Values.services.lineageService.port }};
+        }
+        location /api/v1/ddl/ {
+            proxy_pass http://{{ $fn }}-lineage-service:{{ .Values.services.lineageService.port }};
+        }
+        location ~ ^/api/v1/datasets/[^/]+/(lineage|impact|column-lineage) {
+            proxy_pass http://{{ $fn }}-lineage-service:{{ .Values.services.lineageService.port }};
+        }
+        location /api/v1/datasets/lookup {
+            proxy_pass http://{{ $fn }}-lineage-service:{{ .Values.services.lineageService.port }};
+        }
+        location ~ ^/api/v1/datasets/[^/]+/[^/]+/catalog-link {
+            proxy_pass http://{{ $fn }}-lineage-service:{{ .Values.services.lineageService.port }};
+        }
+        location /api/v1/catalog-datasets/ {
+            proxy_pass http://{{ $fn }}-lineage-service:{{ .Values.services.lineageService.port }};
+        }
+        location /api/v1/users {
+            proxy_pass http://{{ $fn }}-identity-service:{{ .Values.services.identityService.port }};
+        }
+        location /api/v1/bookmarks {
+            proxy_pass http://{{ $fn }}-identity-service:{{ .Values.services.identityService.port }};
+        }
+        location /api/v1/bookmark-collections {
+            proxy_pass http://{{ $fn }}-identity-service:{{ .Values.services.identityService.port }};
+        }
+        location /api/v1/conversations {
+            proxy_pass http://{{ $fn }}-ai-service:{{ .Values.services.aiService.port }};
+            proxy_http_version      1.1;
+            proxy_read_timeout      600s;
+            proxy_send_timeout      600s;
+            proxy_connect_timeout   30s;
+            proxy_buffering         off;
+            proxy_cache             off;
+            chunked_transfer_encoding on;
+        }
+        location /api/v1/semantic-search {
+            proxy_pass http://{{ $fn }}-ai-service:{{ .Values.services.aiService.port }};
+        }
+        location /api/ {
+            proxy_pass http://{{ $fn }}-inventory-service:{{ .Values.services.inventoryService.port }};
+        }
+        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff2?)$ {
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+        }
+    }

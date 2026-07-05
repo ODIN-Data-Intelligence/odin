@@ -16,6 +16,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -47,27 +48,39 @@ public class OpenSearchIndexService {
         }
     }
 
-    public SearchResult search(String query, String type, String domainId,
+    public SearchResult search(String query, String type, String types, String domainId,
                                 String lifecycleStatus, String format,
                                 Boolean hasLineage, String tenantId, int page, int size,
-                                String keyword, String theme, String vocabConcept, String vocab) {
+                                String keyword, String theme, String vocabConcept, String vocab,
+                                String semanticType) {
         try {
             List<Query> filters = new ArrayList<>();
 
             if (tenantId != null) {
-                filters.add(Query.of(q -> q.term(t -> t.field("tenantId.keyword").value(FieldValue.of(tenantId)))));
+                filters.add(Query.of(q -> q.term(t -> t.field("tenantId").value(FieldValue.of(tenantId)))));
             }
             filters.add(Query.of(q -> q.term(t -> t.field("isDeleted").value(FieldValue.of(false)))));
 
-            if (type != null) filters.add(Query.of(q -> q.term(t -> t.field("entityType").value(FieldValue.of(type)))));
+            if (types != null) {
+                List<Query> typeTerms = Arrays.stream(types.split(","))
+                    .map(String::trim).filter(s -> !s.isEmpty())
+                    .map(v -> Query.of(q -> q.term(t -> t.field("entityType").value(FieldValue.of(v)))))
+                    .collect(Collectors.toList());
+                if (!typeTerms.isEmpty()) {
+                    filters.add(Query.of(q -> q.bool(b -> b.should(typeTerms).minimumShouldMatch("1"))));
+                }
+            } else if (type != null) {
+                filters.add(Query.of(q -> q.term(t -> t.field("entityType").value(FieldValue.of(type)))));
+            }
             if (domainId != null) filters.add(Query.of(q -> q.term(t -> t.field("domainId").value(FieldValue.of(domainId)))));
             if (lifecycleStatus != null) filters.add(Query.of(q -> q.term(t -> t.field("lifecycleStatus").value(FieldValue.of(lifecycleStatus)))));
-            if (format != null) filters.add(Query.of(q -> q.term(t -> t.field("format").value(FieldValue.of(format)))));
+            if (format != null) filters.add(Query.of(q -> q.term(t -> t.field("distributionFormats.keyword").value(FieldValue.of(format)))));
             if (hasLineage != null) filters.add(Query.of(q -> q.term(t -> t.field("hasLineage").value(FieldValue.of(hasLineage)))));
             if (keyword != null) filters.add(Query.of(q -> q.term(t -> t.field("keywords.keyword").value(FieldValue.of(keyword)))));
-            if (theme != null) filters.add(Query.of(q -> q.term(t -> t.field("themes.keyword").value(FieldValue.of(theme)))));
+            if (theme != null) filters.add(Query.of(q -> q.term(t -> t.field("themes").value(FieldValue.of(theme)))));
             if (vocabConcept != null) filters.add(Query.of(q -> q.term(t -> t.field("vocabConceptLabels.keyword").value(FieldValue.of(vocabConcept)))));
             if (vocab != null) filters.add(Query.of(q -> q.term(t -> t.field("vocabularyTypes.keyword").value(FieldValue.of(vocab)))));
+            if (semanticType != null) filters.add(Query.of(q -> q.term(t -> t.field("semanticTypes.keyword").value(FieldValue.of(semanticType)))));
 
             Query fullTextQuery = query != null && !query.isBlank()
                 ? Query.of(q -> q.multiMatch(m -> m
@@ -83,16 +96,16 @@ public class OpenSearchIndexService {
                 .filter(filters)
             ));
 
-            Map<String, Aggregation> aggs = Map.of(
-                "entityTypes",      Aggregation.of(a -> a.terms(t -> t.field("entityType.keyword").size(10))),
-                "formats",          Aggregation.of(a -> a.terms(t -> t.field("format.keyword").size(20))),
-                "lifecycleStatuses",Aggregation.of(a -> a.terms(t -> t.field("lifecycleStatus.keyword").size(10))),
-                "vocabularyTypes",  Aggregation.of(a -> a.terms(t -> t.field("vocabularyTypes.keyword").size(10))),
-                "fiboConcepts",     Aggregation.of(a -> a.terms(t -> t.field("fiboConcepts.keyword").size(20))),
-                "keywords",         Aggregation.of(a -> a.terms(t -> t.field("keywords.keyword").size(30))),
-                "themes",           Aggregation.of(a -> a.terms(t -> t.field("themes.keyword").size(30))),
-                "vocabConcepts",    Aggregation.of(a -> a.terms(t -> t.field("vocabConceptLabels.keyword").size(30)))
-            );
+            Map<String, Aggregation> aggs = new LinkedHashMap<>();
+            aggs.put("entityTypes",       Aggregation.of(a -> a.terms(t -> t.field("entityType").size(10))));
+            aggs.put("formats",           Aggregation.of(a -> a.terms(t -> t.field("distributionFormats.keyword").size(20))));
+            aggs.put("lifecycleStatuses", Aggregation.of(a -> a.terms(t -> t.field("lifecycleStatus").size(10))));
+            aggs.put("vocabularyTypes",   Aggregation.of(a -> a.terms(t -> t.field("vocabularyTypes.keyword").size(10))));
+            aggs.put("fiboConcepts",      Aggregation.of(a -> a.terms(t -> t.field("fiboConcepts.keyword").size(20))));
+            aggs.put("keywords",          Aggregation.of(a -> a.terms(t -> t.field("keywords.keyword").size(30))));
+            aggs.put("themes",            Aggregation.of(a -> a.terms(t -> t.field("themes").size(30))));
+            aggs.put("vocabConcepts",     Aggregation.of(a -> a.terms(t -> t.field("vocabConceptLabels.keyword").size(30))));
+            aggs.put("semanticTypes",     Aggregation.of(a -> a.terms(t -> t.field("semanticTypes.keyword").size(20))));
 
             SearchResponse<CatalogSearchDocument> response = client.search(s -> s
                 .index(INDEX)
@@ -142,14 +155,15 @@ public class OpenSearchIndexService {
             bucketsFor(response, "fiboConcepts"),
             bucketsFor(response, "keywords"),
             bucketsFor(response, "themes"),
-            bucketsFor(response, "vocabConcepts")
+            bucketsFor(response, "vocabConcepts"),
+            bucketsFor(response, "semanticTypes")
         );
     }
 
     private SearchFacetsDto emptyFacets() {
         return new SearchFacetsDto(
             List.of(), List.of(), List.of(), List.of(),
-            List.of(), List.of(), List.of(), List.of()
+            List.of(), List.of(), List.of(), List.of(), List.of()
         );
     }
 
@@ -157,7 +171,7 @@ public class OpenSearchIndexService {
         try {
             List<Query> filters = new ArrayList<>();
             if (tenantId != null) {
-                filters.add(Query.of(q -> q.term(t -> t.field("tenantId.keyword").value(FieldValue.of(tenantId)))));
+                filters.add(Query.of(q -> q.term(t -> t.field("tenantId").value(FieldValue.of(tenantId)))));
             }
             filters.add(Query.of(q -> q.term(t -> t.field("isDeleted").value(FieldValue.of(false)))));
 

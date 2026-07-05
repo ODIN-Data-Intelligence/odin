@@ -11,6 +11,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -20,6 +22,8 @@ import java.util.List;
 @RequestMapping("/api/v1/search")
 @RequiredArgsConstructor
 public class SearchController {
+
+    private static final Logger log = LoggerFactory.getLogger(SearchController.class);
 
     private final OpenSearchIndexService indexService;
 
@@ -41,6 +45,10 @@ public class SearchController {
             @Parameter(description = "Entity type filter",
                 schema = @Schema(allowableValues = {"DATASET", "DATA_PRODUCT", "DISTRIBUTION"}))
             @RequestParam(required = false) String type,
+
+            @Parameter(description = "Comma-separated entity type filter (e.g. DATASET,DATA_PRODUCT)",
+                example = "DATASET,DATA_PRODUCT")
+            @RequestParam(required = false) String types,
 
             @Parameter(description = "Domain UUID filter", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
             @RequestParam(required = false) String domainId,
@@ -68,6 +76,9 @@ public class SearchController {
             @Parameter(description = "Vocabulary name filter (e.g. 'FIBO FND', 'schema.org')", example = "FIBO FND")
             @RequestParam(required = false) String vocab,
 
+            @Parameter(description = "Semantic type filter — IRI terminal fragment (e.g. 'Customer', 'Loan')", example = "Customer")
+            @RequestParam(required = false) String semanticType,
+
             @Parameter(description = "Zero-based page number", example = "0")
             @RequestParam(defaultValue = "0") int page,
 
@@ -75,8 +86,9 @@ public class SearchController {
             @RequestParam(defaultValue = "20") int size) {
 
         String tenantId = TenantContextHolder.get();
-        var result = indexService.search(q, type, domainId, lifecycleStatus, format, hasLineage,
-                tenantId, page, size, keyword, theme, vocabConcept, vocab);
+        var result = indexService.search(q, type, types, domainId, lifecycleStatus, format, hasLineage,
+                tenantId, page, size, keyword, theme, vocabConcept, vocab, semanticType);
+        log.debug("action=SEARCH q={} type={} page={} hits={}", q, type, page, result.totalHits());
 
         return new SearchResponse(
             result.documents(),

@@ -48,7 +48,25 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:http://localhost:8180/realms/datacatalog}
+          jwk-set-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:http://keycloak:8180/realms/datacatalog/protocol/openid-connect/certs}
+
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+
+  # Redis-backed cache so @CacheEvict on the active terms policy propagates across all replicas.
+  # Override SPRING_CACHE_TYPE=simple for standalone local runs without Redis.
+  cache:
+    type: ${SPRING_CACHE_TYPE:redis}
+    redis:
+      time-to-live: 10m
+      cache-null-values: false
+
+ai:
+  service:
+    url: ${AI_SERVICE_URL:http://ai-service:8005}
+    api-key: ${AI_SERVICE_API_KEY:dev-local}
 
 server:
   port: 8001
@@ -76,6 +94,9 @@ logging:
     com.odin.catalog: DEBUG
     org.springframework.kafka: INFO
     org.hibernate.SQL: DEBUG
+
+app:
+  dev-auth-enabled: ${APP_DEV_AUTH_ENABLED:false}
 
 ---
 spring:

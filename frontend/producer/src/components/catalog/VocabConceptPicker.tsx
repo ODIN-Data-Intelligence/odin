@@ -1,16 +1,23 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { vocabularyApi } from '@datacatalog/shared';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import TextField from '@mui/material/TextField';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import CircularProgress from '@mui/material/CircularProgress';
+import { vocabularyApi, iriFragment } from '@datacatalog/shared';
 import type { VocabularyConcept } from '@datacatalog/shared';
 
-interface VocabConceptPickerProps {
+interface Props {
   vocabularyId: string;
   vocabularyName: string;
   onSelect: (concept: VocabularyConcept) => void;
   onClose: () => void;
 }
 
-export default function VocabConceptPicker({ vocabularyId, vocabularyName, onSelect, onClose }: VocabConceptPickerProps) {
+export default function VocabConceptPicker({ vocabularyId, vocabularyName, onSelect, onClose }: Props) {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
 
@@ -26,42 +33,55 @@ export default function VocabConceptPicker({ vocabularyId, vocabularyName, onSel
   });
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4">
-        <div className="px-5 py-4 border-b flex items-center justify-between">
-          <h3 className="font-semibold text-gray-900">Search {vocabularyName} Concepts</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-        </div>
-        <div className="px-5 py-3">
-          <input
-            autoFocus
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder="Type to search concepts (min 2 chars)..."
-            className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-          />
-        </div>
-        <div className="px-5 pb-5 max-h-80 overflow-y-auto">
-          {isLoading && <p className="text-sm text-gray-400 text-center py-4">Searching...</p>}
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Search {vocabularyName} Concepts</DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: '8px !important', pb: 0 }}>
+        <TextField
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="Type to search concepts (min 2 chars)…"
+          size="small"
+          fullWidth
+          autoFocus
+        />
+        <Box sx={{ maxHeight: 320, overflowY: 'auto', mx: -3, px: 3, pb: 2 }}>
+          {isLoading && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress size={20} />
+            </Box>
+          )}
           {!isLoading && debouncedQuery.length >= 2 && concepts.length === 0 && (
-            <p className="text-sm text-gray-400 text-center py-4">No concepts found</p>
+            <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>No concepts found</Typography>
           )}
           {concepts.map(c => (
-            <button
+            <Box
               key={c.iri}
+              component="button"
               onClick={() => { onSelect(c); onClose(); }}
-              className="w-full text-left px-3 py-2.5 rounded hover:bg-blue-50 transition-colors"
+              sx={{
+                width: '100%', textAlign: 'left', px: 1.5, py: 1.25, border: 'none',
+                cursor: 'pointer', borderRadius: 1, display: 'block', bgcolor: 'transparent',
+                '&:hover': { bgcolor: 'primary.50' },
+              }}
             >
-              <p className="text-sm font-medium text-gray-900">{c.label}</p>
-              <p className="text-xs text-gray-400 font-mono mt-0.5 truncate">{c.iri}</p>
-              {c.definition && <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{c.definition}</p>}
-            </button>
+              <Typography variant="body2" fontWeight={600}>{c.label}</Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.iri}>
+                {iriFragment(c.iri)}
+              </Typography>
+              {c.definition && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                  {c.definition}
+                </Typography>
+              )}
+            </Box>
           ))}
           {debouncedQuery.length < 2 && (
-            <p className="text-xs text-gray-400 text-center py-4">Type at least 2 characters to search</p>
+            <Typography variant="caption" color="text.disabled" sx={{ textAlign: 'center', display: 'block', py: 4 }}>
+              Type at least 2 characters to search
+            </Typography>
           )}
-        </div>
-      </div>
-    </div>
+        </Box>
+      </DialogContent>
+    </Dialog>
   );
 }

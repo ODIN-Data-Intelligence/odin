@@ -1,8 +1,21 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { logicalModelApi, logicalElementApi } from '@datacatalog/shared';
-import VocabConceptBadge from './VocabConceptBadge';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Tooltip from '@mui/material/Tooltip';
+import IconButton from '@mui/material/IconButton';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import { logicalModelApi, logicalElementApi, useIriTranslations, resolveLabel, VocabConceptBadge, ClassificationBadge } from '@datacatalog/shared';
+import type { LogicalDataElement } from '@datacatalog/shared';
 
 interface LogicalSchemaTableProps {
   datasetId: string;
@@ -24,6 +37,12 @@ export default function LogicalSchemaTable({ datasetId }: LogicalSchemaTableProp
 
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
+  const unmappedIris = elements
+    .flatMap(el => el.vocabMappings ?? [])
+    .filter(m => !m.conceptLabel && !m.conceptDefinition)
+    .map(m => m.conceptIri);
+  const translations = useIriTranslations(unmappedIris);
+
   function toggleExpand(id: string) {
     setExpandedIds(prev => {
       const next = new Set(prev);
@@ -33,97 +52,180 @@ export default function LogicalSchemaTable({ datasetId }: LogicalSchemaTableProp
   }
 
   if (!publishedModel) {
-    return <p className="text-sm text-gray-400 text-center py-6">No logical model available.</p>;
+    return (
+      <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 6 }}>
+        No logical model available.
+      </Typography>
+    );
   }
 
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-xs text-gray-500">
-          {publishedModel.name} v{publishedModel.version}
-          <span className="ml-2 px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-xs">published</span>
-        </p>
-        <p className="text-xs text-gray-400">{elements.length} elements</p>
-      </div>
+  const classifiedCount = elements.filter(el => el.classification).length;
 
-      <div className="rounded-lg border border-gray-200 overflow-hidden">
-        <table className="min-w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Business Name</th>
-              <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Logical Type</th>
-              <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Vocabulary Concept</th>
-              <th className="px-3 py-2.5" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100 bg-white">
-            {elements.map(el => (
-              <>
-                <tr key={el.id} className="hover:bg-gray-50">
-                  <td className="px-3 py-2.5">
-                    <Link
-                      to={`/search?q=${encodeURIComponent(el.name)}`}
-                      title={`Search all datasets with element "${el.name}"`}
-                      className="font-medium text-gray-900 hover:text-blue-600 hover:underline"
-                    >
-                      {el.name}
-                    </Link>
-                    {el.label && el.label !== el.name && <p className="text-xs text-gray-500">{el.label}</p>}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    {el.logicalType ? (
-                      <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-medium">{el.logicalType}</span>
-                    ) : <span className="text-gray-400 text-xs">—</span>}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <div className="flex flex-wrap gap-1">
-                      {el.vocabMappings?.slice(0, 2).map(m => (
-                        <VocabConceptBadge key={m.id} iri={m.conceptIri} label={m.conceptLabel} matchType={m.matchType} />
-                      ))}
-                      {(el.vocabMappings?.length ?? 0) > 2 && (
-                        <span className="text-xs text-gray-400">+{(el.vocabMappings?.length ?? 0) - 2} more</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2.5 text-right">
-                    {(el.physicalColumn || el.physicalColumnRef) && (
-                      <button
-                        onClick={() => toggleExpand(el.id)}
-                        className="text-xs text-gray-400 hover:text-gray-600"
-                      >
-                        {expandedIds.has(el.id) ? 'hide physical ▲' : 'show physical ▼'}
-                      </button>
-                    )}
-                  </td>
-                </tr>
-                {expandedIds.has(el.id) && (
-                  <tr key={`${el.id}-physical`} className="bg-blue-50">
-                    <td colSpan={4} className="px-4 py-2">
-                      <div className="flex items-center gap-4 text-xs text-gray-600">
-                        <span className="font-mono font-medium">
-                          {el.physicalColumn?.name ?? el.physicalColumnRef?.column ?? '—'}
-                        </span>
-                        <span className="text-gray-400">
-                          {el.physicalColumn?.datatype ?? el.physicalColumnRef?.type ?? ''}
-                        </span>
-                        {el.physicalColumn?.description && (
-                          <span className="text-gray-500">{el.physicalColumn.description}</span>
-                        )}
-                        {(el.physicalColumn?.required || el.isRequired) && (
-                          <span className="px-1 py-0.5 bg-red-100 text-red-600 rounded">required</span>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </>
-            ))}
-            {elements.length === 0 && (
-              <tr><td colSpan={4} className="px-3 py-6 text-center text-gray-400 text-xs">No elements defined</td></tr>
+  return (
+    <Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="caption" color="text.secondary">
+            {publishedModel.name} v{publishedModel.version}
+          </Typography>
+          <Chip label="published" color="success" size="small" sx={{ height: 18, fontSize: 11 }} />
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          {classifiedCount > 0 && (
+            <Typography variant="caption" color="text.secondary">{classifiedCount}/{elements.length} classified</Typography>
+          )}
+          <Typography variant="caption" color="text.secondary">{elements.length} elements</Typography>
+        </Box>
+      </Box>
+
+      <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
+        <Box sx={{ overflowX: 'auto' }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow sx={{ bgcolor: 'grey.50' }}>
+                <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Business Name</TableCell>
+                <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Description</TableCell>
+                <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Logical Type</TableCell>
+                <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Classification</TableCell>
+                <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>PII</TableCell>
+                <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Vocabulary Concept</TableCell>
+                <TableCell sx={{ width: 40 }} />
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {elements.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} sx={{ textAlign: 'center', py: 4, color: 'text.disabled', fontSize: 12 }}>
+                    No elements defined
+                  </TableCell>
+                </TableRow>
+              )}
+              {elements.map(el => (
+                <ElementRows
+                  key={el.id}
+                  el={el}
+                  expanded={expandedIds.has(el.id)}
+                  onToggle={() => toggleExpand(el.id)}
+                  translations={translations}
+                />
+              ))}
+            </TableBody>
+          </Table>
+        </Box>
+      </Paper>
+    </Box>
+  );
+}
+
+function ElementRows({ el, expanded, onToggle, translations }: {
+  el: LogicalDataElement;
+  expanded: boolean;
+  onToggle: () => void;
+  translations: Record<string, string>;
+}) {
+  const hasPhysical = !!(el.physicalColumn || el.physicalColumnRef);
+
+  return (
+    <>
+      <TableRow hover>
+        <TableCell>
+          <Typography
+            component={Link}
+            to={`/search?q=${encodeURIComponent(el.name)}`}
+            variant="body2"
+            fontWeight={600}
+            color="primary"
+            title={`Search all datasets with element "${el.name}"`}
+            sx={{ textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+          >
+            {el.name}
+          </Typography>
+          {el.label && el.label !== el.name && (
+            <Typography variant="caption" color="text.secondary" display="block">{el.label}</Typography>
+          )}
+        </TableCell>
+
+        <TableCell sx={{ maxWidth: 200 }}>
+          {el.description
+            ? <Typography variant="caption" color="text.secondary" sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{el.description}</Typography>
+            : <Typography variant="caption" color="text.disabled">—</Typography>}
+        </TableCell>
+
+        <TableCell>
+          {el.logicalType
+            ? <Chip label={el.logicalType} size="small" color="secondary" variant="outlined" sx={{ height: 18, fontSize: 11 }} />
+            : <Typography variant="caption" color="text.disabled">—</Typography>}
+        </TableCell>
+
+        <TableCell>
+          {el.classification
+            ? <ClassificationBadge level={el.classification} />
+            : <Typography variant="caption" color="text.disabled">—</Typography>}
+        </TableCell>
+
+        <TableCell>
+          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'nowrap' }}>
+            {el.isPersonalInformation && (
+              <Tooltip title="Personal Information">
+                <Chip label="PII" size="small" color="error" sx={{ height: 18, fontSize: 11, fontWeight: 700 }} />
+              </Tooltip>
             )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+            {el.isDirectIdentifier && (
+              <Tooltip title="Direct Identifier">
+                <Chip label="ID" size="small" color="warning" sx={{ height: 18, fontSize: 11, fontWeight: 700 }} />
+              </Tooltip>
+            )}
+            {!el.isPersonalInformation && !el.isDirectIdentifier && (
+              <Typography variant="caption" color="text.disabled">—</Typography>
+            )}
+          </Box>
+        </TableCell>
+
+        <TableCell>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+            {el.vocabMappings?.slice(0, 2).map(m => (
+              <VocabConceptBadge
+                key={m.id}
+                iri={m.conceptIri}
+                label={resolveLabel(translations, m.conceptIri, m.conceptLabel, m.conceptDefinition)}
+                matchType={m.matchType}
+              />
+            ))}
+            {(el.vocabMappings?.length ?? 0) > 2 && (
+              <Typography variant="caption" color="text.secondary">+{(el.vocabMappings!.length - 2)} more</Typography>
+            )}
+          </Box>
+        </TableCell>
+
+        <TableCell align="right" sx={{ pr: 0.5 }}>
+          {hasPhysical && (
+            <IconButton size="small" onClick={onToggle}>
+              {expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+            </IconButton>
+          )}
+        </TableCell>
+      </TableRow>
+
+      {expanded && (
+        <TableRow sx={{ bgcolor: 'primary.50' }}>
+          <TableCell colSpan={7} sx={{ py: 1.5, px: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              <Typography variant="caption" fontFamily="monospace" fontWeight={700}>
+                {el.physicalColumn?.name ?? el.physicalColumnRef?.column ?? '—'}
+              </Typography>
+              {(el.physicalColumn?.datatype ?? el.physicalColumnRef?.type) && (
+                <Chip label={el.physicalColumn?.datatype ?? el.physicalColumnRef?.type} size="small" variant="outlined" sx={{ height: 18, fontSize: 11, fontFamily: 'monospace' }} />
+              )}
+              {el.physicalColumn?.description && (
+                <Typography variant="caption" color="text.secondary">{el.physicalColumn.description}</Typography>
+              )}
+              {(el.physicalColumn?.required || el.isRequired) && (
+                <Chip label="required" color="error" size="small" sx={{ height: 18, fontSize: 11 }} />
+              )}
+            </Box>
+          </TableCell>
+        </TableRow>
+      )}
+    </>
   );
 }

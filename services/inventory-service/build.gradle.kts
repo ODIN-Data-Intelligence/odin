@@ -19,6 +19,10 @@ dependencies {
     // API docs
     implementation(libs.springdoc.openapi)
 
+    implementation(libs.spring.boot.cache)
+    implementation(libs.spring.boot.data.redis)
+    implementation(libs.caffeine)
+
     compileOnly(libs.lombok)
     annotationProcessor(libs.lombok)
     implementation(libs.mapstruct)

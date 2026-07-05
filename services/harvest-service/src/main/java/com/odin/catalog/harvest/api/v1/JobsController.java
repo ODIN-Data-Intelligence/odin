@@ -1,20 +1,19 @@
 package com.odin.catalog.harvest.api.v1;
 
 import com.odin.catalog.harvest.api.v1.dto.HarvestJobRequest;
-import com.odin.catalog.harvest.infrastructure.jpa.entity.HarvestJobEntity;
-import com.odin.catalog.harvest.infrastructure.jpa.entity.HarvestRunEntity;
-import com.odin.catalog.harvest.infrastructure.jpa.repository.HarvestJobRepository;
-import com.odin.catalog.harvest.infrastructure.jpa.repository.HarvestRunRepository;
+import com.odin.catalog.harvest.api.v1.dto.HarvestJobResponse;
+import com.odin.catalog.harvest.api.v1.dto.HarvestRunResponse;
+import com.odin.catalog.harvest.application.HarvestJobService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.UUID;
@@ -25,8 +24,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class JobsController {
 
-    private final HarvestJobRepository jobRepository;
-    private final HarvestRunRepository runRepository;
+    private final HarvestJobService jobService;
 
     @Operation(summary = "List harvest jobs",
         description = "Returns all harvest jobs. Optionally filter by source UUID.")
@@ -35,11 +33,10 @@ public class JobsController {
         @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
     })
     @GetMapping
-    public List<HarvestJobEntity> list(
+    public List<HarvestJobResponse> list(
             @Parameter(description = "Filter by harvest source UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
             @RequestParam(required = false) UUID sourceId) {
-        if (sourceId != null) return jobRepository.findBySourceId(sourceId);
-        return jobRepository.findAll();
+        return jobService.list(sourceId);
     }
 
     @Operation(summary = "Get harvest job", description = "Returns a single harvest job by UUID.")
@@ -49,11 +46,10 @@ public class JobsController {
         @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
     })
     @GetMapping("/{id}")
-    public HarvestJobEntity get(
+    public HarvestJobResponse get(
             @Parameter(description = "Harvest job UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
             @PathVariable UUID id) {
-        return jobRepository.findById(id)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        return jobService.get(id);
     }
 
     @Operation(summary = "Create harvest job",
@@ -65,14 +61,39 @@ public class JobsController {
     })
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public HarvestJobEntity create(@RequestBody HarvestJobRequest request) {
-        HarvestJobEntity job = new HarvestJobEntity();
-        job.setSourceId(request.sourceId());
-        job.setName(request.name());
-        job.setScheduleCron(request.scheduleCron());
-        job.setFullRefresh(request.fullRefresh());
-        job.setEnabled(request.enabled());
-        return jobRepository.save(job);
+    public HarvestJobResponse create(@Valid @RequestBody HarvestJobRequest request) {
+        return jobService.create(request);
+    }
+
+    @Operation(summary = "Update harvest job",
+        description = "Replaces configuration fields of an existing harvest job. Does not affect in-progress runs.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Harvest job updated"),
+        @ApiResponse(responseCode = "400", description = "Validation error", content = @Content),
+        @ApiResponse(responseCode = "404", description = "Harvest job not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @PutMapping("/{id}")
+    public HarvestJobResponse update(
+            @Parameter(description = "Harvest job UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
+            @PathVariable UUID id,
+            @Valid @RequestBody HarvestJobRequest request) {
+        return jobService.update(id, request);
+    }
+
+    @Operation(summary = "Delete harvest job",
+        description = "Permanently deletes a harvest job. In-progress runs are not affected.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "204", description = "Deleted"),
+        @ApiResponse(responseCode = "404", description = "Harvest job not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(
+            @Parameter(description = "Harvest job UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
+            @PathVariable UUID id) {
+        jobService.delete(id);
     }
 
     @Operation(summary = "Trigger a harvest job run",
@@ -85,17 +106,9 @@ public class JobsController {
     })
     @PostMapping("/{id}/trigger")
     @ResponseStatus(HttpStatus.ACCEPTED)
-    public HarvestRunEntity trigger(
+    public HarvestRunResponse trigger(
             @Parameter(description = "Harvest job UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
             @PathVariable UUID id) {
-        HarvestJobEntity job = jobRepository.findById(id)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        HarvestRunEntity run = new HarvestRunEntity();
-        run.setJobId(id);
-        run.setSourceId(job.getSourceId());
-        run.setStatus("pending");
-        run.setTriggeredBy("api");
-        run.setFullRefresh(job.isFullRefresh());
-        return runRepository.save(run);
+        return jobService.trigger(id);
     }
 }

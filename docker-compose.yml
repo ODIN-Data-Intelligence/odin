@@ -10,6 +10,7 @@ volumes:
   pg-lineage-data:
   pg-identity-data:
   pg-ai-data:
+  pg-policy-data:
   opensearch-data:
   minio-data:
   kafka-data:
@@ -25,7 +26,7 @@ services:
     environment:
       POSTGRES_DB: inventory
       POSTGRES_USER: inventory
-      POSTGRES_PASSWORD: inventory
+      POSTGRES_PASSWORD: ${INVENTORY_DB_PASSWORD:-inventory}
     volumes:
       - pg-inventory-data:/var/lib/postgresql/data
     ports:
@@ -43,7 +44,7 @@ services:
     environment:
       POSTGRES_DB: harvest
       POSTGRES_USER: harvest
-      POSTGRES_PASSWORD: harvest
+      POSTGRES_PASSWORD: ${HARVEST_DB_PASSWORD:-harvest}
     volumes:
       - pg-harvest-data:/var/lib/postgresql/data
     ports:
@@ -61,7 +62,7 @@ services:
     environment:
       POSTGRES_DB: lineage
       POSTGRES_USER: lineage
-      POSTGRES_PASSWORD: lineage
+      POSTGRES_PASSWORD: ${LINEAGE_DB_PASSWORD:-lineage}
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - pg-lineage-data:/var/lib/postgresql/data
@@ -81,7 +82,7 @@ services:
     environment:
       POSTGRES_DB: identity
       POSTGRES_USER: identity
-      POSTGRES_PASSWORD: identity
+      POSTGRES_PASSWORD: ${IDENTITY_DB_PASSWORD:-identity}
     volumes:
       - pg-identity-data:/var/lib/postgresql/data
       - ./infra/postgres/identity-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -94,13 +95,31 @@ services:
       timeout: 5s
       retries: 5
 
+  postgres-policy:
+    image: postgres:16-alpine
+    container_name: postgres-policy
+    environment:
+      POSTGRES_DB: policy
+      POSTGRES_USER: policy
+      POSTGRES_PASSWORD: ${POLICY_DB_PASSWORD:-policy}
+    volumes:
+      - pg-policy-data:/var/lib/postgresql/data
+    ports:
+      - "5438:5432"
+    networks: [catalog-net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U policy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   postgres-ai:
     image: pgvector/pgvector:pg16
     container_name: postgres-ai
     environment:
       POSTGRES_DB: ai
       POSTGRES_USER: ai
-      POSTGRES_PASSWORD: ai
+      POSTGRES_PASSWORD: ${AI_DB_PASSWORD:-ai}
     volumes:
       - pg-ai-data:/var/lib/postgresql/data
     ports:
@@ -165,7 +184,7 @@ services:
       QUARKUS_PROFILE: prod
       REGISTRY_DATASOURCE_URL: jdbc:postgresql://postgres-inventory:5432/inventory
       REGISTRY_DATASOURCE_USERNAME: inventory
-      REGISTRY_DATASOURCE_PASSWORD: inventory
+      REGISTRY_DATASOURCE_PASSWORD: ${INVENTORY_DB_PASSWORD:-inventory}
     ports:
       - "8085:8080"
     depends_on:
@@ -219,8 +238,8 @@ services:
     container_name: minio
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     volumes:
       - minio-data:/data
     ports:
@@ -257,9 +276,9 @@ services:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres-identity:5432/keycloak
       KC_DB_USERNAME: identity
-      KC_DB_PASSWORD: identity
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_DB_PASSWORD: ${IDENTITY_DB_PASSWORD:-identity}
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
       KC_HTTP_PORT: 8180
       KC_HOSTNAME_STRICT: "false"
       KC_HTTP_ENABLED: "true"
@@ -277,6 +296,27 @@ services:
       timeout: 10s
       retries: 15
       start_period: 60s
+
+  # Registers APP_URL/* in the catalog-frontend Keycloak client's redirectUris.
+  # Re-runs on every `docker compose up` — idempotent (skips if already present).
+  keycloak-config:
+    image: python:3-alpine
+    container_name: keycloak-config
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    environment:
+      KEYCLOAK_URL: http://keycloak:8180
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      # Override APP_URL to match the IP/hostname users use to reach the producer UI.
+      # Default covers the standard local Docker Compose deployment.
+      APP_URL: ${APP_URL:-http://localhost:3000}
+    volumes:
+      - ./infra/keycloak/configure-redirect.sh:/configure-redirect.sh:ro
+    command: sh /configure-redirect.sh
+    restart: "no"
+    networks: [catalog-net]
 
   # ── Traefik ──────────────────────────────────────────────────────────────────
 
@@ -303,9 +343,11 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-inventory:5432/inventory
       SPRING_DATASOURCE_USERNAME: inventory
-      SPRING_DATASOURCE_PASSWORD: inventory
+      SPRING_DATASOURCE_PASSWORD: ${INVENTORY_DB_PASSWORD:-inventory}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8180/realms/datacatalog
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
+      APP_DEV_AUTH_ENABLED: "true"
     ports:
       - "8001:8001"
     depends_on:
@@ -313,11 +355,39 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     networks: [catalog-net]
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.inventory.rule=Host(`api.catalog.local`) && PathPrefix(`/inventory`)"
       - "traefik.http.services.inventory.loadbalancer.server.port=8001"
+
+  ai-service:
+    build:
+      context: .
+      dockerfile: services/ai-service/Dockerfile
+    container_name: ai-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-ai:5432/ai
+      SPRING_DATASOURCE_USERNAME: ai
+      SPRING_DATASOURCE_PASSWORD: ${AI_DB_PASSWORD:-ai}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_AI_OLLAMA_BASE_URL: http://host.docker.internal:11434
+      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-qwen3:4b}
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
+      CATALOG_SERVICE_URL: http://inventory-service:8001
+      APP_DEV_AUTH_ENABLED: "true"
+    ports:
+      - "8005:8005"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres-ai:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks: [catalog-net]
 
   harvest-service:
     build:
@@ -327,12 +397,12 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-harvest:5432/harvest
       SPRING_DATASOURCE_USERNAME: harvest
-      SPRING_DATASOURCE_PASSWORD: harvest
+      SPRING_DATASOURCE_PASSWORD: ${HARVEST_DB_PASSWORD:-harvest}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       MINIO_ENDPOINT: http://minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8180/realms/datacatalog
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      APP_DEV_AUTH_ENABLED: "true"
     ports:
       - "8002:8002"
     depends_on:
@@ -356,9 +426,9 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-lineage:5432/lineage
       SPRING_DATASOURCE_USERNAME: lineage
-      SPRING_DATASOURCE_PASSWORD: lineage
+      SPRING_DATASOURCE_PASSWORD: ${LINEAGE_DB_PASSWORD:-lineage}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8180/realms/datacatalog
+      APP_DEV_AUTH_ENABLED: "true"
     ports:
       - "8003:8003"
     depends_on:
@@ -380,7 +450,7 @@ services:
     environment:
       OPENSEARCH_URIS: http://opensearch:9200
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8180/realms/datacatalog
+      APP_DEV_AUTH_ENABLED: "true"
     ports:
       - "8004:8004"
     depends_on:
@@ -402,13 +472,13 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-identity:5432/identity
       SPRING_DATASOURCE_USERNAME: identity
-      SPRING_DATASOURCE_PASSWORD: identity
+      SPRING_DATASOURCE_PASSWORD: ${IDENTITY_DB_PASSWORD:-identity}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KEYCLOAK_SERVER_URL: http://keycloak:8180
       KEYCLOAK_REALM: datacatalog
       KEYCLOAK_CLIENT_ID: identity-service
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8180/realms/datacatalog
+      APP_DEV_AUTH_ENABLED: "true"
     ports:
       - "8006:8006"
     depends_on:
@@ -422,6 +492,34 @@ services:
       - "traefik.http.routers.identity.rule=Host(`api.catalog.local`) && PathPrefix(`/identity`)"
       - "traefik.http.services.identity.loadbalancer.server.port=8006"
 
+  policy-service:
+    build:
+      context: .
+      dockerfile: services/policy-service/Dockerfile
+    container_name: policy-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-policy:5432/policy
+      SPRING_DATASOURCE_USERNAME: policy
+      SPRING_DATASOURCE_PASSWORD: ${POLICY_DB_PASSWORD:-policy}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KEYCLOAK_SERVER_URL: http://keycloak:8180
+      KEYCLOAK_REALM: datacatalog
+      KEYCLOAK_CLIENT_ID: policy-service
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      APP_DEV_AUTH_ENABLED: "true"
+    ports:
+      - "8007:8007"
+    depends_on:
+      postgres-policy:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    networks: [catalog-net]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.policy.rule=Host(`api.catalog.local`) && PathPrefix(`/policy`)"
+      - "traefik.http.services.policy.loadbalancer.server.port=8007"
+
   # ── Frontends ────────────────────────────────────────────────────────────────
 
   frontend-producer:
@@ -430,22 +528,28 @@ services:
       dockerfile: producer/Dockerfile
     container_name: frontend-producer
     ports:
-      - "3000:80"
+      - "3000:8080"
+    environment:
+      # Both vars must match the IP/hostname reachable by the user's browser.
+      KEYCLOAK_URL: ${KEYCLOAK_URL:-http://localhost:8180}
+      APP_URL: ${APP_URL:-http://localhost:3000}
     networks: [catalog-net]
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.producer.rule=Host(`manage.catalog.local`)"
-      - "traefik.http.services.producer.loadbalancer.server.port=80"
+      - "traefik.http.services.producer.loadbalancer.server.port=8080"
 
   frontend-consumer:
     build:
       context: frontend
       dockerfile: consumer/Dockerfile
     container_name: frontend-consumer
+    environment:
+      CONSUMER_API_KEY: ${CONSUMER_API_KEY:-dev-consumer}
     ports:
-      - "3001:80"
+      - "3001:8080"
     networks: [catalog-net]
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.consumer.rule=Host(`catalog.local`)"
-      - "traefik.http.services.consumer.loadbalancer.server.port=80"
+      - "traefik.http.services.consumer.loadbalancer.server.port=8080"

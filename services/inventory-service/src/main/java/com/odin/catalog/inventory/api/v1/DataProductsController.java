@@ -3,6 +3,8 @@ package com.odin.catalog.inventory.api.v1;
 import com.odin.catalog.inventory.api.v1.dto.DataProductRequest;
 import com.odin.catalog.inventory.api.v1.dto.DataProductResponse;
 import com.odin.catalog.inventory.api.v1.dto.DatasetResponse;
+import com.odin.catalog.inventory.api.v1.dto.LifecycleTransitionRequest;
+import com.odin.catalog.inventory.api.v1.dto.LinkDatasetRequest;
 import com.odin.catalog.inventory.api.v1.dto.PageResponse;
 import com.odin.catalog.inventory.application.dataproduct.DataProductService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -14,13 +16,14 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 @Tag(name = "Data Products", description = "DPROD data products — business-level data ownership, lifecycle management, and dataset linking")
@@ -28,6 +31,8 @@ import java.util.UUID;
 @RequestMapping("/api/v1/data-products")
 @RequiredArgsConstructor
 public class DataProductsController {
+
+    private static final Logger log = LoggerFactory.getLogger(DataProductsController.class);
 
     private final DataProductService dataProductService;
 
@@ -71,6 +76,7 @@ public class DataProductsController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public DataProductResponse create(@Valid @RequestBody DataProductRequest request) {
+        log.info("action=CREATE_DATA_PRODUCT title={}", request.title());
         return dataProductService.create(request);
     }
 
@@ -86,6 +92,7 @@ public class DataProductsController {
             @Parameter(description = "Data product UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
             @PathVariable UUID id,
             @Valid @RequestBody DataProductRequest request) {
+        log.info("action=UPDATE_DATA_PRODUCT id={}", id);
         return dataProductService.update(id, request);
     }
 
@@ -98,15 +105,13 @@ public class DataProductsController {
         @ApiResponse(responseCode = "404", description = "Data product not found", content = @Content),
         @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
     })
-    @io.swagger.v3.oas.annotations.parameters.RequestBody(
-        description = "New lifecycle status",
-        content = @Content(schema = @Schema(example = "{\"status\": \"Deploy\"}")))
     @PatchMapping("/{id}/lifecycle")
     public DataProductResponse transitionLifecycle(
             @Parameter(description = "Data product UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
             @PathVariable UUID id,
-            @RequestBody Map<String, String> body) {
-        return dataProductService.transitionLifecycle(id, body.get("status"));
+            @Valid @RequestBody LifecycleTransitionRequest request) {
+        log.info("action=TRANSITION_LIFECYCLE id={} status={}", id, request.status());
+        return dataProductService.transitionLifecycle(id, request.status());
     }
 
     @Operation(summary = "Delete data product", description = "Soft-deletes a data product.")
@@ -120,6 +125,7 @@ public class DataProductsController {
     public void delete(
             @Parameter(description = "Data product UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
             @PathVariable UUID id) {
+        log.info("action=DELETE_DATA_PRODUCT id={}", id);
         dataProductService.delete(id);
     }
 
@@ -142,16 +148,14 @@ public class DataProductsController {
         @ApiResponse(responseCode = "204", description = "Dataset linked successfully"),
         @ApiResponse(responseCode = "404", description = "Data product not found", content = @Content)
     })
-    @io.swagger.v3.oas.annotations.parameters.RequestBody(
-        description = "Dataset to link",
-        content = @Content(schema = @Schema(example = "{\"datasetId\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\"}")))
     @PostMapping("/{id}/datasets")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void linkDataset(
             @Parameter(description = "Data product UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
             @PathVariable UUID id,
-            @RequestBody Map<String, String> body) {
-        dataProductService.linkDataset(id, UUID.fromString(body.get("datasetId")));
+            @Valid @RequestBody LinkDatasetRequest request) {
+        log.info("action=LINK_DATASET productId={} datasetId={}", id, request.datasetId());
+        dataProductService.linkDataset(id, request.datasetId());
     }
 
     @Operation(summary = "Unlink a dataset from this data product",
@@ -167,6 +171,7 @@ public class DataProductsController {
             @PathVariable UUID id,
             @Parameter(description = "Dataset UUID to unlink", example = "7c9e6679-7425-40de-944b-e07fc1f90ae7")
             @PathVariable UUID datasetId) {
+        log.info("action=UNLINK_DATASET productId={} datasetId={}", id, datasetId);
         dataProductService.unlinkDataset(id, datasetId);
     }
 }

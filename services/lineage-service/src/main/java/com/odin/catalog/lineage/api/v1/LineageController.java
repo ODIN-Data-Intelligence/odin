@@ -1,8 +1,11 @@
 package com.odin.catalog.lineage.api.v1;
 
+import com.odin.catalog.lineage.api.v1.dto.CatalogLinkRequest;
 import com.odin.catalog.lineage.api.v1.dto.LineageGraphResponse;
+import com.odin.catalog.lineage.api.v1.dto.LineageIdentityResponse;
+import com.odin.catalog.lineage.api.v1.dto.LineageLookupResponse;
+import com.odin.catalog.lineage.application.LineageGraphService;
 import com.odin.catalog.lineage.ingestion.OpenLineageHandler;
-import com.odin.catalog.lineage.infrastructure.age.AgeGraphRepository;
 import com.odin.catalog.lineage.infrastructure.jpa.repository.LineageDatasetRepository;
 import com.odin.catalog.shared.models.openlineage.RunEvent;
 import io.swagger.v3.oas.annotations.Operation;
@@ -12,16 +15,15 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Tag(name = "Lineage", description = "OpenLineage event ingestion and graph traversal — upstream, downstream, impact analysis, and catalog linking")
 @RestController
@@ -29,8 +31,10 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class LineageController {
 
+    private static final Logger log = LoggerFactory.getLogger(LineageController.class);
+
     private final OpenLineageHandler openLineageHandler;
-    private final AgeGraphRepository ageGraph;
+    private final LineageGraphService lineageGraphService;
     private final LineageDatasetRepository lineageDatasetRepository;
 
     @Operation(summary = "Ingest an OpenLineage run event",
@@ -45,35 +49,50 @@ public class LineageController {
     @PostMapping("/lineage")
     @ResponseStatus(HttpStatus.CREATED)
     public void ingestRunEvent(@RequestBody RunEvent event) {
+        log.info("action=INGEST_RUN_EVENT eventType={}", event.eventType());
         openLineageHandler.handle(event);
+    }
+
+    @Operation(summary = "Resolve namespace and name to a lineage dataset UUID",
+        description = "Looks up a lineage dataset by OpenLineage namespace and name, returning its lineage service UUID. "
+            + "Used by the lineage explorer to resolve user-entered namespace/name to an ID before querying the graph.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Lineage dataset UUID resolved"),
+        @ApiResponse(responseCode = "404", description = "No lineage dataset found for this namespace and name", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
+    })
+    @GetMapping("/datasets/lookup")
+    public ResponseEntity<LineageLookupResponse> lookupDataset(
+            @Parameter(description = "OpenLineage namespace", example = "snowflake://trading_dw")
+            @RequestParam String namespace,
+            @Parameter(description = "OpenLineage dataset name", example = "PUBLIC.TRADE_POSITIONS")
+            @RequestParam String name) {
+        return lineageDatasetRepository.findByNamespaceAndName(namespace, name)
+            .map(ds -> ResponseEntity.ok(new LineageLookupResponse(ds.getId())))
+            .orElse(ResponseEntity.notFound().build());
     }
 
     @Operation(summary = "Get lineage graph for a dataset",
         description = "Traverses the Apache AGE graph and returns nodes and edges reachable from the given dataset "
-            + "in the requested direction. Uses Cypher multi-hop queries (DERIVED_FROM edges) up to the specified depth.")
+            + "in the requested direction. Uses Cypher multi-hop queries (DERIVED_FROM edges) up to the specified depth. "
+            + "Each node includes its lineage UUID and optionally its catalog resource UUID.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Lineage graph nodes and edges"),
+        @ApiResponse(responseCode = "404", description = "Lineage dataset not found", content = @Content),
         @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
     })
-    @GetMapping("/datasets/{namespace}/{name}/lineage")
-    public LineageGraphResponse getLineage(
-            @Parameter(description = "OpenLineage namespace of the dataset", example = "snowflake://trading_dw")
-            @PathVariable String namespace,
-            @Parameter(description = "OpenLineage name of the dataset", example = "PUBLIC.TRADE_POSITIONS")
-            @PathVariable String name,
+    @GetMapping("/datasets/{id}/lineage")
+    public ResponseEntity<LineageGraphResponse> getLineage(
+            @Parameter(description = "Lineage service dataset UUID")
+            @PathVariable UUID id,
             @Parameter(description = "Traversal direction from the root dataset",
                 schema = @Schema(allowableValues = {"upstream", "downstream"}))
             @RequestParam(defaultValue = "upstream") String direction,
             @Parameter(description = "Maximum number of hops to traverse (1–10)", example = "5")
             @RequestParam(defaultValue = "5") int depth) {
-
-        List<Map<String, Object>> nodes = "upstream".equalsIgnoreCase(direction)
-            ? ageGraph.getUpstreamLineage(namespace, name, depth)
-            : ageGraph.getDownstreamLineage(namespace, name, depth);
-
-        List<Map<String, Object>> edges = buildEdgesForSubgraph(namespace, name, nodes);
-
-        return new LineageGraphResponse(namespace, name, direction, depth, nodes, edges);
+        return lineageGraphService.buildGraph(id, direction, depth)
+            .map(ResponseEntity::ok)
+            .orElse(ResponseEntity.notFound().build());
     }
 
     @Operation(summary = "Get downstream impact analysis for a dataset",
@@ -81,36 +100,35 @@ public class LineageController {
             + "Equivalent to a downstream lineage traversal.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Downstream impact graph"),
+        @ApiResponse(responseCode = "404", description = "Lineage dataset not found", content = @Content),
         @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
     })
-    @GetMapping("/datasets/{namespace}/{name}/impact")
-    public LineageGraphResponse getImpact(
-            @Parameter(description = "OpenLineage namespace of the dataset", example = "snowflake://trading_dw")
-            @PathVariable String namespace,
-            @Parameter(description = "OpenLineage name of the dataset", example = "PUBLIC.TRADE_POSITIONS")
-            @PathVariable String name,
+    @GetMapping("/datasets/{id}/impact")
+    public ResponseEntity<LineageGraphResponse> getImpact(
+            @Parameter(description = "Lineage service dataset UUID")
+            @PathVariable UUID id,
             @Parameter(description = "Maximum number of downstream hops to traverse", example = "10")
             @RequestParam(defaultValue = "10") int depth) {
-        List<Map<String, Object>> nodes = ageGraph.getDownstreamLineage(namespace, name, depth);
-        List<Map<String, Object>> edges = buildEdgesForSubgraph(namespace, name, nodes);
-        return new LineageGraphResponse(namespace, name, "downstream", depth, nodes, edges);
+        return lineageGraphService.buildImpact(id, depth)
+            .map(ResponseEntity::ok)
+            .orElse(ResponseEntity.notFound().build());
     }
 
     @Operation(summary = "Resolve lineage identity for a catalog dataset",
-        description = "Looks up the OpenLineage namespace and name for a given ODIN catalog dataset UUID. "
+        description = "Looks up the lineage UUID, namespace, and name for a given ODIN catalog dataset UUID. "
             + "Used by the consumer UI to fetch lineage for a dataset shown in the drawer.")
     @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Lineage namespace and name resolved",
-            content = @Content(schema = @Schema(example = "{\"namespace\": \"snowflake://trading_dw\", \"name\": \"PUBLIC.TRADE_POSITIONS\"}"))),
+        @ApiResponse(responseCode = "200", description = "Lineage identity resolved"),
         @ApiResponse(responseCode = "404", description = "No lineage dataset linked to this catalog ID", content = @Content),
         @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
     })
     @GetMapping("/catalog-datasets/{catalogId}/lineage-identity")
-    public ResponseEntity<Map<String, String>> getLineageIdentity(
+    public ResponseEntity<LineageIdentityResponse> getLineageIdentity(
             @Parameter(description = "ODIN catalog dataset UUID", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
             @PathVariable UUID catalogId) {
         return lineageDatasetRepository.findByCatalogResourceId(catalogId)
-            .map(ds -> ResponseEntity.ok(Map.of("namespace", ds.getNamespace(), "name", ds.getName())))
+            .map(ds -> ResponseEntity.ok(
+                new LineageIdentityResponse(ds.getId(), ds.getNamespace(), ds.getName())))
             .orElse(ResponseEntity.notFound().build());
     }
 
@@ -122,9 +140,6 @@ public class LineageController {
         @ApiResponse(responseCode = "404", description = "Lineage dataset not found", content = @Content),
         @ApiResponse(responseCode = "401", description = "Missing or invalid auth", content = @Content)
     })
-    @io.swagger.v3.oas.annotations.parameters.RequestBody(
-        description = "Catalog resource UUID to link",
-        content = @Content(schema = @Schema(example = "{\"catalogResourceId\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\"}")))
     @PutMapping("/datasets/{namespace}/{name}/catalog-link")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void linkCatalogResource(
@@ -132,28 +147,7 @@ public class LineageController {
             @PathVariable String namespace,
             @Parameter(description = "OpenLineage dataset name", example = "PUBLIC.TRADE_POSITIONS")
             @PathVariable String name,
-            @RequestBody Map<String, String> body) {
-        lineageDatasetRepository.findByNamespaceAndName(namespace, name).ifPresent(ds -> {
-            ds.setCatalogResourceId(UUID.fromString(body.get("catalogResourceId")));
-            lineageDatasetRepository.save(ds);
-        });
-    }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private List<Map<String, Object>> buildEdgesForSubgraph(
-            String rootNs, String rootName, List<Map<String, Object>> nodes) {
-        Set<String> nodeKeys = nodes.stream()
-            .map(n -> n.get("namespace") + "/" + n.get("name"))
-            .collect(Collectors.toSet());
-        nodeKeys.add(rootNs + "/" + rootName);
-
-        return ageGraph.getAllDerivedFromEdges().stream()
-            .filter(e -> {
-                String from = e.get("from_ns") + "/" + e.get("from_name");
-                String to   = e.get("to_ns")   + "/" + e.get("to_name");
-                return nodeKeys.contains(from) && nodeKeys.contains(to);
-            })
-            .toList();
+            @Valid @RequestBody CatalogLinkRequest request) {
+        lineageGraphService.linkCatalogResource(namespace, name, request.catalogResourceId());
     }
 }

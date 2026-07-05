@@ -21,6 +21,10 @@ public abstract class ResourceEntity {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    @Version
+    @Column(nullable = false)
+    private Long lockVersion;
+
     @Column(name = "resource_type", insertable = false, updatable = false)
     private String resourceType;
 

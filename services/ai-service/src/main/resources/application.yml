@@ -37,15 +37,15 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:http://localhost:8180/realms/datacatalog}
+          jwk-set-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:http://keycloak:8180/realms/datacatalog/protocol/openid-connect/certs}
 
   ai:
     ollama:
       base-url: ${SPRING_AI_OLLAMA_BASE_URL:http://localhost:11434}
       chat:
-        model: llama3.2
+        model: ${OLLAMA_CHAT_MODEL:qwen3:latest}
       embedding:
-        model: nomic-embed-text
+        model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
     openai:
       api-key: ${OPENAI_API_KEY:}
     vectorstore:
@@ -59,6 +59,10 @@ catalog:
   service:
     url: ${CATALOG_SERVICE_URL:http://inventory-service:8001}
     api-key: ${CATALOG_SERVICE_API_KEY:dev-internal}
+
+search:
+  service:
+    url: ${SEARCH_SERVICE_URL:http://search-service:8004}
 
 server:
   port: 8005
@@ -84,3 +88,11 @@ springdoc:
     operationsSorter: method
     tagsSorter: alpha
     tryItOutEnabled: true
+
+app:
+  dev-auth-enabled: ${APP_DEV_AUTH_ENABLED:false}
+  agentic:
+    memory:
+      # Long-term proposer memory for the agentic review loop (lessons + exemplars in the vector store)
+      enabled: ${APP_AGENTIC_MEMORY_ENABLED:true}
+      top-k: ${APP_AGENTIC_MEMORY_TOP_K:3}

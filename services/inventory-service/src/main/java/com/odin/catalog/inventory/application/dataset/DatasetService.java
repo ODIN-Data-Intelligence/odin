@@ -1,26 +1,64 @@
 package com.odin.catalog.inventory.application.dataset;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.odin.catalog.inventory.api.v1.dto.DatasetActivityResponse;
+import com.odin.catalog.inventory.api.v1.dto.DatasetAuditResponse;
 import com.odin.catalog.inventory.api.v1.dto.DatasetRequest;
 import com.odin.catalog.inventory.api.v1.dto.DatasetResponse;
+import com.odin.catalog.inventory.api.v1.dto.LogicalElementAuditResponse;
+import com.odin.catalog.inventory.api.v1.dto.LogicalModelAuditResponse;
+import com.odin.catalog.inventory.api.v1.dto.OwnershipProposalResponse;
 import com.odin.catalog.inventory.api.v1.dto.PageResponse;
+import com.odin.catalog.inventory.infrastructure.jpa.entity.DatasetAuditLogEntity;
 import com.odin.catalog.inventory.infrastructure.jpa.entity.DatasetEntity;
+import com.odin.catalog.inventory.infrastructure.jpa.entity.LogicalElementAuditLogEntity;
+import com.odin.catalog.inventory.infrastructure.jpa.entity.LogicalModelAuditLogEntity;
+import com.odin.catalog.inventory.infrastructure.jpa.entity.OwnershipProposalEntity;
+import com.odin.catalog.inventory.infrastructure.jpa.repository.DatasetAuditLogRepository;
 import com.odin.catalog.inventory.infrastructure.jpa.repository.DatasetRepository;
+import com.odin.catalog.inventory.infrastructure.jpa.repository.LogicalElementAuditLogRepository;
+import com.odin.catalog.inventory.infrastructure.jpa.repository.LogicalModelAuditLogRepository;
+import com.odin.catalog.inventory.infrastructure.jpa.repository.OwnershipProposalRepository;
 import com.odin.catalog.inventory.infrastructure.kafka.CatalogEventProducer;
+import com.odin.catalog.shared.auth.filter.ApiKeyAuthenticationFilter.ApiKeyPrincipal;
 import com.odin.catalog.shared.auth.filter.TenantContextHolder;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class DatasetService {
 
+    private static final Logger log = LoggerFactory.getLogger(DatasetService.class);
+
+    private static final int ACTIVITY_FETCH_CAP = 200;
+
     private final DatasetRepository datasetRepository;
+    private final DatasetAuditLogRepository auditLogRepository;
+    private final LogicalModelAuditLogRepository modelAuditLogRepository;
+    private final LogicalElementAuditLogRepository elementAuditLogRepository;
+    private final OwnershipProposalRepository proposalRepository;
     private final CatalogEventProducer eventProducer;
+    private final ObjectMapper objectMapper;
+    private final com.odin.catalog.inventory.application.logical.LogicalModelService logicalModelService;
 
     @Transactional(readOnly = true)
     public PageResponse<DatasetResponse> list(UUID catalogId, String sourceUri, Pageable pageable) {
@@ -50,24 +88,272 @@ public class DatasetService {
         applyRequest(entity, request, tenantId);
         entity = datasetRepository.save(entity);
         eventProducer.publishDatasetChanged("CREATED", entity);
+        UserContext uc = currentUser();
+        audit(entity.getId(), "CREATED", uc.id(), uc.email(), null, toResponse(entity), tenantId);
+        log.info("action=DATASET_CREATED datasetId={} tenantId={} title={}", entity.getId(), tenantId, entity.getTitle());
         return toResponse(entity);
     }
 
     @Transactional
     public DatasetResponse update(UUID id, DatasetRequest request) {
         DatasetEntity entity = findOrThrow(id);
+        DatasetResponse before = toResponse(entity);
         applyRequest(entity, request, entity.getTenantId());
         entity = datasetRepository.save(entity);
         eventProducer.publishDatasetChanged("UPDATED", entity);
-        return toResponse(entity);
+        DatasetResponse after = toResponse(entity);
+        UserContext uc = currentUser();
+        audit(id, "UPDATED", uc.id(), uc.email(), before, after, entity.getTenantId());
+        log.info("action=DATASET_UPDATED datasetId={} title={}", id, entity.getTitle());
+        return after;
     }
 
     @Transactional
     public void delete(UUID id) {
         DatasetEntity entity = findOrThrow(id);
+        DatasetResponse before = toResponse(entity);
         entity.setDeleted(true);
         datasetRepository.save(entity);
         eventProducer.publishDatasetChanged("DELETED", entity);
+        UserContext uc = currentUser();
+        audit(id, "DELETED", uc.id(), uc.email(), before, null, entity.getTenantId());
+        log.info("action=DATASET_DELETED datasetId={}", id);
+    }
+
+    // ── Ownership ────────────────────────────────────────────────────────────
+
+    @Transactional
+    public DatasetResponse assignOwner(UUID datasetId, UUID userId) {
+        DatasetEntity entity = findOrThrow(datasetId);
+        if (entity.getOwnerId() != null) {
+            throw new IllegalStateException(
+                "Dataset already has an owner; submit a transfer proposal instead");
+        }
+        entity.setOwnerId(userId);
+        entity = datasetRepository.save(entity);
+        UserContext uc = currentUser();
+        audit(datasetId, "OWNER_ASSIGNED", uc.id(), uc.email(), null, toResponse(entity), entity.getTenantId());
+        log.info("action=OWNER_ASSIGNED datasetId={} userId={}", datasetId, userId);
+        return toResponse(entity);
+    }
+
+    @Transactional
+    public OwnershipProposalResponse proposeTransfer(UUID datasetId, UUID proposedOwnerId) {
+        DatasetEntity entity = findOrThrow(datasetId);
+        UserContext uc = currentUser();
+        UUID proposedById = uc.id() != null ? UUID.fromString(uc.id()) : null;
+
+        // Cancel any pre-existing pending proposals
+        proposalRepository.findByDatasetIdAndStatus(datasetId, "PENDING")
+            .forEach(p -> {
+                p.setStatus("REJECTED");
+                p.setResolvedAt(OffsetDateTime.now());
+            });
+
+        OwnershipProposalEntity proposal = new OwnershipProposalEntity();
+        proposal.setDatasetId(datasetId);
+        proposal.setProposedOwnerId(proposedOwnerId);
+        proposal.setProposedById(proposedById);
+        proposal.setTenantId(entity.getTenantId());
+        proposal = proposalRepository.save(proposal);
+
+        audit(datasetId, "OWNER_TRANSFER_PROPOSED", uc.id(), uc.email(), null, null, entity.getTenantId());
+        log.info("action=OWNER_TRANSFER_PROPOSED datasetId={} proposalId={} proposedOwnerId={}", datasetId, proposal.getId(), proposedOwnerId);
+        return toProposalResponse(proposal);
+    }
+
+    @Transactional
+    public DatasetResponse approveTransfer(UUID datasetId, UUID proposalId, String note) {
+        DatasetEntity entity = findOrThrow(datasetId);
+        UserContext uc = currentUser();
+        UUID callerId = uc.id() != null ? UUID.fromString(uc.id()) : null;
+
+        // Only the current owner can approve (system/admin bypasses this check)
+        if (entity.getOwnerId() != null && callerId != null
+                && !entity.getOwnerId().equals(callerId)
+                && !"system".equals(uc.id())) {
+            throw new IllegalArgumentException("Only the current owner can approve a transfer proposal");
+        }
+
+        OwnershipProposalEntity proposal = proposalRepository.findByIdAndDatasetId(proposalId, datasetId)
+            .orElseThrow(() -> new NoSuchElementException("Proposal not found: " + proposalId));
+
+        if (!"PENDING".equals(proposal.getStatus())) {
+            throw new IllegalStateException("Proposal is no longer pending");
+        }
+
+        proposal.setStatus("APPROVED");
+        proposal.setResolvedAt(OffsetDateTime.now());
+        proposal.setNote(note);
+        proposalRepository.save(proposal);
+
+        entity.setOwnerId(proposal.getProposedOwnerId());
+        entity = datasetRepository.save(entity);
+
+        audit(datasetId, "OWNER_TRANSFER_APPROVED", uc.id(), uc.email(), null, toResponse(entity), entity.getTenantId());
+        log.info("action=OWNER_TRANSFER_APPROVED datasetId={} proposalId={} newOwnerId={}", datasetId, proposalId, proposal.getProposedOwnerId());
+        return toResponse(entity);
+    }
+
+    @Transactional
+    public OwnershipProposalResponse rejectTransfer(UUID datasetId, UUID proposalId, String note) {
+        DatasetEntity entity = findOrThrow(datasetId);
+        UserContext uc = currentUser();
+        UUID callerId = uc.id() != null ? UUID.fromString(uc.id()) : null;
+
+        if (entity.getOwnerId() != null && callerId != null
+                && !entity.getOwnerId().equals(callerId)
+                && !"system".equals(uc.id())) {
+            throw new IllegalArgumentException("Only the current owner can reject a transfer proposal");
+        }
+
+        OwnershipProposalEntity proposal = proposalRepository.findByIdAndDatasetId(proposalId, datasetId)
+            .orElseThrow(() -> new NoSuchElementException("Proposal not found: " + proposalId));
+
+        if (!"PENDING".equals(proposal.getStatus())) {
+            throw new IllegalStateException("Proposal is no longer pending");
+        }
+
+        proposal.setStatus("REJECTED");
+        proposal.setResolvedAt(OffsetDateTime.now());
+        proposal.setNote(note);
+        proposalRepository.save(proposal);
+
+        audit(datasetId, "OWNER_TRANSFER_REJECTED", uc.id(), uc.email(), null, null, entity.getTenantId());
+        log.info("action=OWNER_TRANSFER_REJECTED datasetId={} proposalId={}", datasetId, proposalId);
+        return toProposalResponse(proposal);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<OwnershipProposalResponse> getPendingProposal(UUID datasetId) {
+        findOrThrow(datasetId);
+        return proposalRepository.findByDatasetIdAndStatus(datasetId, "PENDING")
+            .stream().findFirst()
+            .map(this::toProposalResponse);
+    }
+
+    // ── Audit history ────────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public PageResponse<DatasetAuditResponse> getHistory(UUID datasetId, Pageable pageable) {
+        findOrThrow(datasetId);
+        var page = auditLogRepository.findByDatasetIdOrderByCreatedAtDesc(datasetId, pageable);
+        return PageResponse.of(page.map(this::toAuditResponse));
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<LogicalElementAuditResponse> getElementHistory(UUID datasetId, Pageable pageable) {
+        findOrThrow(datasetId);
+        return logicalModelService.getElementHistory(datasetId, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<LogicalModelAuditResponse> getModelHistory(UUID datasetId, Pageable pageable) {
+        findOrThrow(datasetId);
+        return logicalModelService.getModelHistory(datasetId, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<DatasetActivityResponse> getActivity(UUID datasetId, Pageable pageable) {
+        findOrThrow(datasetId);
+        Pageable capped = PageRequest.of(0, ACTIVITY_FETCH_CAP, Sort.by(Sort.Direction.DESC, "createdAt"));
+
+        List<DatasetActivityResponse> merged = new ArrayList<>();
+        auditLogRepository.findByDatasetIdOrderByCreatedAtDesc(datasetId, capped)
+            .forEach(e -> merged.add(toActivity(e)));
+        modelAuditLogRepository.findByDatasetIdOrderByCreatedAtDesc(datasetId, capped)
+            .forEach(e -> merged.add(toActivity(e)));
+        elementAuditLogRepository.findByDatasetIdOrderByCreatedAtDesc(datasetId, capped)
+            .forEach(e -> merged.add(toActivity(e)));
+        merged.sort(Comparator.comparing(DatasetActivityResponse::createdAt).reversed());
+
+        int total = merged.size();
+        int start = Math.min((int) pageable.getOffset(), total);
+        int end = Math.min(start + pageable.getPageSize(), total);
+        List<DatasetActivityResponse> pageContent = merged.subList(start, end);
+        int totalPages = pageable.getPageSize() == 0 ? 0 : (int) Math.ceil((double) total / pageable.getPageSize());
+
+        return new PageResponse<>(pageContent, pageable.getPageNumber(), pageable.getPageSize(), total, totalPages);
+    }
+
+    private DatasetActivityResponse toActivity(DatasetAuditLogEntity e) {
+        String name = extractField(e.getPayloadAfter(), e.getPayloadBefore(), "title");
+        return new DatasetActivityResponse(
+            e.getId(), "DATASET", e.getDatasetId(), null, null, name,
+            e.getEventType(), e.getChangedById(), e.getChangedByEmail(),
+            e.getPayloadBefore(), e.getPayloadAfter(), e.getCreatedAt()
+        );
+    }
+
+    private DatasetActivityResponse toActivity(LogicalModelAuditLogEntity e) {
+        String name = extractField(e.getPayloadAfter(), e.getPayloadBefore(), "name");
+        return new DatasetActivityResponse(
+            e.getId(), "MODEL", e.getDatasetId(), e.getLogicalModelId(), null, name,
+            e.getEventType(), e.getChangedById(), e.getChangedByEmail(),
+            e.getPayloadBefore(), e.getPayloadAfter(), e.getCreatedAt()
+        );
+    }
+
+    private DatasetActivityResponse toActivity(LogicalElementAuditLogEntity e) {
+        String name = extractField(e.getPayloadAfter(), e.getPayloadBefore(), "name");
+        return new DatasetActivityResponse(
+            e.getId(), "ELEMENT", e.getDatasetId(), e.getLogicalModelId(), e.getLogicalElementId(), name,
+            e.getEventType(), e.getChangedById(), e.getChangedByEmail(),
+            e.getPayloadBefore(), e.getPayloadAfter(), e.getCreatedAt()
+        );
+    }
+
+    private String extractField(String payloadAfter, String payloadBefore, String field) {
+        for (String json : new String[]{payloadAfter, payloadBefore}) {
+            if (json == null) continue;
+            try {
+                String value = objectMapper.readTree(json).path(field).asText(null);
+                if (value != null) return value;
+            } catch (Exception ignored) { /* fall through to next candidate */ }
+        }
+        return null;
+    }
+
+    // ── Internal helpers ─────────────────────────────────────────────────────
+
+    private void audit(UUID datasetId, String eventType, String changedById, String changedByEmail,
+                       DatasetResponse before, DatasetResponse after, UUID tenantId) {
+        DatasetAuditLogEntity log = new DatasetAuditLogEntity();
+        log.setDatasetId(datasetId);
+        log.setEventType(eventType);
+        log.setChangedById(changedById);
+        log.setChangedByEmail(changedByEmail);
+        log.setPayloadBefore(toJson(before));
+        log.setPayloadAfter(toJson(after));
+        log.setTenantId(tenantId);
+        auditLogRepository.save(log);
+    }
+
+    private String toJson(Object obj) {
+        if (obj == null) return null;
+        try {
+            return objectMapper.writeValueAsString(obj);
+        } catch (JsonProcessingException e) {
+            return null;
+        }
+    }
+
+    private record UserContext(String id, String email) {}
+
+    private UserContext currentUser() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) return new UserContext(null, null);
+
+        Object principal = auth.getPrincipal();
+        if (principal instanceof ApiKeyPrincipal akp) {
+            return new UserContext(akp.ownerId(), null);
+        }
+        if (principal instanceof Jwt jwt) {
+            String sub = jwt.getSubject();
+            String email = jwt.getClaimAsString("email");
+            return new UserContext(sub, email);
+        }
+        return new UserContext(auth.getName(), null);
     }
 
     private void applyRequest(DatasetEntity entity, DatasetRequest req, UUID tenantId) {
@@ -83,6 +369,7 @@ public class DatasetService {
         entity.setLicense(req.license());
         entity.setVersion(req.version());
         entity.setSourceUri(req.sourceUri());
+        entity.setHasPolicy(req.hasPolicy());
     }
 
     private DatasetEntity findOrThrow(UUID id) {
@@ -98,7 +385,29 @@ public class DatasetService {
             e.getAccrualPeriodicity(), e.getKeywords(), e.getThemes(),
             e.getLanguage(), e.getLicense(), e.getVersion(),
             e.getSourceUri(), e.isDeleted(),
-            e.getCreatedAt(), e.getUpdatedAt()
+            e.getCreatedAt(), e.getUpdatedAt(),
+            e.getOwnerId(), null, e.getHasPolicy()
         );
+    }
+
+    private OwnershipProposalResponse toProposalResponse(OwnershipProposalEntity e) {
+        return new OwnershipProposalResponse(
+            e.getId(), e.getDatasetId(), e.getProposedOwnerId(),
+            e.getProposedById(), e.getStatus(), e.getCreatedAt(), e.getResolvedAt(),
+            e.getNote()
+        );
+    }
+
+    private DatasetAuditResponse toAuditResponse(DatasetAuditLogEntity e) {
+        return new DatasetAuditResponse(
+            e.getId(), e.getDatasetId(), e.getEventType(),
+            e.getChangedById(), e.getChangedByEmail(),
+            e.getPayloadBefore(), e.getPayloadAfter(),
+            e.getCreatedAt()
+        );
+    }
+
+    private List<OwnershipProposalResponse> toProposalResponseList(List<OwnershipProposalEntity> entities) {
+        return entities.stream().map(this::toProposalResponse).toList();
     }
 }

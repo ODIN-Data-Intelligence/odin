@@ -15,6 +15,7 @@ minio                 = "8.5.9"
 json-schema-validator = "1.3.3"
 langchain4j           = "0.36.0"
 mapstruct             = "1.5.5.Final"
+caffeine              = "3.1.8"
 testcontainers        = "1.19.8"
 junit                 = "5.10.3"
 
@@ -69,6 +70,9 @@ langchain4j-core       = { module = "dev.langchain4j:langchain4j-core",         
 langchain4j            = { module = "dev.langchain4j:langchain4j",                       version.ref = "langchain4j" }
 langchain4j-ollama     = { module = "dev.langchain4j:langchain4j-ollama",                version.ref = "langchain4j" }
 lombok                 = { module = "org.projectlombok:lombok" }
+spring-boot-cache      = { module = "org.springframework.boot:spring-boot-starter-cache" }
+spring-boot-data-redis = { module = "org.springframework.boot:spring-boot-starter-data-redis" }
+caffeine               = { module = "com.github.ben-manes.caffeine:caffeine", version.ref = "caffeine" }
 
 # Testing
 testcontainers-bom     = { module = "org.testcontainers:testcontainers-bom",             version.ref = "testcontainers" }

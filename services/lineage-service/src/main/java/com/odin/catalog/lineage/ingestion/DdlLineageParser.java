@@ -48,8 +48,9 @@ public class DdlLineageParser {
             upsertDataset(srcNs, srcName);
             ageGraph.mergeDatasetNode(srcNs, srcName);
             ageGraph.mergeDerivedFromEdge(srcNs, srcName, targetNamespace, targetName);
-            log.debug("DDL lineage: {}.{} DERIVED_FROM {}.{}", targetNamespace, targetName, srcNs, srcName);
+            log.debug("action=DDL_EDGE_CREATED target={}.{} source={}.{}", targetNamespace, targetName, srcNs, srcName);
         }
+        log.info("action=DDL_LINEAGE_PROCESSED target={}.{} edgeCount={}", targetNamespace, targetName, sourceRefs.size());
     }
 
     private List<String[]> extractSourceTables(String ddl, String dialect) {

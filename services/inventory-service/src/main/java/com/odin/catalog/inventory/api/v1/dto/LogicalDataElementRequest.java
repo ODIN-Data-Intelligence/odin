@@ -2,7 +2,6 @@ package com.odin.catalog.inventory.api.v1.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 
 @Schema(description = "Request body for creating or updating a logical data element within a model")
 public record LogicalDataElementRequest(
@@ -25,7 +24,7 @@ public record LogicalDataElementRequest(
     String logicalType,
 
     @Schema(description = "Display order within the logical model (1-based)", example = "1")
-    @NotNull Integer ordinal,
+    Integer ordinal,
 
     @Schema(description = "Whether this element must always have a value", example = "true")
     boolean isRequired,
@@ -34,6 +33,16 @@ public record LogicalDataElementRequest(
     boolean isIdentifier,
 
     @Schema(description = "Whether null values are permitted", example = "false")
-    boolean isNullable
+    boolean isNullable,
+
+    @Schema(description = "Data classification override set by the data owner",
+        allowableValues = {"PUBLIC", "INTERNAL", "CONFIDENTIAL", "HIGH_CONFIDENTIAL"})
+    String classification,
+
+    @Schema(description = "Whether this element contains personal information about a natural person")
+    boolean isPersonalInformation,
+
+    @Schema(description = "Whether this element is a direct identifier (name, email, SSN, passport, etc.)")
+    boolean isDirectIdentifier
 
 ) {}

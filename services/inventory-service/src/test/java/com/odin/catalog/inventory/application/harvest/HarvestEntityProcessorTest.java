@@ -273,7 +273,7 @@ class HarvestEntityProcessorTest {
             "trading/trades", sourceUri,
             "Trades", "description", null, null,
             List.of("tag"), List.of("Finance"),
-            cols, null
+            List.of(), cols, null
         );
     }
 
@@ -285,7 +285,7 @@ class HarvestEntityProcessorTest {
             sourceKey, sourceUri,
             title, null, null, null,
             List.of(), List.of(),
-            cols, null
+            List.of(), cols, null
         );
     }
 

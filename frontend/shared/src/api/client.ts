@@ -1,7 +1,24 @@
 const BASE_HEADERS = { 'Content-Type': 'application/json' };
 
+// Token provider — must be replaced at app startup via setTokenProvider().
+// Defaults to null so uninitialised callers receive no auth header rather than
+// reading a potentially stale token from localStorage.
+let _getToken: () => string | null = () => null;
+
+export function setTokenProvider(fn: () => string | null): void {
+  _getToken = fn;
+}
+
+/**
+ * Returns the current auth token from the registered provider. Use this for hand-rolled
+ * fetch calls (e.g. SSE streams) that can't go through get/post but still need the Bearer token.
+ */
+export function getAuthToken(): string | null {
+  return _getToken();
+}
+
 function getAuthHeader(): Record<string, string> {
-  const token = localStorage.getItem('access_token');
+  const token = _getToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 

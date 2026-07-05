@@ -8,8 +8,6 @@ kind: Ingress
 metadata:
   name: {{ include "odin-catalog.fullname" . }}-consumer
   labels: {{- include "odin-catalog.labels" . | nindent 4 }}
-  annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   rules:
@@ -51,64 +49,70 @@ spec:
   tls: {{- toYaml . | nindent 4 }}
   {{- end }}
 
-{{/* ── API gateway (routes to each service by path prefix) ─────────────── */}}
+{{/* ── Keycloak ─────────────────────────────────────────────────────────── */}}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "odin-catalog.fullname" . }}-api
+  name: {{ include "odin-catalog.fullname" . }}-keycloak
   labels: {{- include "odin-catalog.labels" . | nindent 4 }}
   annotations:
-    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "4"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_busy_buffers_size 256k;
+      proxy_buffers           4 256k;
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   rules:
-    - host: {{ .Values.ingress.apiHost }}
+    - host: {{ .Values.ingress.keycloakHost }}
       http:
         paths:
-          - path: /inventory/
+          - path: /
             pathType: Prefix
             backend:
               service:
-                name: {{ include "odin-catalog.fullname" . }}-inventory-service
+                name: {{ include "odin-catalog.fullname" . }}-keycloak
                 port:
-                  number: {{ .Values.services.inventoryService.port }}
-          - path: /harvest/
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ include "odin-catalog.fullname" . }}-harvest-service
-                port:
-                  number: {{ .Values.services.harvestService.port }}
-          - path: /lineage/
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ include "odin-catalog.fullname" . }}-lineage-service
-                port:
-                  number: {{ .Values.services.lineageService.port }}
-          - path: /search/
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ include "odin-catalog.fullname" . }}-search-service
-                port:
-                  number: {{ .Values.services.searchService.port }}
-          - path: /ai/
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ include "odin-catalog.fullname" . }}-ai-service
-                port:
-                  number: {{ .Values.services.aiService.port }}
-          - path: /identity/
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ include "odin-catalog.fullname" . }}-identity-service
-                port:
-                  number: {{ .Values.services.identityService.port }}
+                  number: 8180
   {{- with .Values.ingress.tls }}
   tls: {{- toYaml . | nindent 4 }}
   {{- end }}
+
+{{/* ── API gateway — one ingress per service, strips path prefix ─────────── */}}
+{{- $apiServices := list
+  (dict "path" "inventory" "svc" "inventory-service" "port" .Values.services.inventoryService.port)
+  (dict "path" "harvest"   "svc" "harvest-service"   "port" .Values.services.harvestService.port)
+  (dict "path" "lineage"   "svc" "lineage-service"   "port" .Values.services.lineageService.port)
+  (dict "path" "search"    "svc" "search-service"    "port" .Values.services.searchService.port)
+  (dict "path" "ai"        "svc" "ai-service"        "port" .Values.services.aiService.port)
+  (dict "path" "identity"  "svc" "identity-service"  "port" .Values.services.identityService.port)
+  (dict "path" "policy"    "svc" "policy-service"    "port" .Values.services.policyService.port)
+}}
+{{- range $apiServices }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "odin-catalog.fullname" $root }}-api-{{ .path }}
+  labels: {{- include "odin-catalog.labels" $root | nindent 4 }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: {{ printf "%s-strip-%s@kubernetescrd" $root.Release.Namespace .path | quote }}
+spec:
+  ingressClassName: {{ $root.Values.ingress.className }}
+  rules:
+    - host: {{ $root.Values.ingress.apiHost }}
+      http:
+        paths:
+          - path: /{{ .path }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "odin-catalog.fullname" $root }}-{{ .svc }}
+                port:
+                  number: {{ .port }}
+  {{- with $root.Values.ingress.tls }}
+  tls: {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
 {{- end }}

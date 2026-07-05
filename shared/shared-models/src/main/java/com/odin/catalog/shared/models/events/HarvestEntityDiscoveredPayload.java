@@ -20,6 +20,7 @@ public record HarvestEntityDiscoveredPayload(
     String mediaType,
     List<String> keywords,
     List<String> themes,
+    List<HarvestDistributionPayload> distributions,
     List<NormalizedColumn> columns,
     JsonNode rawPayload
 ) {}

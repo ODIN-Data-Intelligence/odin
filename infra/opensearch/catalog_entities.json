@@ -55,6 +55,7 @@
       "distributionCount":    { "type": "integer" },
       "hasLineage":           { "type": "boolean" },
       "hasLogicalModel":      { "type": "boolean" },
+      "datasetId":            { "type": "keyword" },
 
       "logical_element_names":  { "type": "text", "analyzer": "english_standard" },
       "logical_element_labels": { "type": "keyword" },
@@ -64,6 +65,7 @@
                                   "fields": { "keyword": { "type": "keyword" } } },
       "vocabulary_types":       { "type": "keyword" },
       "fibo_concepts":          { "type": "keyword" },
+      "semanticTypes":          { "type": "keyword" },
 
       "column_names": {
         "type": "text",

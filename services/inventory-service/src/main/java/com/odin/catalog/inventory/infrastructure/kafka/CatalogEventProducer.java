@@ -1,23 +1,100 @@
 package com.odin.catalog.inventory.infrastructure.kafka;
 
+import com.odin.catalog.inventory.api.v1.dto.DatasetSemanticContext;
 import com.odin.catalog.inventory.infrastructure.jpa.entity.DataProductEntity;
 import com.odin.catalog.inventory.infrastructure.jpa.entity.DatasetEntity;
 import com.odin.catalog.shared.kafka.producer.KafkaEventPublisher;
 import com.odin.catalog.shared.kafka.topics.CatalogTopics;
 import com.odin.catalog.shared.models.dcat.DcatDataset;
 import com.odin.catalog.shared.models.dcat.DcatResource;
+import com.odin.catalog.shared.models.dprod.DataProduct;
+import com.odin.catalog.shared.models.dprod.DataProductLifecycleStatus;
 import com.odin.catalog.shared.models.events.DataProductChangedPayload;
 import com.odin.catalog.shared.models.events.DatasetChangedPayload;
+import com.odin.catalog.shared.models.policy.PolicyComponentPayload;
+
+import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
 public class CatalogEventProducer {
 
+    private static final Logger log = LoggerFactory.getLogger(CatalogEventProducer.class);
+
     private final KafkaEventPublisher publisher;
 
     public void publishDatasetChanged(String changeType, DatasetEntity entity) {
+        publishDatasetChanged(changeType, entity, null, null);
+    }
+
+    public void publishDatasetChanged(String changeType, DatasetEntity entity, DatasetSemanticContext ctx) {
+        publishDatasetChanged(changeType, entity, ctx, null);
+    }
+
+    public void publishDatasetChanged(String changeType, DatasetEntity entity,
+                                      List<PolicyComponentPayload> components) {
+        publishDatasetChanged(changeType, entity, null, components);
+    }
+
+    public void publishDatasetChanged(String changeType, DatasetEntity entity,
+                                      DatasetSemanticContext ctx,
+                                      List<PolicyComponentPayload> components) {
+        DcatDataset dataset = buildDcatDataset(entity);
+        DatasetChangedPayload payload = new DatasetChangedPayload(
+                changeType,
+                entity.getId().toString(),
+                entity.getCatalogId() != null ? entity.getCatalogId().toString() : null,
+                entity.getDomainId() != null ? entity.getDomainId().toString() : null,
+                entity.getTenantId().toString(),
+                dataset,
+                ctx != null ? ctx.semanticTypes() : null,
+                ctx != null ? ctx.vocabConceptLabels() : null,
+                ctx != null ? ctx.vocabConceptIris() : null,
+                ctx != null ? ctx.fiboConcepts() : null,
+                ctx != null ? ctx.logicalElementNames() : null,
+                ctx != null ? ctx.logicalTypes() : null,
+                entity.getHasPolicy(),
+                components);
+        publisher.publishAsync(
+            CatalogTopics.DATASETS_CHANGES,
+            entity.getId().toString(),
+            "DatasetChanged",
+            entity.getTenantId().toString(),
+            payload
+        );
+        log.info("action=EVENT_PUBLISHED topic={} eventType=DatasetChanged entityId={} changeType={}",
+            CatalogTopics.DATASETS_CHANGES, entity.getId(), changeType);
+    }
+
+    public void publishDataProductChanged(String changeType, DataProductEntity entity) {
+        publishDataProductChanged(changeType, entity, null);
+    }
+
+    public void publishDataProductChanged(String changeType, DataProductEntity entity, String previousStatus) {
+        var payload = new DataProductChangedPayload(
+            changeType,
+            entity.getId().toString(),
+            entity.getDomainId() != null ? entity.getDomainId().toString() : null,
+            entity.getTenantId().toString(),
+            previousStatus,
+            buildDataProduct(entity)
+        );
+        publisher.publishAsync(
+            CatalogTopics.DATA_PRODUCTS_CHANGES,
+            entity.getId().toString(),
+            "DataProductChanged",
+            entity.getTenantId().toString(),
+            payload
+        );
+        log.info("action=EVENT_PUBLISHED topic={} eventType=DataProductChanged entityId={} changeType={}",
+            CatalogTopics.DATA_PRODUCTS_CHANGES, entity.getId(), changeType);
+    }
+
+    private DcatDataset buildDcatDataset(DatasetEntity entity) {
         DcatResource resource = new DcatResource(
             entity.getId().toString(),
             entity.getResourceType(),
@@ -41,7 +118,7 @@ public class CatalogEventProducer {
             entity.getSourceUri(),
             null
         );
-        DcatDataset dataset = new DcatDataset(
+        return new DcatDataset(
             resource,
             entity.getAccrualPeriodicity(),
             null,
@@ -53,42 +130,37 @@ public class CatalogEventProducer {
             null,
             null
         );
-        var payload = new DatasetChangedPayload(
-            changeType,
-            entity.getId().toString(),
-            entity.getCatalogId() != null ? entity.getCatalogId().toString() : null,
-            entity.getDomainId() != null ? entity.getDomainId().toString() : null,
-            entity.getTenantId().toString(),
-            dataset
-        );
-        publisher.publishAsync(
-            CatalogTopics.DATASETS_CHANGES,
-            entity.getId().toString(),
-            "DatasetChanged",
-            entity.getTenantId().toString(),
-            payload
-        );
     }
 
-    public void publishDataProductChanged(String changeType, DataProductEntity entity) {
-        publishDataProductChanged(changeType, entity, null);
-    }
-
-    public void publishDataProductChanged(String changeType, DataProductEntity entity, String previousStatus) {
-        var payload = new DataProductChangedPayload(
-            changeType,
+    private DataProduct buildDataProduct(DataProductEntity entity) {
+        DcatResource resource = new DcatResource(
             entity.getId().toString(),
-            entity.getDomainId() != null ? entity.getDomainId().toString() : null,
+            entity.getResourceType(),
+            entity.getIri(),
             entity.getTenantId().toString(),
-            previousStatus,
+            entity.getDomainId() != null ? entity.getDomainId().toString() : null,
+            entity.getTitle(),
+            entity.getDescription(),
+            entity.getLanguage(),
+            entity.getKeywords(),
+            entity.getThemes(),
+            entity.getIssued() != null ? entity.getIssued().toString() : null,
+            entity.getModified() != null ? entity.getModified().toString() : null,
+            entity.getLicense(),
+            entity.getRightsStatement(),
+            entity.getAccessRights(),
+            entity.getConformsTo(),
+            entity.getCreatorId() != null ? entity.getCreatorId().toString() : null,
+            entity.getPublisherId() != null ? entity.getPublisherId().toString() : null,
+            null,
+            entity.getSourceUri(),
             null
         );
-        publisher.publishAsync(
-            CatalogTopics.DATA_PRODUCTS_CHANGES,
-            entity.getId().toString(),
-            "DataProductChanged",
-            entity.getTenantId().toString(),
-            payload
-        );
+        DataProductLifecycleStatus status = DataProductLifecycleStatus.Ideation;
+        try {
+            status = DataProductLifecycleStatus.valueOf(entity.getLifecycleStatus());
+        } catch (IllegalArgumentException ignored) {}
+        return new DataProduct(resource, status, null, entity.getPurpose(),
+            entity.getInformationSensitivity(), null, null);
     }
 }

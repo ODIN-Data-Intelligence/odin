@@ -114,6 +114,90 @@ class EmbeddingServiceTest {
         verifyNoInteractions(vectorStore);
     }
 
+    // ── chunk coverage ────────────────────────────────────────────────────
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void onDatasetChanged_upsert_nullDescription_chunkZeroHasNoDescription() throws Exception {
+        DatasetChangedPayload payload = upsertPayload("ds-4", "Portfolio Positions", null, null, null);
+
+        KafkaEnvelope<DatasetChangedPayload> envelope = mock(KafkaEnvelope.class);
+        when(envelope.payload()).thenReturn(payload);
+        when(kafkaEventConsumer.unwrap(any(), eq(DatasetChangedPayload.class))).thenReturn(envelope);
+
+        service.onDatasetChanged(record());
+
+        ArgumentCaptor<List<Document>> captor = ArgumentCaptor.forClass(List.class);
+        verify(vectorStore).add(captor.capture());
+        Document chunk0 = captor.getValue().get(0);
+        assertThat(chunk0.getText()).doesNotContain("Description:");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void onDatasetChanged_upsert_withKeywordsNullThemes_addsKeywordChunk() throws Exception {
+        DatasetChangedPayload payload = upsertPayload("ds-5", "FX Rates", null, List.of("fx", "currency"), null);
+
+        KafkaEnvelope<DatasetChangedPayload> envelope = mock(KafkaEnvelope.class);
+        when(envelope.payload()).thenReturn(payload);
+        when(kafkaEventConsumer.unwrap(any(), eq(DatasetChangedPayload.class))).thenReturn(envelope);
+
+        service.onDatasetChanged(record());
+
+        ArgumentCaptor<List<Document>> captor = ArgumentCaptor.forClass(List.class);
+        verify(vectorStore).add(captor.capture());
+        assertThat(captor.getValue().stream().anyMatch(d -> d.getText().contains("Keywords:"))).isTrue();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void onDatasetChanged_upsert_withNullKeywordsNonNullThemes_addsThemeChunk() throws Exception {
+        DatasetChangedPayload payload = upsertPayload("ds-6", "Index Data", null, null, List.of("Finance"));
+
+        KafkaEnvelope<DatasetChangedPayload> envelope = mock(KafkaEnvelope.class);
+        when(envelope.payload()).thenReturn(payload);
+        when(kafkaEventConsumer.unwrap(any(), eq(DatasetChangedPayload.class))).thenReturn(envelope);
+
+        service.onDatasetChanged(record());
+
+        ArgumentCaptor<List<Document>> captor = ArgumentCaptor.forClass(List.class);
+        verify(vectorStore).add(captor.capture());
+        assertThat(captor.getValue().stream().anyMatch(d -> d.getText().contains("Themes:"))).isTrue();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void onDatasetChanged_upsert_withSemanticTypes_addsSemanticChunk() throws Exception {
+        var resource = mock(com.odin.catalog.shared.models.dcat.DcatResource.class);
+        when(resource.title()).thenReturn("Trade Data");
+        when(resource.description()).thenReturn("Executed trades");
+        when(resource.keywords()).thenReturn(null);
+        when(resource.themes()).thenReturn(null);
+
+        var ds = mock(com.odin.catalog.shared.models.dcat.DcatDataset.class);
+        when(ds.resource()).thenReturn(resource);
+
+        DatasetChangedPayload payload = mock(DatasetChangedPayload.class);
+        when(payload.changeType()).thenReturn("UPDATED");
+        when(payload.datasetId()).thenReturn("ds-7");
+        when(payload.tenantId()).thenReturn("tenant-1");
+        when(payload.dataset()).thenReturn(ds);
+        when(payload.semanticTypes()).thenReturn(List.of("Trade", "FinancialInstrument"));
+        when(payload.vocabConceptLabels()).thenReturn(List.of("MonetaryAmount", "Currency"));
+        when(payload.logicalElementNames()).thenReturn(List.of("trade_id", "notional"));
+
+        KafkaEnvelope<DatasetChangedPayload> envelope = mock(KafkaEnvelope.class);
+        when(envelope.payload()).thenReturn(payload);
+        when(kafkaEventConsumer.unwrap(any(), eq(DatasetChangedPayload.class))).thenReturn(envelope);
+
+        service.onDatasetChanged(record());
+
+        ArgumentCaptor<List<Document>> captor = ArgumentCaptor.forClass(List.class);
+        verify(vectorStore).add(captor.capture());
+        assertThat(captor.getValue().stream()
+            .anyMatch(d -> d.getText().contains("Semantic types:"))).isTrue();
+    }
+
     // ── fixtures ─────────────────────────────────────────────────────────
 
     @SuppressWarnings("unchecked")

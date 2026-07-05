@@ -1,16 +1,43 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
-import { harvestSourceApi, harvestJobApi } from '@datacatalog/shared';
-import PageHeader from '../../components/ui/PageHeader';
-import Button from '../../components/ui/Button';
-import Badge from '../../components/ui/Badge';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import Button from '@mui/material/Button';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import { harvestSourceApi, harvestJobApi, PageHeader } from '@datacatalog/shared';
+import type { HarvestSource, HarvestJob } from '@datacatalog/shared';
 import HarvestSourceForm from '../../components/admin/HarvestSourceForm';
+import HarvestJobForm from '../../components/admin/HarvestJobForm';
+
+const SOURCE_TYPE_LABELS: Record<string, string> = {
+  dcat_http: 'DCAT HTTP',
+  aws_glue: 'AWS Glue',
+  snowflake: 'Snowflake',
+  teradata: 'Teradata',
+};
 
 export default function HarvestPage() {
   const { tenant } = useParams();
-  const [showForm, setShowForm] = useState(false);
   const qc = useQueryClient();
+
+  const [showSourceForm, setShowSourceForm] = useState(false);
+  const [editingSource, setEditingSource] = useState<HarvestSource | null>(null);
+  const [deletingSourceId, setDeletingSourceId] = useState<string | null>(null);
+
+  const [showJobForm, setShowJobForm] = useState(false);
+  const [editingJob, setEditingJob] = useState<HarvestJob | null>(null);
+  const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
 
   const { data: sources = [] } = useQuery({
     queryKey: ['harvest-sources'],
@@ -27,94 +54,199 @@ export default function HarvestPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['harvest-jobs'] }),
   });
 
-  const SOURCE_TYPE_LABELS: Record<string, string> = {
-    dcat_http: 'DCAT HTTP',
-    aws_glue: 'AWS Glue',
-    snowflake: 'Snowflake',
-    teradata: 'Teradata',
-  };
+  const deleteSourceMut = useMutation({
+    mutationFn: (id: string) => harvestSourceApi.delete(id),
+    onSuccess: () => {
+      setDeletingSourceId(null);
+      qc.invalidateQueries({ queryKey: ['harvest-sources'] });
+    },
+  });
+
+  const deleteJobMut = useMutation({
+    mutationFn: (id: string) => harvestJobApi.delete(id),
+    onSuccess: () => {
+      setDeletingJobId(null);
+      qc.invalidateQueries({ queryKey: ['harvest-jobs'] });
+    },
+  });
+
+  function closeSourceForm() {
+    setShowSourceForm(false);
+    setEditingSource(null);
+    qc.invalidateQueries({ queryKey: ['harvest-sources'] });
+  }
+
+  function closeJobForm() {
+    setShowJobForm(false);
+    setEditingJob(null);
+    qc.invalidateQueries({ queryKey: ['harvest-jobs'] });
+  }
 
   return (
-    <div>
+    <Box>
       <PageHeader
         title="Harvest"
         description="Configure sources and schedule metadata harvests"
-        actions={<Button onClick={() => setShowForm(true)}>+ Add Source</Button>}
+        actions={
+          <Button variant="contained" size="small" onClick={() => setShowSourceForm(true)} sx={{ textTransform: 'none' }}>
+            + Add Source
+          </Button>
+        }
       />
 
-      <div className="p-6 space-y-8">
-        <section>
-          <h2 className="text-base font-semibold text-gray-800 mb-3">Sources</h2>
-          <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Endpoint</th>
-                  <th className="px-4 py-3" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
+      <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {/* Sources */}
+        <Box>
+          <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1.5 }}>Sources</Typography>
+          <Paper variant="outlined" sx={{ overflow: 'auto' }}>
+            <Table size="small" sx={{ minWidth: 680 }}>
+              <TableHead>
+                <TableRow sx={{ bgcolor: 'grey.50' }}>
+                  <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Name</TableCell>
+                  <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Type</TableCell>
+                  <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Endpoint</TableCell>
+                  <TableCell />
+                </TableRow>
+              </TableHead>
+              <TableBody>
                 {sources.map(src => (
-                  <tr key={src.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-900">
-                      <Link to={`/${tenant}/admin/harvest/sources/${src.id}`} className="hover:text-blue-600">
+                  <TableRow key={src.id} hover>
+                    <TableCell>
+                      <Typography
+                        component={Link}
+                        to={`/${tenant}/admin/harvest/sources/${src.id}`}
+                        variant="body2"
+                        fontWeight={600}
+                        color="primary"
+                        sx={{ textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+                      >
                         {src.name}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge label={SOURCE_TYPE_LABELS[src.sourceType] ?? src.sourceType} className="bg-blue-50 text-blue-700" />
-                    </td>
-                    <td className="px-4 py-3 text-gray-500 truncate max-w-xs">{src.baseUrl ?? src.databaseName ?? '—'}</td>
-                    <td className="px-4 py-3 text-right" />
-                  </tr>
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Chip label={SOURCE_TYPE_LABELS[src.sourceType] ?? src.sourceType} color="info" size="small" sx={{ height: 18, fontSize: 11 }} />
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {src.baseUrl ?? src.databaseName ?? '—'}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <Button size="small" onClick={() => setEditingSource(src)} sx={{ textTransform: 'none', mr: 1 }}>Edit</Button>
+                      <Button size="small" color="error" onClick={() => setDeletingSourceId(src.id)} sx={{ textTransform: 'none' }}>Delete</Button>
+                    </TableCell>
+                  </TableRow>
                 ))}
                 {sources.length === 0 && (
-                  <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-400">No sources configured</td></tr>
+                  <TableRow>
+                    <TableCell colSpan={4} sx={{ textAlign: 'center', py: 5, color: 'text.disabled' }}>No sources configured</TableCell>
+                  </TableRow>
                 )}
-              </tbody>
-            </table>
-          </div>
-        </section>
+              </TableBody>
+            </Table>
+          </Paper>
+        </Box>
 
-        <section>
-          <h2 className="text-base font-semibold text-gray-800 mb-3">Jobs</h2>
-          <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Schedule</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                  <th className="px-4 py-3" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
+        {/* Jobs */}
+        <Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+            <Typography variant="subtitle2" fontWeight={600}>Jobs</Typography>
+            <Button size="small" variant="outlined" onClick={() => setShowJobForm(true)} sx={{ textTransform: 'none' }}>+ Add Job</Button>
+          </Box>
+          <Paper variant="outlined" sx={{ overflow: 'auto' }}>
+            <Table size="small" sx={{ minWidth: 680 }}>
+              <TableHead>
+                <TableRow sx={{ bgcolor: 'grey.50' }}>
+                  <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Name</TableCell>
+                  <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Schedule</TableCell>
+                  <TableCell sx={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>Status</TableCell>
+                  <TableCell />
+                </TableRow>
+              </TableHead>
+              <TableBody>
                 {jobs.map(job => (
-                  <tr key={job.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-900">{job.name}</td>
-                    <td className="px-4 py-3 text-gray-500 font-mono text-xs">{job.scheduleCron ?? 'Manual'}</td>
-                    <td className="px-4 py-3">
-                      <Badge label={job.enabled ? 'Enabled' : 'Disabled'} className={job.enabled ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'} />
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <Button size="sm" variant="secondary" onClick={() => triggerMut.mutate(job.id)}>
-                        Run Now
-                      </Button>
-                    </td>
-                  </tr>
+                  <TableRow key={job.id} hover>
+                    <TableCell><Typography variant="body2" fontWeight={600}>{job.name}</Typography></TableCell>
+                    <TableCell>
+                      <Typography variant="caption" fontFamily="monospace" color="text.secondary">
+                        {job.scheduleCron ?? 'Manual'}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={job.enabled ? 'Enabled' : 'Disabled'}
+                        color={job.enabled ? 'success' : 'default'}
+                        size="small"
+                        sx={{ height: 18, fontSize: 11 }}
+                      />
+                    </TableCell>
+                    <TableCell sx={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <Button size="small" variant="outlined" onClick={() => triggerMut.mutate(job.id)} sx={{ textTransform: 'none', mr: 1 }}>Run Now</Button>
+                      <Button size="small" onClick={() => setEditingJob(job)} sx={{ textTransform: 'none', mr: 1 }}>Edit</Button>
+                      <Button size="small" color="error" onClick={() => setDeletingJobId(job.id)} sx={{ textTransform: 'none' }}>Delete</Button>
+                    </TableCell>
+                  </TableRow>
                 ))}
                 {jobs.length === 0 && (
-                  <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-400">No jobs configured</td></tr>
+                  <TableRow>
+                    <TableCell colSpan={4} sx={{ textAlign: 'center', py: 5, color: 'text.disabled' }}>No jobs configured</TableCell>
+                  </TableRow>
                 )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </div>
+              </TableBody>
+            </Table>
+          </Paper>
+        </Box>
+      </Box>
 
-      {showForm && <HarvestSourceForm onClose={() => { setShowForm(false); qc.invalidateQueries({ queryKey: ['harvest-sources'] }); }} />}
-    </div>
+      {/* Source form (create / edit) */}
+      {(showSourceForm || editingSource) && (
+        <HarvestSourceForm source={editingSource ?? undefined} onClose={closeSourceForm} />
+      )}
+
+      {/* Job form (create / edit) */}
+      {(showJobForm || editingJob) && (
+        <HarvestJobForm job={editingJob ?? undefined} onClose={closeJobForm} />
+      )}
+
+      {/* Delete source confirmation */}
+      <Dialog open={!!deletingSourceId} onClose={() => setDeletingSourceId(null)} maxWidth="xs">
+        <DialogTitle>Delete source?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">This will also remove all associated jobs and runs.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeletingSourceId(null)} sx={{ textTransform: 'none' }}>Cancel</Button>
+          <Button
+            color="error"
+            variant="contained"
+            disabled={deleteSourceMut.isPending}
+            onClick={() => deleteSourceMut.mutate(deletingSourceId!)}
+            sx={{ textTransform: 'none' }}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete job confirmation */}
+      <Dialog open={!!deletingJobId} onClose={() => setDeletingJobId(null)} maxWidth="xs">
+        <DialogTitle>Delete job?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">Associated run history will also be removed.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeletingJobId(null)} sx={{ textTransform: 'none' }}>Cancel</Button>
+          <Button
+            color="error"
+            variant="contained"
+            disabled={deleteJobMut.isPending}
+            onClick={() => deleteJobMut.mutate(deletingJobId!)}
+            sx={{ textTransform: 'none' }}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
   );
 }

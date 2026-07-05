@@ -1,7 +1,16 @@
-import { useRef, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useRef, useEffect, useState } from 'react';
+import { useSearchParams, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { searchApi } from '@datacatalog/shared';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Skeleton from '@mui/material/Skeleton';
+import Pagination from '@mui/material/Pagination';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import Drawer from '@mui/material/Drawer';
+import Button from '@mui/material/Button';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import { searchApi, useIsMobile } from '@datacatalog/shared';
 import SearchBar from '../components/SearchBar';
 import FacetPanel from '../components/FacetPanel';
 import DatasetSummaryCard from '../components/DatasetSummaryCard';
@@ -9,85 +18,164 @@ import DatasetDetailDrawer from '../components/DatasetDetailDrawer';
 import { useSearchStore } from '../store/searchStore';
 import { useDrawerStore } from '../store/drawerStore';
 
+const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
+
 export default function SearchPage() {
   const searchBarRef = useRef<HTMLInputElement>(null);
   const [searchParams] = useSearchParams();
-  const { query, filters, page, setQuery } = useSearchStore();
+  const { id: pathDatasetId } = useParams<{ id: string }>();
+  const { query, filters, page, size, setQuery, setPage, setSize } = useSearchStore();
   const { openDatasetId, openDataset } = useDrawerStore();
+  const isMobile = useIsMobile();
+  const [facetsOpen, setFacetsOpen] = useState(false);
 
-  // Sync URL query param → store on mount
   useEffect(() => {
     const urlQ = searchParams.get('q');
     if (urlQ && urlQ !== query) setQuery(urlQ);
 
-    const dsId = searchParams.get('ds');
-    if (dsId) openDataset(dsId);
+    const dsId = pathDatasetId ?? searchParams.get('ds');
+    const et = (searchParams.get('et') ?? 'DATASET') as 'DATASET' | 'DATA_PRODUCT';
+    if (dsId) openDataset(dsId, et);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['search', query, filters, page],
-    queryFn: () => searchApi.search({ q: query, ...filters, page, size: 20 }),
+  const { data, isLoading } = useQuery({
+    queryKey: ['search', query, filters, page, size],
+    queryFn: () => searchApi.search({ q: query, ...filters, page, size }),
     enabled: true,
   });
 
   const results = data?.results ?? [];
   const facets = data?.facets ?? {};
   const total = data?.total ?? 0;
+  const pageCount = Math.ceil(total / size);
+  const firstItem = total > 0 ? page * size + 1 : 0;
+  const lastItem = Math.min((page + 1) * size, total);
 
   return (
-    <div className="flex h-screen overflow-hidden flex-col">
+    <Box sx={{ display: 'flex', height: '100%', overflow: 'hidden', flexDirection: 'column' }}>
       {/* Top bar */}
-      <div className="bg-white border-b px-6 py-3 flex items-center gap-4">
-        <div className="w-full max-w-2xl">
+      <Box sx={{ bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider', px: { xs: 1.5, md: 3 }, py: 1.5, display: 'flex', alignItems: 'center', gap: { xs: 1, md: 2 }, flexShrink: 0 }}>
+        {isMobile && (
+          <Button
+            onClick={() => setFacetsOpen(true)}
+            startIcon={<FilterListIcon />}
+            size="small"
+            variant="outlined"
+            sx={{ flexShrink: 0, textTransform: 'none' }}
+          >
+            Filters
+          </Button>
+        )}
+        <Box sx={{ flex: 1, maxWidth: 640 }}>
           <SearchBar ref={searchBarRef} />
-        </div>
-        <p className="text-sm text-gray-500 flex-shrink-0">
-          {isLoading ? 'Searching...' : total > 0 ? `${total.toLocaleString()} results` : ''}
-        </p>
-      </div>
+        </Box>
+        {!isMobile && (
+          <Typography variant="body2" color="text.secondary" sx={{ flexShrink: 0, minWidth: 80, textAlign: 'right' }}>
+            {isLoading ? 'Searching…' : total > 0 ? `${total.toLocaleString()} results` : ''}
+          </Typography>
+        )}
+      </Box>
 
       {/* Body */}
-      <div className="flex flex-1 overflow-hidden">
+      <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* Facets + Results */}
-        <div className={`flex flex-1 overflow-hidden ${openDatasetId ? 'w-1/2' : 'w-full'}`}>
-          {/* Facets sidebar */}
-          <div className="w-56 flex-shrink-0 border-r bg-gray-50 overflow-y-auto px-4 py-5">
-            <FacetPanel facets={facets} />
-          </div>
+        <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden', width: openDatasetId && !isMobile ? '50%' : '100%' }}>
+          {/* Facets sidebar — inline on desktop, drawer on mobile */}
+          {!isMobile && (
+            <Box sx={{ width: 240, flexShrink: 0, borderRight: 1, borderColor: 'divider', bgcolor: 'grey.50', overflowY: 'auto', px: 2, py: 2.5 }}>
+              <FacetPanel facets={facets} />
+            </Box>
+          )}
 
-          {/* Results list */}
-          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
-            {isLoading ? (
-              [...Array(5)].map((_, i) => (
-                <div key={i} className="h-20 bg-gray-100 rounded-lg animate-pulse" />
-              ))
-            ) : results.length === 0 ? (
-              <div className="text-center py-16">
-                <p className="text-gray-400 text-lg">No results found</p>
-                <p className="text-sm text-gray-400 mt-1">Try different keywords or clear some filters</p>
-              </div>
-            ) : (
-              results.map(result => (
-                <DatasetSummaryCard
-                  key={result.id}
-                  result={result}
-                  isActive={openDatasetId === result.id}
+          {/* Results column: scrollable list + fixed pagination bar */}
+          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            {/* Scrollable results */}
+            <Box sx={{ flex: 1, overflowY: 'auto', px: 2.5, py: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+              {isLoading ? (
+                [...Array(Math.min(size, 5))].map((_, i) => <Skeleton key={i} variant="rounded" height={174} />)
+              ) : results.length === 0 ? (
+                <Box sx={{ textAlign: 'center', py: 10 }}>
+                  <Typography variant="h6" color="text.secondary" gutterBottom>No results found</Typography>
+                  <Typography variant="body2" color="text.disabled">
+                    Try different keywords or clear some filters
+                  </Typography>
+                </Box>
+              ) : (
+                results.map(result => (
+                  <DatasetSummaryCard
+                    key={result.id}
+                    result={result}
+                    isActive={openDatasetId === result.id}
+                  />
+                ))
+              )}
+            </Box>
+
+            {/* Pagination bar */}
+            {!isLoading && total > 0 && (
+              <Box
+                sx={{
+                  flexShrink: 0,
+                  borderTop: 1,
+                  borderColor: 'divider',
+                  bgcolor: 'background.paper',
+                  px: 2.5,
+                  py: 1.25,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 2,
+                }}
+              >
+                <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
+                  {firstItem}–{lastItem} of {total.toLocaleString()}
+                </Typography>
+
+                <Pagination
+                  count={pageCount}
+                  page={page + 1}
+                  onChange={(_, p) => setPage(p - 1)}
+                  size="small"
+                  color="primary"
+                  siblingCount={1}
+                  boundaryCount={1}
                 />
-              ))
-            )}
 
-            {!isLoading && results.length > 0 && (
-              <p className="text-xs text-gray-400 text-center pt-2 pb-4">
-                Showing {results.length} of {total.toLocaleString()} results
-              </p>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+                  <Typography variant="caption" color="text.secondary">Per page:</Typography>
+                  <Select
+                    value={size}
+                    onChange={e => setSize(Number(e.target.value))}
+                    size="small"
+                    sx={{ fontSize: 12, '.MuiSelect-select': { py: 0.5, px: 1.25 } }}
+                  >
+                    {PAGE_SIZE_OPTIONS.map(n => (
+                      <MenuItem key={n} value={n} sx={{ fontSize: 13 }}>{n}</MenuItem>
+                    ))}
+                  </Select>
+                </Box>
+              </Box>
             )}
-          </div>
-        </div>
+          </Box>
+        </Box>
 
         {/* Drawer */}
         {openDatasetId && <DatasetDetailDrawer />}
-      </div>
-    </div>
+      </Box>
+
+      {/* Mobile facets drawer */}
+      {isMobile && (
+        <Drawer
+          anchor="left"
+          open={facetsOpen}
+          onClose={() => setFacetsOpen(false)}
+          ModalProps={{ keepMounted: true }}
+          PaperProps={{ sx: { width: 280, maxWidth: '85vw', bgcolor: 'grey.50', px: 2, py: 2.5, overflowY: 'auto' } }}
+        >
+          <FacetPanel facets={facets} />
+        </Drawer>
+      )}
+    </Box>
   );
 }
